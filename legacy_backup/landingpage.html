@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bustos Development System</title>
+    <link rel="stylesheet" href="landingpage.css">
+</head>
+<body>
+
+    <div class="hero-section">
+    <video autoplay muted loop playsinline id="myVideo">
+        <source src="AQMGyMSw_d6ssXHh5wrEwWRCd-f-xCKwnQ7jZv62klJL_HzP6b5UuNIsupVlzc3Ay88-U-pCV4UVtoklL39B1NTiOSjCIu01RT-7Uj8-4QvUmA.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+
+    <div class="overlay"></div>
+        <header class="logos">
+            <img src="BSTOS LOGO.png" alt="Bustos Logo" class="logo">
+            <img src="BP LOGO.png" alt="Bagong Pilipinas" class="logo">
+            <img src="POPDEV LOGO.png" alt="Commission on Population" class="logo">
+        </header>
+
+        <main class="content">
+            <h1>Bustos Development System</h1>
+            <h2>Bustos, Bulacan</h2>
+            <p class="description">
+                A centralized system for managing and monitoring population data of Bustos, Bulacan.
+            </p>
+
+            <div class="action-buttons">
+                <button onclick="handleLogin()" class="btn-login">LOGIN</button>
+                <a href="#" class="learn-more">Learn More</a>
+            </div>
+        </main>
+
+        <footer>
+            <p class="warning">⚠️ Access to the system is limited to authorized personnel only.</p>
+            <p class="copyright">© 2026 Bustos Population Development System</p>
+            <p class="devs">Developed by BS Information Technology Students - Bulacan State University</p>
+        </footer>
+    </div>
+
+        <script>
+    function handleLogin() {
+        console.log("Redirecting...");
+        // Ito ang linyang maglilipat sa kanila sa login page
+        window.location.href = "loginpage.html"; 
+    }
+
+    function showMessage() {
+        console.log("System Ready.");
+    }
+
+    window.onload = showMessage;
+</script>
+
+
+</body>
+</html>

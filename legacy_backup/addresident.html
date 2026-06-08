@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Resident - BustoSight</title>
+    <link rel="stylesheet" href="addresident.css"> 
+    <script src="global.js"></script>
+    <style>
+        .form-step { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Para magkasya ang 3 checkboxes sa isang row */
+        .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .voter-box { background: #e6fffa !important; border: 1px solid #b2f5ea !important; }
+    </style>
+</head>
+
+<body>
+    <div class="bg-image"></div>
+    <div class="overlay"></div>
+
+    <div class="dashboard-wrapper">
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <img src="POPDEV LOGO.png" alt="Logo">
+            </div>
+            <nav class="nav-menu">
+                <p class="label">Population Development</p>
+                <ul>
+                    <li onclick="window.location.href='dashboard.html'">Dashboard</li>
+                    <li onclick="window.location.href='barangaylistpage.html'">Barangay List</li>
+                    <li onclick="window.location.href='reportpage.html'">Reports</li>
+                    <li class="active">Add Residents</li>
+                    <li onclick="location.href='manageaccount.html'">Manage Accounts</li>                 
+                </ul>
+            </nav>
+             <div class="sidebar-footer">
+                <button class="logout-btn" id="logoutBtn">Logout</button>
+            </div>
+        </aside>
+
+        <main class="content">
+            <div class="step-wrapper">
+                <div class="step active" id="s1">1</div>
+                <div class="step-divider"></div>
+                <div class="step" id="s2">2</div>
+                <div class="step-divider"></div>
+                <div class="step" id="s3">3</div>
+                <div class="step-divider"></div>
+                <div class="step" id="s4">4</div>
+            </div>
+
+            <div class="form-card-container">
+                <div class="form-blue-header">
+                    <h1 id="form-title">Add Resident Form</h1>
+                </div>
+
+                <div class="form-white-body">
+                    <form id="multiStepForm">
+                        
+                        <div class="form-step" id="step1">
+                            <h2 class="form-section-title">Household Information</h2>
+                            <div class="grid-4-cols">
+                                <div class="field-group"><label>Household Number</label><input type="text" id="in_hh_num" placeholder="2024-XXXX"></div>
+                                <div class="field-group"><label>House Number</label><input type="text" id="in_house_no" placeholder="No."></div>
+                                <div class="field-group"><label>Street</label><input type="text" id="in_street" placeholder="Street Name"></div>
+                                <div class="field-group"><label>Purok</label><input type="text" id="in_purok" placeholder="Purok"></div>
+                            </div>
+                            <div class="grid-2-cols" style="margin-top: 20px;">
+                                <div class="field-group">
+                                    <label>Barangay</label>
+                                    <select class="modern-select" id="in_brgy">
+                                        <option value="" disabled selected>Select Barangay</option>
+                                        <option value="Poblacion">Poblacion</option>
+                                        <option value="Tibagan">Tibagan</option>
+                                        <option value="Bonga Menor">Bonga Menor</option>
+                                        <option value="Bonga Mayor">Bonga Mayor</option>
+                                        <option value="Malawak">Malawak</option>
+                                        <option value="Catacte">Catacte</option>
+                                        <option value="Liciada">Liciada</option>
+                                        <option value="Camachilihan">Camachilihan</option>
+                                        <option value="Malamig">Malamig</option>
+                                        <option value="Buisan">Buisan</option>
+                                        <option value="Cambaog">Cambaog</option>
+                                        <option value="San Pedro">San Pedro</option>
+                                        <option value="Talampas">Talampas</option>
+                                        <option value="Tanawan">Tanawan</option>
+                                    </select>
+                                </div>
+                                <div class="field-group">
+                                    <label>Municipality</label>
+                                    <input type="text" value="Bustos" readonly id="in_mun">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-step" id="step2" style="display: none;">
+                            <h2 class="form-section-title">Household Head Information</h2>
+                            <div class="grid-4-cols">
+                                <div class="field-group"><label>Last Name</label><input type="text" id="head_lname"></div>
+                                <div class="field-group"><label>First Name</label><input type="text" id="head_fname"></div>
+                                <div class="field-group"><label>Middle Name</label><input type="text" id="head_mname"></div>
+                                <div class="field-group">
+                                    <label>Qualifier</label>
+                                    <select class="modern-select" id="head_q"><option value="">None</option><option>JR.</option><option>SR.</option></select>
+                                </div>
+                            </div>
+                            <div class="grid-4-cols" style="margin-top: 15px;">
+                                <div class="field-group"><label>Place of Birth</label><input type="text" id="head_pob"></div>
+                                <div class="field-group"><label>Date of Birth</label><input type="date" id="head_dob"></div>
+                                <div class="field-group"><label>Sex</label><select class="modern-select" id="head_sex"><option>Male</option><option>Female</option></select></div>
+                                <div class="field-group"><label>Civil Status</label><select class="modern-select" id="head_civil"><option>Single</option><option>Married</option><option>Widowed</option></select></div>
+                            </div>
+                            
+                            <div style="margin-top: 25px; background: #f0f7ff; padding: 15px; border-radius: 12px; border: 1px solid #d1e3f8;">
+                                <p style="font-size: 11px; font-weight: 800; color: #2c5282; margin-bottom: 10px; text-transform: uppercase; text-align: center;">Head Classification</p>
+                                <div class="grid-3-cols">
+                                    <div class="field-group" style="flex-direction: row; justify-content: space-between; align-items: center; background: white; padding: 8px 15px; border-radius: 8px;">
+                                        <label style="margin:0">Senior Citizen</label>
+                                        <input type="checkbox" id="head_is_senior" style="width:18px; height:18px;">
+                                    </div>
+                                    <div class="field-group" style="flex-direction: row; justify-content: space-between; align-items: center; background: white; padding: 8px 15px; border-radius: 8px;">
+                                        <label style="margin:0">PWD</label>
+                                        <input type="checkbox" id="head_is_pwd" style="width:18px; height:18px;">
+                                    </div>
+                                    <div class="field-group voter-box" style="flex-direction: row; justify-content: space-between; align-items: center; padding: 8px 15px; border-radius: 8px;">
+                                        <label style="margin:0; font-weight: 800; color: #2c7a7b;">Registered Voter</label>
+                                        <input type="checkbox" id="head_is_voter" style="width:18px; height:18px;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-step" id="step3" style="display: none;">
+                            <div id="members-container">
+                                <div class="member-entry" style="border-bottom: 2px dashed #cbd5e0; margin-bottom: 35px; padding-bottom: 25px;">
+                                    <h2 class="form-section-title">Household Member #1</h2>
+                                   <div class="grid-4-cols">
+    <div class="field-group"><label>Last Name</label><input type="text" class="m_lname"></div>
+    <div class="field-group"><label>First Name</label><input type="text" class="m_fname"></div>
+    <div class="field-group"><label>Middle Name</label><input type="text" class="m_mname"></div>
+    <div class="field-group">
+        <label>Relation to Head</label>
+        <input type="text" class="m_rel" placeholder="e.g. Son, Wife">
+    </div>
+</div>
+                                    <div class="grid-4-cols" style="margin-top: 15px;">
+                                        <div class="field-group"><label>Place of Birth</label><input type="text" class="m_pob"></div>
+                                        <div class="field-group"><label>Date of Birth</label><input type="date" class="m_dob"></div>
+                                        <div class="field-group"><label>Sex</label><select class="modern-select m_sex"><option>Male</option><option>Female</option></select></div>
+                                        <div class="field-group"><label>Civil Status</label><select class="modern-select m_civil"><option>Single</option><option>Married</option></select></div>
+                                    </div>
+                                    <div style="margin-top: 15px; background: #f7fafc; padding: 15px; border-radius: 10px; border: 1px solid #edf2f7;">
+                                        <div class="grid-3-cols">
+                                            <div class="field-group" style="flex-direction: row; justify-content: space-between; align-items: center; background: white; padding: 8px 15px; border-radius: 8px;">
+                                                <label style="margin:0">Senior Citizen</label><input type="checkbox" class="m_senior" style="width:18px; height:18px;">
+                                            </div>
+                                            <div class="field-group" style="flex-direction: row; justify-content: space-between; align-items: center; background: white; padding: 8px 15px; border-radius: 8px;">
+                                                <label style="margin:0">PWD</label><input type="checkbox" class="m_pwd" style="width:18px; height:18px;">
+                                            </div>
+                                            <div class="field-group voter-box" style="flex-direction: row; justify-content: space-between; align-items: center; padding: 8px 15px; border-radius: 8px;">
+                                                <label style="margin:0; font-weight: 800; color: #2c7a7b;">Voter</label><input type="checkbox" class="m_voter" style="width:18px; height:18px;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <button type="button" onclick="addMember()" style="background: #48bb78; color: white; border: none; padding: 12px 25px; border-radius: 12px; cursor: pointer; font-weight: 700;">+ Add Another Member</button>
+                            </div>
+                        </div>
+
+                        <div class="form-step" id="step4" style="display: none;">
+                            <div id="summary-area" style="background: white; border-radius: 15px; padding: 25px; border: 1px solid #e2e8f0;"></div>
+                            <p style="text-align: center; color: #a0aec0; font-size: 11px; margin-top: 20px;">Review carefully before clicking Confirm & Submit.</p>
+                        </div>
+
+                        <div class="form-nav-buttons">
+                            <button type="button" class="btn-back" id="prevBtn" style="visibility: hidden;" onclick="moveStep(-1)">Previous</button>
+                            <button type="button" class="btn-next" id="nextBtn" onclick="moveStep(1)">Next</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        let memberCount = 1;
+
+        function moveStep(step) {
+            if (currentStep === 4 && step === 1) {
+                saveDataToLocal();
+                return;
+            }
+            if (currentStep === 3 && step === 1) {
+                generateOverview();
+            }
+
+            const formTitle = document.getElementById("form-title");
+            document.getElementById(`step${currentStep}`).style.display = "none";
+            document.getElementById(`s${currentStep}`).classList.remove("active");
+
+            currentStep += step;
+
+            document.getElementById(`step${currentStep}`).style.display = "block";
+            document.getElementById(`s${currentStep}`).classList.add("active");
+
+            if (currentStep === 4) formTitle.innerText = "Review Registration Details";
+            else formTitle.innerText = "Add Resident Form";
+
+            document.getElementById("prevBtn").style.visibility = currentStep === 1 ? "hidden" : "visible";
+            document.getElementById("nextBtn").innerText = currentStep === 4 ? "Confirm & Submit" : "Next";
+            document.querySelector('.form-white-body').scrollTop = 0;
+        }
+
+        function addMember() {
+    memberCount++;
+    const container = document.getElementById('members-container');
+    const div = document.createElement('div');
+    div.className = "member-entry";
+    div.style = "border-bottom: 2px dashed #cbd5e0; margin-bottom: 35px; padding-bottom: 25px; animation: fadeIn 0.4s;";
+    
+    div.innerHTML = `
+        <h2 class="form-section-title">Household Member #${memberCount}</h2>
+        <div class="grid-4-cols">
+            <div class="field-group"><label>Last Name</label><input type="text" class="m_lname"></div>
+            <div class="field-group"><label>First Name</label><input type="text" class="m_fname"></div>
+            <div class="field-group"><label>Middle Name</label><input type="text" class="m_mname"></div>
+            <div class="field-group">
+                <label>Relation to Head</label>
+                <input type="text" class="m_rel" placeholder="e.g. Son, Wife">
+            </div>
+        </div>
+        <div class="grid-4-cols" style="margin-top: 15px;">
+            <div class="field-group"><label>Qualifier</label><select class="modern-select m_qual"><option value="">None</option><option>JR.</option><option>SR.</option></select></div>
+            <div class="field-group"><label>Place of Birth</label><input type="text" class="m_pob"></div>
+            <div class="field-group"><label>Date of Birth</label><input type="date" class="m_dob"></div>
+            <div class="field-group"><label>Sex</label><select class="modern-select m_sex"><option>Male</option><option>Female</option></select></div>
+        </div>
+        <div style="margin-top: 15px; background: #f7fafc; padding: 15px; border-radius: 10px; border: 1px solid #edf2f7;">
+            <div class="grid-3-cols">
+                <div class="field-group" style="flex-direction: row; justify-content: space-between; align-items: center; background: white; padding: 8px 15px; border-radius: 8px;">
+                    <label style="margin:0">Senior Citizen</label><input type="checkbox" class="m_senior" style="width:18px; height:18px;">
+                </div>
+                <div class="field-group" style="flex-direction: row; justify-content: space-between; align-items: center; background: white; padding: 8px 15px; border-radius: 8px;">
+                    <label style="margin:0">PWD</label><input type="checkbox" class="m_pwd" style="width:18px; height:18px;">
+                </div>
+                <div class="field-group voter-box" style="flex-direction: row; justify-content: space-between; align-items: center; padding: 8px 15px; border-radius: 8px;">
+                    <label style="margin:0; font-weight: 800; color: #2c7a7b;">Voter</label><input type="checkbox" class="m_voter" style="width:18px; height:18px;">
+                </div>
+            </div>
+        </div>
+        <div style="text-align:right; margin-top:10px;">
+            <button type="button" onclick="this.closest('.member-entry').remove()" style="color:red; background:none; border:none; cursor:pointer; font-size:11px; font-weight:bold;">[ REMOVE MEMBER ]</button>
+        </div>`;
+    
+    container.appendChild(div);
+    const formBody = document.querySelector('.form-white-body');
+    setTimeout(() => { formBody.scrollTo({ top: formBody.scrollHeight, behavior: 'smooth' }); }, 50);
+}
+function generateOverview() {
+    const container = document.getElementById('summary-area');
+    
+    // --- STEP 1: HOUSEHOLD LOCATION ---
+    const hhNum = document.getElementById('in_hh_num').value || "N/A";
+    const houseNo = document.getElementById('in_house_no').value || "";
+    const street = document.getElementById('in_street').value || "";
+    const purok = document.getElementById('in_purok').value || "";
+    const brgy = document.getElementById('in_brgy').value || "N/A";
+
+    // --- STEP 2: HEAD OF HOUSEHOLD ---
+    const hLname = document.getElementById('head_lname').value || "-";
+    const hFname = document.getElementById('head_fname').value || "-";
+    const hDob = document.getElementById('head_dob').value || "-";
+    const hSex = document.getElementById('head_sex').value || "-";
+    
+    const hStatus = [];
+    if(document.getElementById('head_is_senior').checked) hStatus.push("Senior Citizen");
+    if(document.getElementById('head_is_pwd').checked) hStatus.push("PWD");
+    if(document.getElementById('head_is_voter').checked) hStatus.push("Registered Voter");
+
+    let html = `
+        <div style="margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #edf2f7;">
+            <h3 style="font-size: 13px; color: #2b6cb0; text-transform: uppercase; margin-bottom: 10px;"> Household Location</h3>
+            <p style="font-size: 14px; margin: 5px 0;"><b>Household #:</b> ${hhNum}</p>
+            <p style="font-size: 14px; margin: 5px 0;"><b>Address:</b> ${houseNo} ${street}, ${purok}, ${brgy}, Bustos, Bulacan</p>
+        </div>
+
+        <div style="margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #edf2f7;">
+            <h3 style="font-size: 13px; color: #2d3748; text-transform: uppercase; margin-bottom: 10px;"> Head of Household</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px;">
+                <span><b>Full Name:</b> ${hLname}, ${hFname}</span>
+                <span><b>Sex:</b> ${hSex}</span>
+                <span><b>Birthdate:</b> ${hDob}</span>
+                <span><b>Classification:</b> ${hStatus.join(", ") || "Regular Resident"}</span>
+            </div>
+        </div>
+
+        <h3 style="font-size: 13px; color: #2d3748; text-transform: uppercase; margin-bottom: 10px;"> Family Members</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead>
+                <tr style="background: #f8fafc; text-align: left;">
+                    <th style="padding: 10px; border: 1px solid #e2e8f0;">No.</th>
+                    <th style="padding: 10px; border: 1px solid #e2e8f0;">Full Name</th>
+                    <th style="padding: 10px; border: 1px solid #e2e8f0;">Birthdate</th>
+                    <th style="padding: 10px; border: 1px solid #e2e8f0;">Relation</th>
+                    <th style="padding: 10px; border: 1px solid #e2e8f0;">Classification</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+    // --- STEP 3: FAMILY MEMBERS LOOP ---
+    const mEntries = document.querySelectorAll('.member-entry');
+    mEntries.forEach((entry, index) => {
+        const mlname = entry.querySelector('.m_lname').value || "-";
+        const mmfname = entry.querySelector('.m_fname').value || "-";
+        const mdob = entry.querySelector('.m_dob').value || "-";
+        const mrel = entry.querySelector('.m_rel').value || "-";
+        
+        const mStatus = [];
+        if(entry.querySelector('.m_senior').checked) mStatus.push("Senior");
+        if(entry.querySelector('.m_pwd').checked) mStatus.push("PWD");
+        if(entry.querySelector('.m_voter').checked) mStatus.push("Voter");
+
+        html += `
+            <tr>
+                <td style="padding: 8px; border: 1px solid #e2e8f0;">${index + 1}</td>
+                <td style="padding: 8px; border: 1px solid #e2e8f0;">${mlname}, ${mmfname}</td>
+                <td style="padding: 8px; border: 1px solid #e2e8f0;">${mdob}</td>
+                <td style="padding: 8px; border: 1px solid #e2e8f0;">${mrel}</td>
+                <td style="padding: 8px; border: 1px solid #e2e8f0;">${mStatus.join(", ") || "Regular"}</td>
+            </tr>`;
+    });
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+}
+       function saveDataToLocal() {
+    let allRecords = JSON.parse(localStorage.getItem('tanawanData')) || [];
+    const common = {
+        h_no: document.getElementById('in_hh_num').value,
+        brgy: document.getElementById('in_brgy').value,
+        no: document.getElementById('in_house_no').value,
+        st: document.getElementById('in_street').value,
+        p: document.getElementById('in_purok').value,
+        mun: "Bustos"
+    };
+
+    // Head Save
+    allRecords.push({
+        ...common,
+        last: document.getElementById('head_lname').value,
+        first: document.getElementById('head_fname').value,
+        is_voter: document.getElementById('head_is_voter').checked ? "Yes" : "No",
+        is_senior: document.getElementById('head_is_senior').checked ? "Yes" : "No",
+        is_pwd: document.getElementById('head_is_pwd').checked ? "Yes" : "No",
+        rel: "HEAD"
+    });
+
+    // Members Save
+    document.querySelectorAll('.member-entry').forEach((entry) => {
+        allRecords.push({
+            ...common,
+            last: entry.querySelector('.m_lname').value,
+            first: entry.querySelector('.m_fname').value,
+            rel: entry.querySelector('.m_rel').value || "MEMBER", // Eto yung bago
+            is_voter: entry.querySelector('.m_voter').checked ? "Yes" : "No",
+            is_senior: entry.querySelector('.m_senior').checked ? "Yes" : "No",
+            is_pwd: entry.querySelector('.m_pwd').checked ? "Yes" : "No"
+        });
+    });
+
+    localStorage.setItem('tanawanData', JSON.stringify(allRecords));
+    alert("Resident successfully added to Barangay " + common.brgy + "!");
+    window.location.href = 'barangaylistpage.html';
+}
+    </script>
+</body>
+</html>

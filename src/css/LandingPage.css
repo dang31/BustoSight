@@ -1,0 +1,189 @@
+/* =====================
+   LANDING PAGE CSS
+   ===================== */
+
+.landing-hero {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: white;
+  overflow: hidden;
+}
+
+/* Background Video */
+.landing-video {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  min-width: 100%;
+  min-height: 100%;
+  width: auto;
+  height: auto;
+  z-index: -2;
+  transform: translate(-50%, -50%) scale(1.25);
+  object-fit: cover;
+}
+
+.landing-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(
+    160deg,
+    rgba(10, 25, 60, 0.88) 0%,
+    rgba(26, 60, 120, 0.65) 60%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+  z-index: -1;
+}
+
+/* Logos row */
+.landing-logos {
+  display: flex;
+  gap: 28px;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+  animation: fadeInUp 0.7s ease;
+}
+
+.landing-logo {
+  height: 88px;
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.45));
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+.landing-logo:hover {
+  transform: translateY(-4px) scale(1.05);
+  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.5));
+}
+
+/* Middle content */
+.landing-content {
+  position: relative;
+  z-index: 1;
+  max-width: 760px;
+  animation: fadeInUp 0.9s ease 0.2s both;
+}
+
+.landing-content h1 {
+  font-family: 'Poppins', sans-serif;
+  font-size: clamp(2.4rem, 5.5vw, 4.2rem);
+  font-weight: 800;
+  text-transform: uppercase;
+  line-height: 1.1;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  text-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.landing-content h2 {
+  font-size: clamp(1.1rem, 2.5vw, 1.7rem);
+  font-weight: 400;
+  opacity: 0.85;
+  margin-bottom: 22px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.landing-description {
+  font-size: 1.05rem;
+  font-style: italic;
+  font-weight: 300;
+  max-width: 600px;
+  margin: 0 auto 44px;
+  opacity: 0.85;
+  line-height: 1.7;
+}
+
+/* Action buttons */
+.landing-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: fadeInUp 1s ease 0.4s both;
+}
+
+.btn-landing-login {
+  background: linear-gradient(135deg, #5d87ff 0%, #4870e6 100%);
+  color: white;
+  border: none;
+  padding: 17px 90px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 24px rgba(93, 135, 255, 0.45);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.btn-landing-login:hover {
+  background: linear-gradient(135deg, #4870e6 0%, #3a5ed4 100%);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(93, 135, 255, 0.55);
+}
+
+.btn-landing-login:active {
+  transform: translateY(0);
+}
+
+.landing-learn-more {
+  color: rgba(255,255,255,0.85);
+  font-weight: 600;
+  font-size: 0.95rem;
+  border-bottom: 1px solid transparent;
+  transition: all 0.3s;
+  letter-spacing: 0.5px;
+}
+
+.landing-learn-more:hover {
+  color: white;
+  border-bottom-color: white;
+  text-shadow: 0 0 12px rgba(255,255,255,0.4);
+}
+
+/* Footer */
+.landing-footer {
+  position: relative;
+  z-index: 1;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  opacity: 0.75;
+  animation: fadeInUp 1s ease 0.5s both;
+}
+
+.landing-footer .warning {
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.landing-footer .copyright {
+  margin-top: 40px;
+  font-weight: 300;
+  margin-bottom: 3px;
+}
+
+.landing-footer .devs {
+  font-weight: 300;
+}
+
+@media (max-width: 600px) {
+  .landing-logos {
+    gap: 16px;
+  }
+  .landing-logo {
+    height: 60px;
+  }
+  .btn-landing-login {
+    padding: 14px 60px;
+  }
+}

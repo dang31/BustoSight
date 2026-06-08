@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BustoSight - Barangay List</title>
+    <link rel="stylesheet" href="barangaylistpage.css">
+    <script src="global.js"></script>
+
+    <style>
+        /* Table and Layout Fixes */
+        .table-wrapper { max-height: 70vh; overflow-y: auto; border: 1px solid #ddd; background: #fff; border-radius: 8px; }
+        /* Inadjust ang min-width dahil nadagdagan ang column */
+        table { width: 100%; border-collapse: collapse; min-width: 1750px; } 
+        thead th { position: sticky; top: 0; background: #2c5282; color: white; z-index: 10; padding: 12px; font-size: 11px; text-transform: uppercase; }
+        tbody td { padding: 12px; border-bottom: 1px solid #eee; font-size: 11px; color: #333; }
+        tr:hover { background: #f0f7ff; cursor: pointer; }
+        .brgy-item.active { background: #2c5282; color: white; font-weight: bold; }
+
+        /* Buttons */
+        .btn-archive-row { background: #e53e3e; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; transition: 0.2s; }
+        .btn-archive-row:hover { background: #c53030; transform: scale(1.05); }
+        .btn-view-archive { background: #718096 !important; }
+
+        /* HOUSEHOLD MODAL */
+        .modal-overlay { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; 
+            backdrop-filter: blur(3px);
+        }
+        .modal-content { 
+            background: white; width: 95%; max-width: 1200px; padding: 30px; border-radius: 15px; 
+            position: relative; box-shadow: 0 15px 40px rgba(0,0,0,0.4); animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .close-modal { position: absolute; right: 20px; top: 15px; font-size: 28px; cursor: pointer; color: #888; transition: 0.2s; }
+        .close-modal:hover { color: #ff4d4d; }
+
+        .household-header { border-bottom: 3px solid #6da4f2; margin-bottom: 20px; padding-bottom: 10px; }
+        .household-header h2 { color: #2c5282; margin: 0; }
+        
+        .family-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .family-table th { background: #f8fbff; color: #2c5282; text-align: left; padding: 12px; font-size: 12px; border-bottom: 2px solid #edf2f7; }
+        .family-table td { padding: 12px; border-bottom: 1px solid #eee; font-size: 12px; }
+        .head-row { background: #fffcf0; font-weight: 600; border-left: 5px solid #f6ad55; }
+        
+        .action-cell { cursor: default; }
+    </style>
+</head>
+<body>
+    <div class="bg-image"></div>
+    <div class="overlay"></div>
+
+    <div class="dashboard-wrapper">
+        <aside class="sidebar">
+            <div class="sidebar-logo"><img src="POPDEV LOGO.png" alt="Logo"></div>
+            <nav class="nav-menu">
+                <div class="label">Population Development</div>
+                <ul>
+                    <li onclick="location.href='dashboard.html'">Dashboard</li>
+                    <li class="active">Barangay List</li> 
+                    <li onclick="location.href='reportpage.html'">Reports</li>          
+                    <li onclick="location.href='addresident.html'">Add Residents</li>                 
+                    <li onclick="location.href='manageaccount.html'">Manage Accounts</li>                 
+                </ul>
+            </nav>
+            <button class="logout-btn" onclick="location.href='login.html'">Logout</button>
+        </aside>
+
+        <main class="content">
+            <header class="main-header"><h1 id="headerTitle">Barangay Poblacion</h1></header>
+            
+            <div class="main-layout">
+                <div class="brgy-selector">
+                    <div class="brgy-header">Barangays</div>
+                    <div class="brgy-list" id="brgyListContainer">
+                        <div class="brgy-item" onclick="selectBrgy('Poblacion')">Poblacion</div>
+                        <div class="brgy-item" onclick="selectBrgy('Tibagan')">Tibagan</div>
+                        <div class="brgy-item" onclick="selectBrgy('Bonga Menor')">Bonga Menor</div>
+                        <div class="brgy-item" onclick="selectBrgy('Bonga Mayor')">Bonga Mayor</div>
+                        <div class="brgy-item" onclick="selectBrgy('Malawak')">Malawak</div>
+                        <div class="brgy-item" onclick="selectBrgy('Catacte')">Catacte</div>
+                        <div class="brgy-item" onclick="selectBrgy('Liciada')">Liciada</div>
+                        <div class="brgy-item" onclick="selectBrgy('Camachilihan')">Camachilihan</div>
+                        <div class="brgy-item" onclick="selectBrgy('Malamig')">Malamig</div>
+                        <div class="brgy-item" onclick="selectBrgy('Buisan')">Buisan</div>
+                        <div class="brgy-item" onclick="selectBrgy('Cambaog')">Cambaog</div>
+                        <div class="brgy-item" onclick="selectBrgy('San Pedro')">San Pedro</div>
+                        <div class="brgy-item" onclick="selectBrgy('Talampas')">Talampas</div>
+                        <div class="brgy-item" onclick="selectBrgy('Tanawan')">Tanawan</div>
+                    </div>
+                </div>
+
+                <div class="table-section">
+                    <div class="table-controls">
+                        <input type="text" id="searchBox" class="search-input" placeholder="Search name or HH No..." onkeyup="filterTable()">
+                        <input type="file" id="csvFileInput" style="display:none" accept=".csv">
+                        <button class="btn btn-import" onclick="document.getElementById('csvFileInput').click()">Import Data</button>
+                        <button class="btn btn-view-archive" onclick="location.href='archiveresidents.html'">View Archive</button>
+                        <button class="btn btn-add" onclick="location.href='addresident.html'">Add Resident</button>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>HH NO.</th><th>LAST NAME</th><th>FIRST NAME</th><th>MIDDLE</th><th>QUAL.</th>
+                                    <th>NO.</th><th>STREET</th><th>PUROK</th><th>BIRTH PLACE</th><th>BIRTH DATE</th>
+                                    <th>SEX</th><th>CIVIL STATUS</th><th>CITIZENSHIP</th><th>OCCUPATION</th><th>REL. TO HEAD</th>
+                                    <th>VOTER?</th> <th>ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody id="residentTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="hhModal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <div class="household-header">
+                <h2 id="modalHHTitle">Household Family Members</h2>
+                <p id="modalHHNo" style="margin-top: 5px; color: #555;"></p>
+            </div>
+            <div style="max-height: 450px; overflow-y: auto;">
+                <table class="family-table">
+                    <thead>
+                        <tr>
+                            <th>FULL NAME</th>
+                            <th>RELATION</th>
+                            <th>SEX</th>
+                            <th>BIRTHDAY</th>
+                            <th>OCCUPATION</th>
+                            <th>VOTER?</th> <th>ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody id="familyMembersBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allRecords = JSON.parse(localStorage.getItem('tanawanData')) || [];
+        let activeBrgy = "Poblacion";
+
+        function selectBrgy(name) {
+            activeBrgy = name;
+            document.getElementById('headerTitle').innerText = "Barangay " + name;
+            document.querySelectorAll('.brgy-item').forEach(item => {
+                item.classList.toggle('active', item.innerText.trim() === name);
+            });
+            loadTable();
+        }
+
+        function loadTable() {
+            const tbody = document.getElementById('residentTableBody');
+            tbody.innerHTML = '';
+            allRecords = JSON.parse(localStorage.getItem('tanawanData')) || [];
+
+            const filtered = allRecords.filter(res => {
+                const residentBrgy = res.brgy || "Tanawan"; 
+                return residentBrgy.toLowerCase().trim() === activeBrgy.toLowerCase().trim();
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="17" style="text-align:center; padding:30px; color:#999;">Walang record sa Barangay ${activeBrgy}.</td></tr>`;
+                return;
+            }
+
+            filtered.forEach(res => {
+                const tr = document.createElement('tr');
+                tr.onclick = () => viewHousehold(res.h_no); 
+
+                tr.innerHTML = `
+                    <td>${res.h_no || ''}</td><td>${res.last || ''}</td><td>${res.first || ''}</td>
+                    <td>${res.mid || ''}</td><td>${res.q || ''}</td><td>${res.no || ''}</td>
+                    <td>${res.st || ''}</td><td>${res.p || ''}</td><td>${res.bp || ''}</td>
+                    <td>${res.bd || ''}</td><td>${res.s || ''}</td><td>${res.cs || ''}</td>
+                    <td>${res.cz || 'FILIPINO'}</td><td>${res.oc || 'N/A'}</td><td>${res.rel || ''}</td>
+                    <td><strong>${res.isVoter || 'N/A'}</strong></td>
+                    <td class="action-cell">
+                        <button class="btn-archive-row" onclick="event.stopPropagation(); executeArchive('${res.h_no}', '${res.last}', '${res.first}')">
+                            Archive
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+      // --- CORE ARCHIVE LOGIC WITH PASSWORD ---
+function executeArchive(hhNo, last, first) {
+    // 1. Confirm the action first
+    if (!confirm(`Are you sure you want to archive resident ${first} ${last}?`)) return;
+
+    // 2. Ask for Admin Password
+    const adminPassword = prompt("Security Check: Please enter Admin Password to archive this record:");
+
+    // 3. Validate Password (Halimbawa: admin123)
+    // Maaari mong palitan ang 'admin123' sa kahit anong password na gusto mo
+    if (adminPassword === null) return; // Kapag pinindot ang 'Cancel'
+    
+    if (adminPassword !== "admin123") {
+        alert("Access Denied: Incorrect Admin Password.");
+        return;
+    }
+
+    // 4. If password is correct, proceed to archive
+    let currentData = JSON.parse(localStorage.getItem('tanawanData')) || [];
+    let archivedData = JSON.parse(localStorage.getItem('archivedResidents')) || [];
+
+    const index = currentData.findIndex(r => r.h_no === hhNo && r.last === last && r.first === first);
+
+    if (index !== -1) {
+        const person = currentData[index];
+        person.archiveDate = new Date().toLocaleDateString();
+        person.brgy = person.brgy || activeBrgy;
+        
+        archivedData.push(person);
+        currentData.splice(index, 1);
+
+        localStorage.setItem('tanawanData', JSON.stringify(currentData));
+        localStorage.setItem('archivedResidents', JSON.stringify(archivedData));
+
+        alert("Successfully archived!");
+        closeModal();
+        loadTable();
+    } else {
+        alert("Error: Resident record not found.");
+    }
+}
+        function viewHousehold(hhNo) {
+            if(!hhNo) return;
+
+            const family = allRecords.filter(r => r.h_no === hhNo);
+            const modal = document.getElementById('hhModal');
+            const familyBody = document.getElementById('familyMembersBody');
+            
+            document.getElementById('modalHHNo').innerText = "Household ID: " + hhNo;
+            familyBody.innerHTML = '';
+
+            family.sort((a, b) => (a.rel || "").toUpperCase() === 'HEAD' ? -1 : 0);
+
+            family.forEach(m => {
+                const isHead = (m.rel || "").toUpperCase() === 'HEAD' ? 'class="head-row"' : '';
+                familyBody.innerHTML += `
+                    <tr ${isHead}>
+                        <td>${m.last}, ${m.first} ${m.mid}</td>
+                        <td>${m.rel || 'MEMBER'}</td>
+                        <td>${m.s || ''}</td>
+                        <td>${m.bd || ''}</td>
+                        <td>${m.oc || 'N/A'}</td>
+                        <td>${m.isVoter || 'N/A'}</td>
+                        <td>
+                            <button class="btn-archive-row" onclick="executeArchive('${m.h_no}', '${m.last}', '${m.first}')">
+                                Archive
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('hhModal').style.display = 'none'; }
+
+        document.getElementById('csvFileInput').addEventListener('change', function(e) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const lines = event.target.result.split(/\r?\n/).filter(l => l.trim() !== "");
+                let importedData = [];
+                lines.forEach((line) => {
+                    const c = parseCSVLine(line);
+                    const isHeader = line.toLowerCase().includes("hh no.") || line.toLowerCase().includes("first name");
+                    if (!isHeader && c.length >= 2) {
+                        importedData.push({
+                            h_no: c[0]||'', last: c[1]||'', first: c[2]||'', mid: c[3]||'', q: c[4]||'',
+                            no: c[5]||'', st: c[6]||'', p: c[7]||'', bp: c[8]||'', bd: c[9]||'',
+                            s: c[10]||'', cs: c[11]||'', cz: c[12]||'', oc: c[13]||'', rel: c[14]||'',
+                            isVoter: 'N/A', // Default value for new column
+                            brgy: activeBrgy
+                        });
+                    }
+                });
+                allRecords = [...allRecords, ...importedData];
+                localStorage.setItem('tanawanData', JSON.stringify(allRecords));
+                alert("Import Successful!");
+                loadTable();
+            };
+            reader.readAsText(e.target.files[0]);
+        });
+
+        function parseCSVLine(text) {
+            const result = []; let cell = ''; let inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                let char = text[i];
+                if (char === '"') inQuotes = !inQuotes;
+                else if (char === ',' && !inQuotes) { result.push(cell.trim()); cell = ''; }
+                else { cell += char; }
+            }
+            result.push(cell.trim()); return result;
+        }
+
+        function filterTable() {
+            const q = document.getElementById('searchBox').value.toLowerCase();
+            const rows = document.querySelectorAll('#residentTableBody tr');
+            rows.forEach(r => r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none');
+        }
+
+        window.onclick = (e) => { if(e.target == document.getElementById('hhModal')) closeModal(); }
+        window.onload = () => selectBrgy('Poblacion');
+    </script>
+</body>
+</html>

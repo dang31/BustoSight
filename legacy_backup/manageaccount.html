@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Accounts - BustoSight</title>
+    <link rel="stylesheet" href="manageaccount.css"> <script src="global.js"></script>
+    <style>
+        /* Extra styles para sa Manage Accounts specific elements */
+        .account-table-container { margin-top: 20px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .btn-delete { background: #feb2b2; color: #c53030; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 800; text-transform: uppercase; transition: 0.3s; }
+        .btn-delete:hover { background: #f56565; color: white; }
+        
+        /* Modal for Admin Verification */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); z-index: 1000; align-items: center; justify-content: center; }
+        .admin-modal { background: white; padding: 30px; border-radius: 20px; width: 350px; text-align: center; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); animation: fadeIn 0.3s ease; }
+        .modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+    </style>
+</head>
+
+<body>
+    <div class="bg-image"></div>
+    <div class="overlay"></div>
+
+    <div class="dashboard-wrapper">
+        <aside class="sidebar">
+            <div class="sidebar-logo"><img src="POPDEV LOGO.png" alt="Logo"></div>
+            <nav class="nav-menu">
+                <p class="label">Population Development</p>
+                <ul>
+                    <li onclick="window.location.href='dashboard.html'">Dashboard</li>
+                    <li onclick="window.location.href='barangaylistpage.html'">Barangay List</li>
+                    <li onclick="window.location.href='reportpage.html'">Reports</li>
+                    <li onclick="window.location.href='addresident.html'">Add Residents</li>
+<li class="active">Manage Account</li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="logout-btn" id="logoutBtn">Logout</button>
+            </div>
+        </aside>
+
+        <main class="content">
+            <div class="form-card-container">
+                <div class="form-blue-header">
+                    <h1>Manage User Accounts</h1>
+                </div>
+
+                <div class="form-white-body">
+                    <div class="form-step">
+                        <h2 class="form-section-title">Create New User</h2>
+                        <div class="grid-2-cols">
+                            <div class="field-group">
+                                <label>Username</label>
+                                <input type="text" id="new_username" placeholder="Enter username">
+                            </div>
+                            <div class="field-group">
+                                <label>Password</label>
+                                <input type="password" id="new_password" placeholder="••••••••">
+                            </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 20px;">
+                            <button type="button" class="btn-next" onclick="openAdminVerify('create')">Register Account</button>
+                        </div>
+                    </div>
+
+                    <hr style="margin: 40px 0; border: 0; border-top: 2px dashed #e2e8f0;">
+
+                    <div class="form-step">
+                        <h2 class="form-section-title">Active System Users</h2>
+                        <div class="account-table-container">
+                            <table class="modern-table">
+                                <thead>
+                                    <tr>
+                                        <th>Username</th>
+                                        <th>Role / Position</th>
+                                        <th style="text-align: center;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="accounts-table-body">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="admin-modal">
+            <h2 style="font-size: 16px; color: var(--primary-blue); margin-bottom: 10px;">Admin Verification</h2>
+            <p style="font-size: 12px; color: #718096; margin-bottom: 20px;">Please enter admin's password before proceeding.</p>
+            <div class="field-group">
+                <label>Admin Password</label>
+                <input type="password" id="admin_pass_input" style="text-align: center;">
+            </div>
+            <div class="modal-btns">
+                <button class="btn-back" style="flex:1" onclick="closeAdminVerify()">Cancel</button>
+                <button class="btn-next" style="flex:1" onclick="processAction()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentAction = null;
+        let selectedIndex = null;
+
+        // I-load ang accounts sa simula
+        window.onload = loadAccounts;
+
+        function loadAccounts() {
+            // Sample data structure
+            let accounts = JSON.parse(localStorage.getItem('popdevUsers')) || [
+                { user: 'admin_bustos', role: 'Administrator' }
+            ];
+
+            const tbody = document.getElementById('accounts-table-body');
+            tbody.innerHTML = accounts.map((acc, index) => `
+                <tr>
+                    <td><b>${acc.user}</b></td>
+                    <td><span style="color: #4a5568; font-size: 12px;">${acc.role}</span></td>
+                    <td style="text-align: center;">
+                        ${acc.role !== 'Administrator' ? `<button class="btn-delete" onclick="openAdminVerify('delete', ${index})">Delete</button>` : '<i>Protected</i>'}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openAdminVerify(action, index = null) {
+            currentAction = action;
+            selectedIndex = index;
+            document.getElementById('modalOverlay').style.display = 'flex';
+            document.getElementById('admin_pass_input').focus();
+        }
+
+        function closeAdminVerify() {
+            document.getElementById('modalOverlay').style.display = 'none';
+            document.getElementById('admin_pass_input').value = '';
+        }
+
+        function processAction() {
+            const adminPass = document.getElementById('admin_pass_input').value;
+
+            // Palitan ang "admin123" ng gusto mong totoong admin password
+            if (adminPass === "admin123") {
+                if (currentAction === 'create') {
+                    saveAccount();
+                } else if (currentAction === 'delete') {
+                    deleteAccount();
+                }
+                closeAdminVerify();
+            } else {
+                alert("Mali ang Admin Password! Hindi maaring ituloy ang action.");
+            }
+        }
+
+        function saveAccount() {
+            const user = document.getElementById('new_username').value;
+            const pass = document.getElementById('new_password').value;
+
+            if (!user || !pass) return alert("Please enter username and password.");
+
+            let accounts = JSON.parse(localStorage.getItem('popdevUsers')) || [{ user: 'admin_bustos', role: 'Administrator' }];
+            accounts.push({ user: user, pass: pass, role: 'User' });
+
+            localStorage.setItem('popdevUsers', JSON.stringify(accounts));
+            alert("Account of " + user + " is successfully created!");
+            
+            document.getElementById('new_username').value = '';
+            document.getElementById('new_password').value = '';
+            loadAccounts();
+        }
+
+        function deleteAccount() {
+            let accounts = JSON.parse(localStorage.getItem('popdevUsers'));
+            accounts.splice(selectedIndex, 1);
+            localStorage.setItem('popdevUsers', JSON.stringify(accounts));
+            loadAccounts();
+        }
+
+        // Logout function consistent sa addresident.html
+        document.getElementById('logoutBtn').onclick = function() {
+            if (confirm("Are you sure you want to log out?")) {
+                window.location.href = 'loginpage.html';
+            }
+        };
+    </script>
+</body>
+</html>

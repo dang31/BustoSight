@@ -1,0 +1,178 @@
+/* ===========================
+   REPORTS PAGE CSS
+   =========================== */
+
+.report-card {
+  background: rgba(255,255,255,0.97);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  max-width: 680px;
+  margin: 0 auto;
+  border: 1px solid rgba(44,82,130,0.08);
+  animation: fadeInUp 0.5s ease;
+}
+
+.report-card-header {
+  background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+  padding: 24px 30px;
+  color: white;
+}
+
+.report-card-header h2 {
+  font-size: 20px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.report-card-header p {
+  font-size: 13px;
+  opacity: 0.85;
+  margin-top: 4px;
+}
+
+.report-selection-list {
+  padding: 26px 30px;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 8px 0;
+  transition: var(--transition);
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.main-toggle-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary-dark);
+  letter-spacing: 0.3px;
+}
+
+.report-item-label {
+  font-size: 13.5px;
+  color: var(--gray-600);
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.checkbox-group:hover .report-item-label {
+  color: var(--primary);
+}
+
+.sub-items {
+  padding-left: 28px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sub-items .checkbox-group {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: var(--transition);
+}
+
+.sub-items .checkbox-group:hover {
+  background: #f0f7ff;
+  border-color: rgba(74,141,240,0.2);
+}
+
+.report-actions {
+  padding: 20px 30px 28px;
+  border-top: 1px solid var(--gray-100);
+  background: var(--gray-50);
+}
+
+.generate-print-btn {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  letter-spacing: 0.5px;
+  box-shadow: 0 6px 20px rgba(44,82,130,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.generate-print-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(44,82,130,0.45);
+}
+
+.generate-print-btn:active {
+  transform: translateY(-1px);
+}
+
+/* Printable area (hidden in screen) */
+#printable-area {
+  display: none;
+}
+
+/* Print styles */
+@media print {
+  body * { visibility: hidden; }
+  #printable-area, #printable-area * { visibility: visible; }
+  #printable-area {
+    display: block !important;
+    position: absolute;
+    left: 0; top: 0;
+    width: 100%;
+    padding: 30px;
+    font-family: 'Times New Roman', serif;
+  }
+  .report-section {
+    display: none;
+    page-break-after: always;
+  }
+  .report-section.show-print {
+    display: block !important;
+  }
+  .no-print { display: none !important; }
+
+  /* Print table styles */
+  #printable-area table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: unset;
+    margin-top: 15px;
+  }
+  #printable-area th,
+  #printable-area td {
+    border: 1px solid #ccc;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  #printable-area thead th {
+    background: #2c5282;
+    color: white;
+    position: static;
+  }
+  #printable-area h3 {
+    font-size: 14px;
+    color: #1a365d;
+    text-transform: uppercase;
+    margin: 20px 0 10px;
+  }
+}

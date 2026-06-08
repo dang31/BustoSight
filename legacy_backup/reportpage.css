@@ -1,0 +1,235 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+    --primary-blue: #2c5282;
+    --accent-blue: #3182ce;
+    --glass-sidebar: rgba(255, 255, 255, 0.1);
+    --card-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* --- CORE RESET --- */
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+
+body { 
+    background-color: #f4f7fe; 
+    overflow: hidden; 
+    color: #2d3748; 
+    height: 100vh;
+}
+
+/* --- BACKGROUND ENGINE --- */
+.bg-image {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: url('background-bustos.jpg') center/cover no-repeat;
+    z-index: -2;
+}
+.overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(135deg, rgba(26, 54, 93, 0.9) 0%, rgba(44, 82, 130, 0.7) 100%);
+    z-index: -1;
+}
+
+/* --- LAYOUT WRAPPER --- */
+.dashboard-wrapper { 
+    display: flex; 
+    height: 100vh; 
+    width: 100vw;
+    position: relative; 
+    z-index: 1; 
+}
+
+/* --- SIDEBAR --- */
+.sidebar { 
+    width: 260px; 
+    min-width: 260px; 
+    background: var(--glass-sidebar); 
+    backdrop-filter: blur(20px); 
+    border-right: 1px solid rgba(255,255,255,0.1); 
+    color: white; 
+    display: flex; 
+    flex-direction: column; 
+    padding: 30px 0; 
+    height: 100%;
+}
+
+.sidebar-logo { text-align: center; margin-bottom: 40px; flex-shrink: 0; }
+.sidebar-logo img { width: 80px; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.3)); }
+
+.nav-menu { flex-grow: 1; overflow-y: auto; }
+.nav-menu .label { 
+    font-size: 10px; padding: 0 25px; opacity: 0.6; 
+    margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; font-weight: 700;
+}
+
+.nav-menu ul { list-style: none; }
+.nav-menu li { 
+    padding: 16px 25px; cursor: pointer; font-size: 14px; 
+    transition: 0.3s ease; border-left: 4px solid transparent;
+}
+
+.nav-menu li:hover { background: rgba(255,255,255,0.1); padding-left: 35px; }
+.nav-menu li.active { 
+    background: white; color: var(--primary-blue); 
+    font-weight: 700; border-left-color: #4299e1;
+}
+
+.sidebar-footer { padding: 20px; flex-shrink: 0; }
+.logout-btn { 
+    width: 100%; background: rgba(254, 178, 178, 0.1); border: none; 
+    color: #feb2b2; padding: 12px; font-weight: 600; 
+    cursor: pointer; border-radius: 12px; transition: 0.3s;
+}
+.logout-btn:hover { background: #f56565 !important; color: white !important; }
+
+/* --- MAIN CONTENT --- */
+.content { 
+    flex: 1; 
+    padding: 25px; 
+    overflow-y: auto; 
+    height: 100vh; 
+    scroll-behavior: smooth;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-header { 
+    background: white; color: var(--primary-blue); 
+    padding: 18px; border-radius: 16px; 
+    text-align: center; margin-bottom: 25px; 
+    box-shadow: var(--card-shadow);
+    flex-shrink: 0;
+}
+.main-header h1 { font-size: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+
+/* --- THE REPORT CARD: FIXED SPACING --- */
+/* --- THE REPORT CARD: FIXED SPACING --- */
+.report-card {
+    background: white; 
+    border-radius: 20px; 
+    padding: 40px; 
+    box-shadow: var(--card-shadow); 
+    max-width: 900px; 
+    margin: 0 auto 40px auto; 
+    width: 100%;
+}
+
+.report-card-header {
+    margin-bottom: 20px;
+    border-bottom: 2px solid #f4f7fe;
+}
+.report-card-header h2 {
+    font-size: 24px;
+    color: var(--primary-blue);
+}
+
+.report-card-header p {
+    font-size: 15px;
+    margin-bottom: 20px;
+    color: #718096;
+}
+
+/* 2. Pampaluwag sa "Select All Reports" row */
+.report-selection-list > .checkbox-group:first-child {
+    margin-bottom: 30px; /* DISTANCE NG SELECT ALL SA MGA SUMUSUNOD NA ITEMS */
+    padding: 15px;
+    background: #f8fafc;
+    border-radius: 12px;
+}
+
+.main-toggle-label {
+    font-weight: 800;
+    font-size: 16px;
+    color: #2d3748;
+}
+
+/* 3. Spacing sa bawat Category/Item */
+.checkbox-group { 
+    display: flex; 
+    align-items: center; 
+    margin-bottom: 20px; 
+    cursor: pointer; 
+}
+
+.checkbox-group input { 
+    width: 20px; 
+    height: 20px; 
+    margin-right: 15px; 
+    accent-color: var(--accent-blue); 
+    cursor: pointer;
+}
+
+.report-item-label { 
+    color: #2c5282; 
+    font-weight: 700; 
+    font-size: 16px; 
+}
+
+/* 4. Luwag ng Sub-items list */
+.sub-items { 
+    padding-left: 40px; 
+    border-left: 3px solid #edf2f7; 
+    margin-left: 10px; 
+    margin-bottom: 30px; 
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* SPACE SA PAGITAN NG MGA CHECKBOXES */
+}
+
+/* Style para sa mga text sa loob ng sub-items */
+.sub-items label {
+    display: flex;
+    align-items: center;
+    font-size: 14.5px;
+    color: #4a5568;
+    line-height: 1.6; /* LUWAG NG TEXT LINES */
+    cursor: pointer;
+}
+
+.sub-items input { margin-right: 12px; }
+
+.generate-print-btn {
+    width: 100%; background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%); 
+    color: white; border: none; padding: 18px; border-radius: 12px; 
+    font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.3s;
+    margin-top: 10px;
+}
+.generate-print-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+
+/* --- PRINT ENGINE: UPDATED FOR TABLES --- */
+#printable-area { display: none; }
+@media print {
+    body { background: white !important; }
+    body * { visibility: hidden; }
+    .dashboard-wrapper, .sidebar, .bg-image, .overlay, .main-header, .report-card { display: none !important; }
+    
+    #printable-area, #printable-area * { visibility: visible; }
+    #printable-area { 
+        display: block !important; 
+        position: absolute; 
+        left: 0; top: 0; 
+        width: 100%; 
+        background: white !important; 
+        padding: 20px; 
+        color: black; 
+    }
+
+    /* Siguradong may border ang table sa print */
+    table { 
+        width: 100%; 
+        border-collapse: collapse !important; 
+        margin-bottom: 20px;
+    }
+    table, th, td { 
+        border: 1px solid #000 !important; 
+        padding: 10px !important;
+    }
+    th { background-color: #f2f2f2 !important;  }
+
+    .report-section { display: none !important; margin-bottom: 30px; }
+    .report-section.show-print { display: block !important; }
+}
+
+/* Custom Scrollbar */
+.content::-webkit-scrollbar { width: 6px; }
+.content::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 10px; }
+

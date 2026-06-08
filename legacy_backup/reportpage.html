@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BustoSight - Reports Generation</title>
+    <link rel="stylesheet" href="reportpage.css">
+    <script src="global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* CSS para sa Printing Logic */
+        #printable-area {
+            display: none; /* Nakatago sa screen view */
+        }
+
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printable-area, #printable-area * {
+                visibility: visible;
+            }
+            #printable-area {
+                display: block !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .report-section {
+                display: none; /* Itatago lahat muna */
+                page-break-after: always;
+            }
+            .report-section.show-print {
+                display: block !important; /* Lalabas lang ang pinili */
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-image"></div>
+    <div class="overlay"></div>
+
+    <div class="dashboard-wrapper">
+        <aside class="sidebar">
+            <div class="sidebar-logo"><img src="POPDEV LOGO.png" alt="Logo"></div>
+            <nav class="nav-menu">
+                <p class="label">Population Development</p>
+                <ul>
+                    <li onclick="window.location.href='dashboard.html'">Dashboard</li>
+                    <li onclick="window.location.href='barangaylistpage.html'">Barangay List</li>                  
+                    <li class="active">Reports</li>
+                    <li onclick="window.location.href='addresident.html'">Add Residents</li>                 
+                    <li onclick="location.href='manageaccount.html'">Manage Accounts</li>                 
+                </ul>
+            </nav>
+            <div class="sidebar-footer"><button class="logout-btn">Logout</button></div>
+        </aside>
+
+        <main class="content">
+            <header class="main-header"><h1>Bustos Population Reports</h1></header>
+
+            <div class="report-card">
+                <div class="report-card-header">
+                    <h2>Generate Reports</h2>
+                    <p>Select the components to include in the printed report:</p>
+                </div>
+
+                <div class="report-selection-list">
+                    <label class="checkbox-group">
+                        <input type="checkbox" id="selectAll">
+                        <span class="main-toggle-label">Select All Reports</span>
+                    </label>
+
+                    <div class="sub-items" style="padding-left: 20px; margin-top: 10px;">
+                        <label class="checkbox-group">
+                            <input type="checkbox" class="report-item" data-section="age-gender">
+                            <span class="report-item-label">Age and Gender Distribution</span>
+                        </label>
+                        <label class="checkbox-group">
+                            <input type="checkbox" class="report-item" data-section="household">
+                            <span class="report-item-label">Total Household Population (14 Barangays)</span>
+                        </label>
+                        <label class="checkbox-group">
+                            <input type="checkbox" class="report-item" data-section="brgy-stats">
+                            <span class="report-item-label">Barangay Statistics Summary</span>
+                        </label>
+                        <label class="checkbox-group">
+                            <input type="checkbox" class="report-item" data-section="senior-pwd">
+                            <span class="report-item-label">Senior Citizen & PWD Report</span>
+                        </label>
+                        <label class="checkbox-group">
+                            <input type="checkbox" class="report-item" data-section="voters-report">
+                            <span class="report-item-label">Total Voters per Barangay</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="report-actions">
+                    <button id="printBtn" class="generate-print-btn"><i class="fas fa-print"></i> Generate & Print Selected</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="printable-area">
+        <div class="report-header" style="text-align: center; margin-bottom: 30px;">
+            <p>Republic of the Philippines</p>
+            <p>Province of Bulacan</p>
+            <h2>Municipality of Bustos</h2>
+            <p><strong>OFFICIAL CENSUS AND POPULATION REPORT</strong></p>
+            <p>Date Generated: <span id="currentDate"></span></p>
+        </div>
+
+        <div id="age-gender" class="report-section">
+            <h3>I. Age and Gender Distribution</h3>
+            <table>
+                <thead>
+                    <tr><th rowspan="2">AGE GROUP</th><th colspan="2">SEX</th><th rowspan="2">TOTAL</th></tr>
+                    <tr><th>MALE</th><th>FEMALE</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Under 5</td><td>120</td><td>115</td><td>235</td></tr>
+                    <tr><td>5-17 (Youth)</td><td>450</td><td>430</td><td>880</td></tr>
+                    <tr><td>18-59 (Adult)</td><td>890</td><td>910</td><td>1,800</td></tr>
+                    <tr><td>60+ (Senior)</td><td>150</td><td>180</td><td>330</td></tr>
+                    <tr><td><strong>GRAND TOTAL</strong></td><td><strong>1,610</strong></td><td><strong>1,635</strong></td><td><strong>3,245</strong></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="household" class="report-section">
+            <h3>II. Total Household Population (14 Barangays)</h3>
+            <table>
+                <thead>
+                    <tr><th>#</th><th>BARANGAY</th><th>HOUSEHOLDS</th><th>POPULATION</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>Bonga Mayor</td><td>320</td><td>1,450</td></tr>
+                    <tr><td>2</td><td>Bonga Menor</td><td>280</td><td>1,210</td></tr>
+                    <tr><td>3</td><td>Buisan</td><td>150</td><td>680</td></tr>
+                    <tr><td>4</td><td>Camachilihan</td><td>210</td><td>950</td></tr>
+                    <tr><td>5</td><td>Cambaog</td><td>430</td><td>1,980</td></tr>
+                    <tr><td>6</td><td>Catacte</td><td>190</td><td>870</td></tr>
+                    <tr><td>7</td><td>Liciada</td><td>340</td><td>1,540</td></tr>
+                    <tr><td>8</td><td>Malamig</td><td>260</td><td>1,120</td></tr>
+                    <tr><td>9</td><td>Malawak</td><td>220</td><td>980</td></tr>
+                    <tr><td>10</td><td>Poblacion</td><td>510</td><td>2,450</td></tr>
+                    <tr><td>11</td><td>San Pedro</td><td>240</td><td>1,050</td></tr>
+                    <tr><td>12</td><td>Talampas</td><td>275</td><td>1,240</td></tr>
+                    <tr><td>13</td><td>Tanauan</td><td>305</td><td>1,380</td></tr>
+                    <tr><td>14</td><td>Tibagan</td><td>290</td><td>1,320</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="brgy-stats" class="report-section">
+            <h3>III. Barangay Statistics Summary</h3>
+            <table>
+                <thead>
+                    <tr><th>BARANGAY</th><th>SENIORS</th><th>PWDs</th><th>VOTERS</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Bonga Mayor</td><td>85</td><td>24</td><td>410</td></tr>
+                    <tr><td>Bonga Menor</td><td>92</td><td>31</td><td>480</td></tr>
+                    <tr><td>Malamig</td><td>64</td><td>18</td><td>320</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="senior-pwd" class="report-section">
+            <h3>IV. Senior Citizen & PWD Report</h3>
+            <table>
+                <thead>
+                    <tr><th>CATEGORY</th><th>MALE</th><th>FEMALE</th><th>TOTAL</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Senior Citizens</td><td>340</td><td>410</td><td>750</td></tr>
+                    <tr><td>PWDs</td><td>125</td><td>110</td><td>235</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="voters-report" class="report-section">
+            <h3>V. Total Voters per Barangay</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>BARANGAY</th>
+                        <th>REGISTERED VOTERS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>Bonga Mayor</td><td>410</td></tr>
+                    <tr><td>2</td><td>Bonga Menor</td><td>480</td></tr>
+                    <tr><td>3</td><td>Buisan</td><td>215</td></tr>
+                    <tr><td>4</td><td>Camachilihan</td><td>305</td></tr>
+                    <tr><td>5</td><td>Cambaog</td><td>620</td></tr>
+                    <tr><td>6</td><td>Catacte</td><td>290</td></tr>
+                    <tr><td>7</td><td>Liciada</td><td>540</td></tr>
+                    <tr><td>8</td><td>Malamig</td><td>320</td></tr>
+                    <tr><td>9</td><td>Malawak</td><td>310</td></tr>
+                    <tr><td>10</td><td>Poblacion</td><td>850</td></tr>
+                    <tr><td>11</td><td>San Pedro</td><td>380</td></tr>
+                    <tr><td>12</td><td>Talampas</td><td>415</td></tr>
+                    <tr><td>13</td><td>Tanauan</td><td>440</td></tr>
+                    <tr><td>14</td><td>Tibagan</td><td>435</td></tr>
+                    <tr style="background: #f0f4f8; font-weight: bold;">
+                        <td colspan="2">TOTAL MUNICIPAL VOTERS</td>
+                        <td>6,010</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="signature-section" style="margin-top: 50px;">
+            <p>Certified Correct by:</p>
+            <br><br>
+            <p>__________________________</p>
+            <p><strong>POPDEV OFFICER</strong></p>
+        </div>
+    </div>
+
+    <script>
+        // Automatic Date
+        document.getElementById('currentDate').innerText = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+        const selectAll = document.getElementById('selectAll');
+        const reportItems = document.querySelectorAll('.report-item');
+
+        // Select All functionality
+        selectAll.addEventListener('change', function() {
+            reportItems.forEach(cb => cb.checked = this.checked);
+        });
+
+        // Individual checkbox functionality
+        reportItems.forEach(item => {
+            item.addEventListener('change', () => {
+                selectAll.checked = Array.from(reportItems).every(i => i.checked);
+            });
+        });
+
+        // Print function
+        document.getElementById('printBtn').addEventListener('click', function() {
+            const selected = document.querySelectorAll('.report-item:checked');
+            
+            if (selected.length === 0) {
+                alert("Please select at least one report!");
+                return;
+            }
+
+            // Reset all sections first
+            document.querySelectorAll('.report-section').forEach(sec => sec.classList.remove('show-print'));
+            
+            // Show only selected sections
+            selected.forEach(cb => {
+                const sectionId = cb.getAttribute('data-section');
+                const targetSection = document.getElementById(sectionId);
+                if(targetSection) {
+                    targetSection.classList.add('show-print');
+                }
+            });
+
+            // Trigger Print
+            window.print();
+        });
+    </script>
+</body>
+</html>

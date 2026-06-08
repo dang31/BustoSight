@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BustoSight - Population Forecasting Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="global.js"></script>
+    <style>
+        /* Card Hover Effects */
+        .card { cursor: pointer; transition: 0.3s; position: relative; overflow: hidden; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 12px 20px rgba(0,0,0,0.2); border: 1px solid #3182ce; }
+        .card::after { content: 'Click to view details'; position: absolute; bottom: 5px; right: 10px; font-size: 8px; opacity: 0.6; }
+
+        /* Distribution Modal Styling */
+        .dist-modal {
+            display: none; position: fixed; z-index: 1000; left: 0; top: 0; 
+            width: 100%; height: 100%; background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px); justify-content: center; align-items: center;
+        }
+        .dist-content {
+            background: white; width: 90%; max-width: 450px; padding: 25px; 
+            border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        
+        .dist-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #edf2f7; padding-bottom: 15px; margin-bottom: 15px; }
+        .dist-header h3 { color: #2c5282; font-size: 18px; text-transform: uppercase; }
+        .close-dist { cursor: pointer; font-size: 24px; color: #a0aec0; }
+        .close-dist:hover { color: #e53e3e; }
+
+        .dist-list { max-height: 350px; overflow-y: auto; padding-right: 5px; }
+        .dist-item { display: flex; justify-content: space-between; padding: 12px 15px; border-bottom: 1px solid #f7fafc; transition: 0.2s; }
+        .dist-item:hover { background: #f0f7ff; border-radius: 8px; }
+        .dist-item span:first-child { font-weight: 500; color: #4a5568; }
+        .dist-item span:last-child { font-weight: 800; color: #2c5282; }
+
+        /* Scrollbar for modal */
+        .dist-list::-webkit-scrollbar { width: 4px; }
+        .dist-list::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div class="bg-image"></div>
+    <div class="overlay"></div>
+
+    <div class="dashboard-wrapper">
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <img src="POPDEV LOGO.png" alt="Logo">
+            </div>
+            <nav class="nav-menu">
+                <p class="label">Population Development</p>
+                <ul>
+                    <li class="active">Dashboard</li>
+                    <li onclick="window.location.href='barangaylistpage.html'">Barangay List</li>                  
+                    <li onclick="window.location.href='reportpage.html'">Reports</li>                 
+                    <li onclick="window.location.href='addresident.html'">Add Residents</li>                 
+                    <li onclick="window.location.href='manageaccount.html'">Manage Account</li>                 
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="logout-btn" id="logoutBtn" onclick="window.location.href='login.html'">Logout</button>
+            </div>
+        </aside>
+
+        <main class="content">
+            <header class="main-header">
+                <h1>BustoSight: Population Dashboard</h1>
+            </header>
+
+            <div class="stats-container">
+                <div class="card" onclick="openDist('Total Household')"><h5>Total Household</h5> <h2>2,945</h2></div>
+                <div class="card" onclick="openDist('Total Senior Citizen')"><h5>Total Senior Citizen</h5> <h2>140</h2></div>
+                <div class="card" onclick="openDist('Total Voters')"><h5>Total Voters</h5> <h2>5,440</h2></div>
+                <div class="card" onclick="openDist('Total PWD')"><h5>Total PWD</h5> <h2>25</h2></div>
+                <div class="card" onclick="openDist('Total Citizen')"><h5>Total Citizen</h5> <h2>8,550</h2></div>
+                <div class="card" onclick="openDist('Total Voters')"><h5>Total Voters</h5> <h2>5,440</h2></div>
+            </div>
+
+            <div class="forecast-container">
+                <div class="f-card">
+                    <div class="f-header"><strong>Total Population Growth</strong></div>
+                    <div class="f-body">
+                        <div class="f-val"><span>Current:</span> <strong>8,550</strong></div>
+                        <div class="f-val"><span>5-Year Project:</span> <strong>9,440</strong></div>
+                        <div class="f-growth">↗ Linear Regression Projection</div>
+                    </div>
+                    <div class="f-footer">Analyzes the past 5 years of data to calculate average increase and project the additional population for the next 5 years.</div>
+                </div>
+
+          <div class="f-card">
+    <div class="f-header"><strong>Senior Population</strong></div>
+    <div class="f-body">
+        <div class="f-val"><span>Ages 60+:</span> <strong>140</strong></div>
+        <div class="f-val"><span>Projected:</span> <strong>172</strong></div> 
+        <div class="f-growth">↗ Aging Population Trend</div>
+    </div>
+    <div class="f-footer">Focuses on residents aged 60 and above, utilizing aging population trends to forecast future growth.</div>
+</div>
+
+                <div class="f-card">
+                    <div class="f-header"><strong>Migration Trend</strong></div>
+                    <div class="f-body">
+                        <div class="f-val"><span>Net Change:</span> <strong>+2.4%</strong></div>
+                        <div class="f-status">Status: In-Migration</div>
+                    </div>
+                    <div class="f-footer">An approximation based on net population changes not explained by natural growth (births/deaths).</div>
+                </div>
+
+                <div class="f-card">
+                    <div class="f-header"><strong>Change Trend</strong></div>
+                    <div class="f-body">
+                        <div class="f-val"><span>Overall Trend:</span> <strong>Increasing</strong></div>
+                        <div class="f-val"><span>Scope:</span> <strong>5-Year Review</strong></div>
+                    </div>
+                    <div class="f-footer">Reviews overall population shifts over the last 5 years to determine if the count will rise or fall.</div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-item">
+                    <h4>Age Group Distribution (5-Year Forecast)</h4>
+                    <div class="chart-container"><canvas id="ageChart"></canvas></div>
+                    <p class="chart-note">Analyzes historical age breakdowns to show how many people will enter each age group in the next 5 years.</p>
+                </div>
+                
+                <div class="chart-item">
+                    <h4>Population by Barangay</h4>
+                    <div class="chart-container"><canvas id="barChart"></canvas></div>
+                </div>
+
+                <div class="chart-item">
+                    <h4>Growth Trends (Linear Regression)</h4>
+                    <div class="chart-container"><canvas id="lineChart"></canvas></div>
+                </div>
+
+                <div class="chart-item">
+                    <h4>Gender Distribution</h4>
+                    <div class="chart-container pie-box"><canvas id="pieChart"></canvas></div>
+                </div>
+
+                 <div class="chart-item">
+                    <h4>Historical Population & Voters Trend</h4>
+                    <div class="chart-container">
+                        <canvas id="historyChart"></canvas>
+                    </div>
+                    <p class="chart-note">Comparative analysis of total population vs. registered voters from 2021 to 2025.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="distModal" class="dist-modal">
+        <div class="dist-content">
+            <div class="dist-header">
+                <h3 id="modalTitle">Distribution</h3>
+                <span class="close-dist" onclick="closeDist()">&times;</span>
+            </div>
+            <div class="dist-list" id="modalList">
+                </div>
+        </div>
+    </div>
+
+    <script>
+ // --- ACTUAL DATA FOR 14 BARANGAYS (SAMPLE NUMBERS) ---
+const brgyStats = [
+    { name: "Bonga Mayor", hh: 345, senior: 45, voters: 890, pwd: 12, citizen: 1540 },
+    { name: "Bonga Menor", hh: 290, senior: 38, voters: 750, pwd: 8, citizen: 1200 },
+    { name: "Buisan", hh: 150, senior: 20, voters: 400, pwd: 5, citizen: 650 },
+    { name: "Camachilihan", hh: 210, senior: 25, voters: 560, pwd: 7, citizen: 890 },
+    { name: "Cambaog", hh: 420, senior: 55, voters: 1100, pwd: 15, citizen: 1850 },
+    { name: "Catacte", hh: 180, senior: 22, voters: 480, pwd: 6, citizen: 780 },
+    { name: "Liciada", hh: 510, senior: 70, voters: 1350, pwd: 20, citizen: 2200 },
+    { name: "Malamig", hh: 230, senior: 30, voters: 610, pwd: 9, citizen: 1050 },
+    { name: "Malawak", hh: 275, senior: 35, voters: 720, pwd: 11, citizen: 1180 },
+    { name: "Poblacion", hh: 580, senior: 85, voters: 1600, pwd: 25, citizen: 2600 },
+    { name: "San Pedro", hh: 195, senior: 28, voters: 520, pwd: 8, citizen: 880 },
+    { name: "Talampas", hh: 310, senior: 42, voters: 830, pwd: 14, citizen: 1420 },
+    { name: "Tanawan", hh: 260, senior: 32, voters: 680, pwd: 10, citizen: 1120 },
+    { name: "Tibagan", hh: 330, senior: 48, voters: 900, pwd: 13, citizen: 1510 }
+];
+
+function openDist(category) {
+    const modal = document.getElementById('distModal');
+    const title = document.getElementById('modalTitle');
+    const list = document.getElementById('modalList');
+    
+    title.innerText = category;
+    list.innerHTML = '';
+
+    // Alphabetical sort para hindi nakakalito
+    brgyStats.sort((a, b) => a.name.localeCompare(b.name));
+
+    brgyStats.forEach(item => {
+        let val = 0;
+        // Titingnan kung anong card ang pinindot mo
+        if (category.includes("Household")) val = item.hh;
+        else if (category.includes("Senior")) val = item.senior;
+        else if (category.includes("Voters")) val = item.voters;
+        else if (category.includes("PWD")) val = item.pwd;
+        else val = item.citizen;
+
+        list.innerHTML += `
+            <div class="dist-item">
+                <span>${item.name}</span>
+                <span>${val.toLocaleString()}</span>
+            </div>
+        `;
+    });
+
+    modal.style.display = 'flex';
+}
+        function closeDist() {
+            document.getElementById('distModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside content
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('distModal')) closeDist();
+        }
+
+        // --- CHARTS CONFIGURATION ---
+        new Chart(document.getElementById('ageChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Children (0-17)', 'Working-Age (18-59)', 'Seniors (60+)'],
+                datasets: [
+                    { label: 'Current', data: [2500, 5000, 1050], backgroundColor: '#5d87ff' },
+                    { label: 'Projected (5 Yrs)', data: [2800, 5400, 1240], backgroundColor: '#00d1b2' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+       new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+        labels: ['Bonga Menor', 'Bonga Mayor', 'Malawak', 'Catacte', 'Liciada', 'Camachilihan', 'Malamig', 'Cambaog', 'Talampas', 'San Pedro', 'Buisan', 'Tanawan', 'Poblacion', 'Tibagan'],
+        datasets: [{ 
+            label: 'Population', // Ito yung text na lalabas sa tabi ng blue box
+            data: [1200, 900, 450, 600, 300, 200, 1200, 900, 450, 600, 300, 200, 1500, 1100], 
+            backgroundColor: '#5d87ff', 
+            barThickness: 10 // Slim but visible
+        }]
+    },
+    options: { 
+        indexAxis: 'y', 
+        responsive: true, 
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { 
+                display: true, // IBALIK NATIN ITO
+                position: 'top', // Lalabas sa taas, sa tabi o ilalim ng title
+                align: 'end',    // I-align sa kanan para sosyal tingnan
+                labels: {
+                    boxWidth: 12, // Sukat ng maliit na blue box
+                    font: { size: 10 }
+                }
+            }
+        },
+        scales: {
+            y: { ticks: { font: { size: 9 } }, grid: { display: false } },
+            x: { ticks: { font: { size: 9 } }, grid: { display: false } }
+        }
+    }
+});
+        new Chart(document.getElementById('lineChart'), {
+            type: 'line',
+            data: {
+                labels: ['2026', '2027', '2028', '2029', '2030', '2031'],
+                datasets: [{ label: 'Predicted Growth', data: [8550, 8729, 8910, 9100, 9280, 9440], borderColor: '#ff4d4d', fill: true, tension: 0.4 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        new Chart(document.getElementById('pieChart'), {
+            type: 'pie',
+            data: {
+                labels: ['Male', 'Female'],
+                datasets: [{ data: [4200, 4350], backgroundColor: ['#5d87ff', '#ff85a2'] }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        function openDist(category) {
+    const modal = document.getElementById('distModal');
+    const title = document.getElementById('modalTitle');
+    const list = document.getElementById('modalList');
+    
+    title.innerText = category;
+    list.innerHTML = '';
+
+    // Alphabetical sort
+    brgyStats.sort((a, b) => a.name.localeCompare(b.name));
+
+    brgyStats.forEach(item => {
+        let val = 0;
+        
+        // Logic mapping para sa bawat card
+        if (category.includes("Household")) {
+            val = item.hh;
+        } else if (category.includes("Senior")) {
+            val = item.senior;
+        } else if (category.includes("Voters")) {
+            val = item.voters; // Ito ang kukuha ng voters data
+        } else if (category.includes("PWD")) {
+            val = item.pwd;
+        } else {
+            val = item.citizen; // Default for Total Citizen
+        }
+
+        list.innerHTML += `
+            <div class="dist-item">
+                <span>${item.name}</span>
+                <span>${val.toLocaleString()}</span>
+            </div>
+        `;
+    });
+
+    modal.style.display = 'flex';
+}
+
+new Chart(document.getElementById('historyChart'), {
+    type: 'line', // Pwede ring 'bar' kung gusto mong columns
+    data: {
+        labels: ['2021', '2022', '2023', '2024', '2025'], // Ang mga taon
+        datasets: [
+            {
+                label: 'Total Population',
+                data: [7200, 7550, 7900, 8200, 8550], // Historical population data
+                borderColor: '#2c5282',
+                backgroundColor: 'rgba(44, 82, 130, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Registered Voters',
+                data: [4100, 4300, 4800, 5100, 5440], // Historical voters data
+                borderColor: '#38a169',
+                backgroundColor: 'transparent',
+                borderDash: [5, 5], // Putol-putol na linya para maiba sa total population
+                pointStyle: 'circle',
+                pointRadius: 5
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'top' }
+        },
+        scales: {
+            y: {
+                beginAtZero: false, // Dahil hindi naman mag-ze-zero ang population
+                grid: { color: '#edf2f7' }
+            },
+            x: {
+                grid: { display: false }
+            }
+        }
+    }
+});
+    </script>
+</body>
+</html>

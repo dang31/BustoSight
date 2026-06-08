@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BustoSight - Archive Records</title>
+    <link rel="stylesheet" href="barangaylistpage.css">
+    <style>
+        /* Karagdagang style para sa Archive specific elements */
+        .btn-restore {
+            background: linear-gradient(135deg, #48bb78 0%, #2f855a 100%);
+            box-shadow: 0 4px 10px rgba(72, 187, 120, 0.3);
+        }
+        .btn-restore:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(72, 187, 120, 0.4); }
+        
+        .status-badge {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            transition: 0.3s;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .back-btn:hover { background: rgba(255, 255, 255, 0.3); }
+
+        .archive-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-image"></div>
+    <div class="overlay"></div>
+
+    <div class="dashboard-wrapper">
+        <main class="content" style="padding: 40px;">
+            
+            <div class="archive-controls">
+                <a href="barangaylistpage.html" class="back-btn">← Back to Barangay List</a>
+                <div style="text-align: right;">
+                    <h2 style="color: white; font-weight: 800; text-transform: uppercase; letter-spacing: 2px;">Archived Residents</h2>
+                    <p style="color: rgba(255,255,255,0.7); font-size: 12px;">Inactive or Deceased Records</p>
+                </div>
+            </div>
+
+            <div class="table-section">
+                <div class="table-controls">
+                    <input type="text" id="archiveSearch" class="search-input" placeholder="Search archived name or HH No..." onkeyup="filterArchive()">
+                </div>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>HH NO.</th>
+                                <th>FULL NAME</th>
+                                <th>BARANGAY</th>
+                                <th>SEX</th>
+                                <th>RELATION</th>
+                                <th>DATE ARCHIVED</th>
+                                <th>STATUS</th>
+                                <th>ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody id="archiveTableBody">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function loadArchiveData() {
+            const tbody = document.getElementById('archiveTableBody');
+            const archivedData = JSON.parse(localStorage.getItem('archivedResidents')) || [];
+            tbody.innerHTML = '';
+
+            if (archivedData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#a0aec0;">No archived records found.</td></tr>`;
+                return;
+            }
+
+            archivedData.forEach((res, index) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${res.h_no || 'N/A'}</td>
+                    <td><strong>${res.last}, ${res.first} ${res.mid || ''}</strong></td>
+                    <td>${res.brgy || 'Unknown'}</td>
+                    <td>${res.s || ''}</td>
+                    <td>${res.rel || ''}</td>
+                    <td>${res.archiveDate || 'N/A'}</td>
+                    <td><span class="status-badge">Archived</span></td>
+                    <td class="action-cell">
+                        <button class="btn btn-restore" onclick="restoreResident(${index})">
+                            Restore
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+    function restoreResident(index) {
+    // STEP 1: Tanong muna kung sigurado (Confirmation)
+    const siguradoKaBa = confirm("Are you sure you want to restore this resident to the active list?");
+    
+    if (siguradoKaBa) {
+        // STEP 2: Kapag "OK" ang pinindot, hingi agad ng Password
+        const adminPassword = prompt("SECURITY CHECK: Enter Admin Password to confirm restoration:");
+
+        // STEP 3: Check kung Cancel o Walang nilagay
+        if (adminPassword === null) return; // Huminto dito kapag nag-cancel sa password box
+
+        // STEP 4: Validation ng Password
+        if (adminPassword === "admin123") {
+            // Dito lang gagawin ang pag-restore kapag TAMA ang password
+            let archivedData = JSON.parse(localStorage.getItem('archivedResidents')) || [];
+            let activeData = JSON.parse(localStorage.getItem('tanawanData')) || [];
+
+            const restoredPerson = archivedData[index];
+            
+            // Linisin ang archive metadata
+            delete restoredPerson.archiveDate;
+
+            // Lipat records
+            activeData.push(restoredPerson);
+            archivedData.splice(index, 1);
+
+            // Save updates
+            localStorage.setItem('tanawanData', JSON.stringify(activeData));
+            localStorage.setItem('archivedResidents', JSON.stringify(archivedData));
+
+            alert("Success! The resident has been restored to the active list.");
+            loadArchiveData(); // Refresh table
+        } else {
+            // Kapag MALI ang password
+            alert("Error: Incorrect Admin Password. Access Denied.");
+        }
+    } else {
+        // Kapag "Cancel" ang pinindot sa "Are you sure?"
+        console.log("Restoration cancelled by user.");
+    }
+}
+        function filterArchive() {
+            const q = document.getElementById('archiveSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#archiveTableBody tr');
+            rows.forEach(r => {
+                r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none';
+            });
+        }
+
+        // Initial Load
+        window.onload = loadArchiveData;
+    </script>
+</body>
+</html>

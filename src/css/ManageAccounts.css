@@ -1,0 +1,104 @@
+/* ============================
+   MANAGE ACCOUNTS PAGE CSS
+   ============================ */
+
+/* Reuses form-card-container, form-blue-header, form-white-body from AddResident */
+
+.modern-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.modern-table thead th {
+  position: static;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: white;
+  padding: 13px 16px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 700;
+}
+
+.modern-table tbody td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--gray-100);
+  font-size: 13px;
+  min-width: unset;
+}
+
+.modern-table tbody tr:hover {
+  background: var(--gray-50);
+}
+
+.modern-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.account-table-container {
+  margin-top: 20px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--gray-200);
+}
+
+.btn-delete {
+  background: var(--red-light);
+  color: var(--red);
+  border: 1px solid rgba(229,62,62,0.2);
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: var(--transition);
+}
+
+.btn-delete:hover {
+  background: var(--red);
+  color: white;
+  border-color: var(--red);
+  transform: scale(1.05);
+}
+
+/* Admin verification modal */
+.admin-modal {
+  background: white;
+  padding: 32px 28px;
+  border-radius: var(--radius-xl);
+  width: 360px;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  animation: fadeInScale 0.3s ease;
+}
+
+.admin-modal h2 {
+  font-size: 18px;
+  color: var(--primary);
+  margin-bottom: 8px;
+  font-weight: 800;
+}
+
+.admin-modal p {
+  font-size: 13px;
+  color: var(--gray-500);
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.modal-btns {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.protected-badge {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--gray-400);
+  background: var(--gray-100);
+  padding: 4px 10px;
+  border-radius: 20px;
+}
