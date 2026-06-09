@@ -217,6 +217,28 @@ tbody tr:last-child td {
   transform: scale(1.05);
 }
 
+.btn-delete-all {
+  background: linear-gradient(135deg, var(--red-light), var(--red));
+  color: white;
+  box-shadow: 0 2px 8px rgba(229, 62, 62, 0.3);
+}
+
+.btn-delete-all:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(229, 62, 62, 0.4);
+  background: var(--red);
+}
+
+.btn-mock {
+  background: var(--gray-600);
+  color: white;
+}
+
+.btn-mock:hover {
+  background: var(--gray-800);
+  transform: translateY(-1px);
+}
+
 /* Household Modal */
 .hh-modal-content {
   background: white;
@@ -292,4 +314,57 @@ tbody tr:last-child td {
   background: #fffcf0;
   font-weight: 600;
   border-left: 4px solid var(--orange);
+}
+
+/* ---- RESPONSIVE BARANGAY LIST ---- */
+@media (max-width: 1024px) {
+  .main-layout {
+    flex-direction: column;
+    height: auto;
+    gap: 24px;
+  }
+
+  .brgy-selector {
+    width: 100%;
+    max-height: 200px;
+  }
+
+  .brgy-list {
+    display: flex;
+    overflow-x: auto;
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .brgy-item {
+    white-space: nowrap;
+    padding: 8px 16px;
+    margin: 0;
+  }
+
+  .brgy-item:hover {
+    padding-left: 16px;
+  }
+
+  .table-section {
+    overflow: visible;
+  }
+
+  .content { padding-top: 80px; }
+}
+
+@media (max-width: 768px) {
+  .table-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
 }

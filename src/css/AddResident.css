@@ -255,6 +255,31 @@
   box-shadow: 0 8px 20px rgba(44,82,130,0.4);
 }
 
+.btn-next:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-next.loading {
+  position: relative;
+  color: transparent !important;
+}
+
+.btn-next.loading::after {
+  content: 'Saving...';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 11px;
+}
+
 /* Summary area */
 .summary-area {
   background: white;
@@ -309,4 +334,66 @@
 .summary-table td {
   padding: 8px 12px;
   border: 1px solid var(--gray-200);
+}
+
+/* ---- RESPONSIVE ADD RESIDENT ---- */
+@media (max-width: 1024px) {
+  .form-white-body {
+    max-height: none;
+    overflow-y: visible;
+  }
+  
+  .form-card-container {
+    margin-bottom: 40px;
+  }
+}
+
+@media (max-width: 768px) {
+  .step-wrapper {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .step-divider {
+    display: none;
+  }
+
+  .grid-2-cols, .grid-3-cols, .grid-4-cols {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .form-blue-header {
+    padding: 16px 20px;
+  }
+
+  .form-blue-header h1 {
+    font-size: 16px;
+  }
+
+  .form-white-body {
+    padding: 20px;
+  }
+
+  .form-nav-buttons {
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px;
+  }
+
+  .btn-back, .btn-next {
+    width: 100%;
+    justify-content: center;
+    display: flex;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
 }

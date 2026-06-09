@@ -259,6 +259,56 @@ img {
   letter-spacing: 1.5px;
 }
 
+/* ---- RESPONSIVE UTILITIES ---- */
+@media (max-width: 1024px) {
+  .sidebar {
+    position: fixed;
+    height: 100vh;
+    left: -260px;
+    z-index: 2000;
+    transition: var(--transition);
+  }
+
+  .sidebar.mobile-open {
+    left: 0;
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .content {
+    padding: 16px;
+  }
+}
+
+.mobile-nav-toggle {
+  display: none;
+  background: white;
+  border: none;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  position: fixed;
+  top: 18px;
+  left: 16px;
+  z-index: 100;
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 20px;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1999;
+  backdrop-filter: blur(4px);
+}
+
+@media (max-width: 1024px) {
+  .mobile-nav-toggle { display: block; }
+  .sidebar-overlay.show { display: block; }
+}
+
 /* ---- SHARED ANIMATIONS ---- */
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(16px); }

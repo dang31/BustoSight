@@ -50,6 +50,36 @@ export default function BarangayList() {
     alert('Successfully archived!');
   };
 
+  const handleDeleteBrgyData = () => {
+    if (!window.confirm(`WARNING: Are you sure you want to PERMANENTLY DELETE ALL records in Barangay ${activeBrgy}? This action cannot be undone.`)) return;
+
+    const adminPassword = prompt('Security Check: Please enter Admin Password to delete these records:');
+    if (adminPassword === null) return;
+    if (adminPassword !== 'admin123') {
+      alert('Access Denied: Incorrect Admin Password.');
+      return;
+    }
+
+    const updatedRecords = allRecords.filter(res => (res.brgy || 'Poblacion').toLowerCase() !== activeBrgy.toLowerCase());
+    
+    localStorage.setItem('tanawanData', JSON.stringify(updatedRecords));
+    setAllRecords(updatedRecords);
+    alert(`Successfully deleted all records in Barangay ${activeBrgy}!`);
+  };
+
+  const generateMockData = () => {
+    const mockResidents = [
+      { h_no: 'MOCK-001', last: 'Dela Cruz', first: 'Juan', mid: 'P', q: '', no: '123', st: 'Main St', p: 'Purok 1', bp: 'Bustos', bd: '1990-01-01', s: 'M', cs: 'Single', cz: 'FILIPINO', oc: 'Engineer', rel: 'HEAD', isVoter: 'YES', brgy: activeBrgy },
+      { h_no: 'MOCK-001', last: 'Dela Cruz', first: 'Maria', mid: 'S', q: '', no: '123', st: 'Main St', p: 'Purok 1', bp: 'Bustos', bd: '1992-05-15', s: 'F', cs: 'Married', cz: 'FILIPINO', oc: 'Teacher', rel: 'WIFE', isVoter: 'YES', brgy: activeBrgy },
+      { h_no: 'MOCK-002', last: 'Santos', first: 'Ricardo', mid: 'L', q: 'JR', no: '45', st: 'Daisy St', p: 'Purok 3', bp: 'Baliuag', bd: '1985-11-20', s: 'M', cs: 'Single', cz: 'FILIPINO', oc: 'Driver', rel: 'HEAD', isVoter: 'NO', brgy: activeBrgy },
+    ];
+    
+    const newRecords = [...allRecords, ...mockResidents];
+    localStorage.setItem('tanawanData', JSON.stringify(newRecords));
+    setAllRecords(newRecords);
+    alert('Mock data generated successfully!');
+  };
+
   const openHousehold = (hhNo) => {
     if (!hhNo) return;
     const members = allRecords.filter(r => r.h_no === hhNo);
@@ -149,6 +179,12 @@ export default function BarangayList() {
               </button>
               <button className="btn btn-add" onClick={() => navigate('/add-resident')}>
                 Add Resident
+              </button>
+              <button className="btn btn-delete-all" onClick={handleDeleteBrgyData}>
+                Delete All {activeBrgy}
+              </button>
+              <button className="btn btn-mock" onClick={generateMockData}>
+                Add Mock Data
               </button>
             </div>
 

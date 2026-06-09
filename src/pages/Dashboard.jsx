@@ -144,8 +144,103 @@ function getDistributionValues(category, item) {
 
 export default function Dashboard() {
   const [modal, setModal] = useState(null); // { category: string }
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'barangay' | 'forecast'
 
   const sortedBrgy = [...brgyStats].sort((a, b) => a.name.localeCompare(b.name));
+
+  const renderOverview = () => (
+    <div className="tab-content animate-fade-up">
+      {/* Stat Cards */}
+      <div className="stats-container">
+        {STAT_CARDS.map((card, i) => (
+          <div
+            key={i}
+            className="stat-card"
+            onClick={() => setModal({ category: card.key })}
+            title={`View ${card.label} distribution`}
+          >
+            <h5>{card.label}</h5>
+            <h2>{card.value}</h2>
+          </div>
+        ))}
+      </div>
+
+      <div className="charts-grid">
+        <div className="chart-item">
+          <h4>Gender Distribution</h4>
+          <div className="chart-container pie-box">
+            <Pie data={pieChartData} options={chartOpts} />
+          </div>
+        </div>
+
+        <div className="chart-item">
+          <h4>Historical Population &amp; Voters Trend</h4>
+          <div className="chart-container">
+            <Line data={historyChartData} options={{ ...chartOpts, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: false, grid: { color: '#edf2f7' } }, x: { grid: { display: false } } } }} />
+          </div>
+          <p className="chart-note">
+            Comparative analysis of total population vs. registered voters from 2021 to 2025.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderBarangayAnalysis = () => (
+    <div className="tab-content animate-fade-up">
+      <div className="charts-grid" style={{ gridTemplateColumns: '1fr' }}>
+        <div className="chart-item">
+          <h4>Population by Barangay</h4>
+          <div className="chart-container" style={{ height: '500px' }}>
+            <Bar data={barChartData} options={{ ...barOpts, maintainAspectRatio: false }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderForecast = () => (
+    <div className="tab-content animate-fade-up">
+      {/* Forecast Cards */}
+      <div className="forecast-container">
+        {FORECAST_CARDS.map((fc, i) => (
+          <div key={i} className="f-card">
+            <div className="f-header"><strong>{fc.title}</strong></div>
+            <div className="f-body">
+              {fc.body.map((row, j) => (
+                <div key={j} className="f-val">
+                  <span>{row.label}</span>
+                  <strong>{row.value}</strong>
+                </div>
+              ))}
+              {fc.tag && <div className="f-growth">{fc.tag}</div>}
+              {fc.status && <div className="f-status">{fc.status}</div>}
+            </div>
+            <div className="f-footer">{fc.footer}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="charts-grid">
+        <div className="chart-item">
+          <h4>Age Group Distribution (5-Year Forecast)</h4>
+          <div className="chart-container">
+            <Bar data={ageChartData} options={chartOpts} />
+          </div>
+          <p className="chart-note">
+            Analyzes historical age breakdowns to show how many people will enter each age group in the next 5 years.
+          </p>
+        </div>
+
+        <div className="chart-item">
+          <h4>Growth Trends (Linear Regression)</h4>
+          <div className="chart-container">
+            <Line data={lineChartData} options={chartOpts} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="dashboard-wrapper">
@@ -159,84 +254,32 @@ export default function Dashboard() {
           <h1>BustoSight: Population Dashboard</h1>
         </header>
 
-        {/* Stat Cards */}
-        <div className="stats-container">
-          {STAT_CARDS.map((card, i) => (
-            <div
-              key={i}
-              className="stat-card"
-              onClick={() => setModal({ category: card.key })}
-              title={`View ${card.label} distribution`}
-            >
-              <h5>{card.label}</h5>
-              <h2>{card.value}</h2>
-            </div>
-          ))}
+        {/* Tab Navigation */}
+        <div className="dashboard-tabs">
+          <button 
+            className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
+            onClick={() => setActiveTab('overview')}
+          >
+            📊 Overview
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'barangay' ? 'active' : ''}`}
+            onClick={() => setActiveTab('barangay')}
+          >
+            🏘️ Barangay Analysis
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'forecast' ? 'active' : ''}`}
+            onClick={() => setActiveTab('forecast')}
+          >
+            📈 Projections
+          </button>
         </div>
 
-        {/* Forecast Cards */}
-        <div className="forecast-container">
-          {FORECAST_CARDS.map((fc, i) => (
-            <div key={i} className="f-card">
-              <div className="f-header"><strong>{fc.title}</strong></div>
-              <div className="f-body">
-                {fc.body.map((row, j) => (
-                  <div key={j} className="f-val">
-                    <span>{row.label}</span>
-                    <strong>{row.value}</strong>
-                  </div>
-                ))}
-                {fc.tag && <div className="f-growth">{fc.tag}</div>}
-                {fc.status && <div className="f-status">{fc.status}</div>}
-              </div>
-              <div className="f-footer">{fc.footer}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Charts */}
-        <div className="charts-grid">
-          <div className="chart-item">
-            <h4>Age Group Distribution (5-Year Forecast)</h4>
-            <div className="chart-container">
-              <Bar data={ageChartData} options={chartOpts} />
-            </div>
-            <p className="chart-note">
-              Analyzes historical age breakdowns to show how many people will enter each age group in the next 5 years.
-            </p>
-          </div>
-
-          <div className="chart-item">
-            <h4>Population by Barangay</h4>
-            <div className="chart-container">
-              <Bar data={barChartData} options={barOpts} />
-            </div>
-          </div>
-
-          <div className="chart-item">
-            <h4>Growth Trends (Linear Regression)</h4>
-            <div className="chart-container">
-              <Line data={lineChartData} options={chartOpts} />
-            </div>
-          </div>
-
-          <div className="chart-item">
-            <h4>Gender Distribution</h4>
-            <div className="chart-container pie-box">
-              <Pie data={pieChartData} options={chartOpts} />
-            </div>
-          </div>
-
-          <div className="chart-item">
-            <h4>Historical Population &amp; Voters Trend</h4>
-            <div className="chart-container">
-              <Line data={historyChartData} options={{ ...chartOpts, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: false, grid: { color: '#edf2f7' } }, x: { grid: { display: false } } } }} />
-            </div>
-            <p className="chart-note">
-              Comparative analysis of total population vs. registered voters from 2021 to 2025.
-            </p>
-          </div>
-        </div>
+        {/* Dynamic Content */}
+        {activeTab === 'overview' && renderOverview()}
+        {activeTab === 'barangay' && renderBarangayAnalysis()}
+        {activeTab === 'forecast' && renderForecast()}
       </main>
 
       {/* Distribution Modal */}

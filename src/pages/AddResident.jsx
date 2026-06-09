@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { brgyStats } from '../data/brgyData';
+import { supabase } from '../lib/supabase';
 import '../css/AddResident.css';
 
 export default function AddResident() {
@@ -15,6 +16,7 @@ export default function AddResident() {
     is_senior: false, is_pwd: false, is_voter: false
   });
   const [members, setMembers] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const addMember = () => {
     setMembers([...members, {
@@ -41,48 +43,80 @@ export default function AddResident() {
     setCurrentStep(currentStep + dir);
   };
 
-  const saveData = () => {
-    const allRecords = JSON.parse(localStorage.getItem('tanawanData')) || [];
-    
-    const common = {
-      h_no: household.hh_num,
-      brgy: household.brgy,
-      no: household.house_no,
-      st: household.street,
-      p: household.purok,
-      mun: 'Bustos'
-    };
+  const saveData = async () => {
+    setIsLoading(true);
+    try {
+      const common = {
+        h_no: household.hh_num,
+        house_no: household.house_no,
+        street: household.street,
+        purok: household.purok,
+        barangay: household.brgy
+      };
 
-    // Save Head
-    const headRecord = {
-      ...common,
-      last: head.lname, first: head.fname, mid: head.mname, q: head.q,
-      bd: head.dob, bp: head.pob, s: head.sex, cs: head.civil,
-      is_voter: head.is_voter ? 'Yes' : 'No',
-      is_senior: head.is_senior ? 'Yes' : 'No',
-      is_pwd: head.is_pwd ? 'Yes' : 'No',
-      rel: 'HEAD'
-    };
-    
-    const newRecords = [headRecord];
+      const residentsToSave = [
+        {
+          ...common,
+          last_name: head.lname,
+          first_name: head.fname,
+          middle_name: head.mname,
+          qualifier: head.q,
+          birth_place: head.pob,
+          birth_date: head.dob || null,
+          sex: head.sex,
+          civil_status: head.civil,
+          relation_to_head: 'HEAD',
+          is_voter: head.is_voter ? 'Yes' : 'No'
+        },
+        ...members.map(m => ({
+          ...common,
+          last_name: m.lname,
+          first_name: m.fname,
+          middle_name: m.mname,
+          qualifier: m.q,
+          birth_place: m.pob,
+          birth_date: m.dob || null,
+          sex: m.sex,
+          civil_status: m.civil,
+          relation_to_head: m.rel || 'MEMBER',
+          is_voter: m.is_voter ? 'Yes' : 'No'
+        }))
+      ];
 
-    // Save Members
-    members.forEach(m => {
-      newRecords.push({
-        ...common,
-        last: m.lname, first: m.fname, mid: m.mname, q: m.q,
-        bd: m.dob, bp: m.pob, s: m.sex, cs: m.civil,
-        rel: m.rel || 'MEMBER',
-        is_voter: m.is_voter ? 'Yes' : 'No',
-        is_senior: m.is_senior ? 'Yes' : 'No',
-        is_pwd: m.is_pwd ? 'Yes' : 'No'
-      });
-    });
+      const { error } = await supabase.from('residents').insert(residentsToSave);
 
-    const updatedData = [...allRecords, ...newRecords];
-    localStorage.setItem('tanawanData', JSON.stringify(updatedData));
-    alert('Resident successfully added!');
-    navigate('/barangay');
+      if (error) throw error;
+
+      // Maintain localStorage for now as requested (backup)
+      const allRecords = JSON.parse(localStorage.getItem('tanawanData')) || [];
+      const newRecordsLocal = residentsToSave.map(r => ({
+        h_no: r.h_no,
+        brgy: r.barangay,
+        no: r.house_no,
+        st: r.street,
+        p: r.purok,
+        last: r.last_name,
+        first: r.first_name,
+        mid: r.middle_name,
+        q: r.qualifier,
+        bd: r.birth_date,
+        bp: r.birth_place,
+        s: r.sex,
+        cs: r.civil_status,
+        rel: r.relation_to_head,
+        is_voter: r.is_voter
+      }));
+
+      localStorage.setItem('tanawanData', JSON.stringify([...allRecords, ...newRecordsLocal]));
+
+      alert('Resident successfully saved to Supabase!');
+      navigate('/barangay');
+    } catch (err) {
+      console.error('Error saving to Supabase:', err);
+      alert('Failed to save to Supabase: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -274,8 +308,13 @@ export default function AddResident() {
                 <button type="button" className={`btn-back ${currentStep === 1 ? 'hidden' : ''}`} onClick={() => handleStep(-1)}>
                   Previous
                 </button>
-                <button type="button" className="btn-next" onClick={() => handleStep(1)}>
-                  {currentStep === 4 ? 'Confirm & Submit' : 'Next'}
+                <button 
+                  type="button" 
+                  className={`btn-next ${isLoading ? 'loading' : ''}`} 
+                  onClick={() => handleStep(1)}
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Saving...' : (currentStep === 4 ? 'Confirm & Submit' : 'Next')}
                 </button>
               </div>
             </form>
