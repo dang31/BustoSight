@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { brgyStats } from '../data/brgyData';
+import { supabase } from '../lib/supabase';
 import '../css/BarangayList.css';
 
 export default function BarangayList() {
@@ -9,12 +10,58 @@ export default function BarangayList() {
   const [activeBrgy, setActiveBrgy] = useState('Poblacion');
   const [allRecords, setAllRecords] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedHousehold, setSelectedHousehold] = useState(null); // { householdNum: string, members: [] }
+  const [selectedHousehold, setSelectedHousehold] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const data = JSON.parse(localStorage.getItem('tanawanData')) || [];
-    setAllRecords(data);
+    fetchResidents();
   }, []);
+
+  const fetchResidents = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('residents')
+        .select('*')
+        .eq('is_archived', false);
+
+      if (error) throw error;
+
+      // Map Supabase columns to UI state structure
+      const mappedData = data.map(r => ({
+        id: r.id,
+        h_no: r.h_no,
+        last: r.last_name,
+        first: r.first_name,
+        mid: r.middle_name,
+        q: r.qualifier,
+        no: r.house_no,
+        st: r.street,
+        p: r.purok,
+        bp: r.birth_place,
+        bd: r.birth_date,
+        s: r.sex,
+        cs: r.civil_status,
+        cz: r.citizenship,
+        oc: r.occupation,
+        rel: r.relation_to_head,
+        isVoter: r.is_voter,
+        brgy: r.barangay
+      }));
+
+      setAllRecords(mappedData);
+      
+      // Sync to localStorage as backup if needed
+      localStorage.setItem('tanawanData', JSON.stringify(mappedData));
+    } catch (err) {
+      console.error('Error fetching residents:', err);
+      // Fallback to localStorage if offline or error
+      const cached = JSON.parse(localStorage.getItem('tanawanData')) || [];
+      setAllRecords(cached);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredRecords = allRecords.filter((res) => {
     const residentBrgy = res.brgy || 'Poblacion';
@@ -27,7 +74,7 @@ export default function BarangayList() {
     return matchesBrgy && matchesSearch;
   });
 
-  const handleArchive = (res) => {
+  const handleArchive = async (res) => {
     if (!window.confirm(`Are you sure you want to archive resident ${res.first} ${res.last}?`)) return;
 
     const adminPassword = prompt('Security Check: Please enter Admin Password to archive this record:');
@@ -37,20 +84,34 @@ export default function BarangayList() {
       return;
     }
 
-    let archivedData = JSON.parse(localStorage.getItem('archivedResidents')) || [];
-    const updatedRecords = allRecords.filter(r => !(r.h_no === res.h_no && r.last === res.last && r.first === res.first));
-    
-    const personToArchive = { ...res, archiveDate: new Date().toLocaleDateString(), brgy: res.brgy || activeBrgy };
-    archivedData.push(personToArchive);
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('residents')
+        .update({ 
+          is_archived: true, 
+          archive_date: new Date().toISOString() 
+        })
+        .eq('id', res.id);
 
-    localStorage.setItem('tanawanData', JSON.stringify(updatedRecords));
-    localStorage.setItem('archivedResidents', JSON.stringify(archivedData));
-    setAllRecords(updatedRecords);
-    setSelectedHousehold(null);
-    alert('Successfully archived!');
+      if (error) throw error;
+
+      // Update local state
+      const updatedRecords = allRecords.filter(r => r.id !== res.id);
+      setAllRecords(updatedRecords);
+      localStorage.setItem('tanawanData', JSON.stringify(updatedRecords));
+      
+      setSelectedHousehold(null);
+      alert('Successfully archived!');
+    } catch (err) {
+      console.error('Error archiving:', err);
+      alert('Failed to archive: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDeleteBrgyData = () => {
+  const handleDeleteBrgyData = async () => {
     if (!window.confirm(`WARNING: Are you sure you want to PERMANENTLY DELETE ALL records in Barangay ${activeBrgy}? This action cannot be undone.`)) return;
 
     const adminPassword = prompt('Security Check: Please enter Admin Password to delete these records:');
@@ -60,11 +121,26 @@ export default function BarangayList() {
       return;
     }
 
-    const updatedRecords = allRecords.filter(res => (res.brgy || 'Poblacion').toLowerCase() !== activeBrgy.toLowerCase());
-    
-    localStorage.setItem('tanawanData', JSON.stringify(updatedRecords));
-    setAllRecords(updatedRecords);
-    alert(`Successfully deleted all records in Barangay ${activeBrgy}!`);
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('residents')
+        .delete()
+        .eq('barangay', activeBrgy);
+
+      if (error) throw error;
+
+      const updatedRecords = allRecords.filter(res => (res.brgy || 'Poblacion').toLowerCase() !== activeBrgy.toLowerCase());
+      setAllRecords(updatedRecords);
+      localStorage.setItem('tanawanData', JSON.stringify(updatedRecords));
+      
+      alert(`Successfully deleted all records in Barangay ${activeBrgy}!`);
+    } catch (err) {
+      console.error('Error deleting records:', err);
+      alert('Failed to delete records: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const generateMockData = () => {
@@ -199,9 +275,15 @@ export default function BarangayList() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRecords.length > 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="17" style={{ textAlign: 'center', padding: '30px' }}>
+                        <div className="loading-spinner">Loading residents...</div>
+                      </td>
+                    </tr>
+                  ) : filteredRecords.length > 0 ? (
                     filteredRecords.map((res, i) => (
-                      <tr key={i} onClick={() => openHousehold(res.h_no)}>
+                      <tr key={res.id || i} onClick={() => openHousehold(res.h_no)}>
                         <td>{res.h_no}</td><td>{res.last}</td><td>{res.first}</td>
                         <td>{res.mid}</td><td>{res.q}</td><td>{res.no}</td>
                         <td>{res.st}</td><td>{res.p}</td><td>{res.bp}</td>

@@ -1,16 +1,43 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 import '../css/LoginPage.css';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // Simple passthrough – navigate to dashboard
-    navigate('/dashboard');
+    setIsLoading(true);
+    setErrorMsg('');
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('username', username)
+        .eq('password', password)
+        .eq('status', 'Active')
+        .single();
+
+      if (error || !data) {
+        setErrorMsg('Invalid username or password, or account is inactive.');
+        return;
+      }
+
+      // Store user session info if needed
+      localStorage.setItem('popdev_user', JSON.stringify(data));
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('Login error:', err);
+      setErrorMsg('An error occurred during login.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -46,6 +73,8 @@ export default function LoginPage() {
             <h2>Login</h2>
             <p className="login-instruction">Please log in with your official credentials.</p>
 
+            {errorMsg && <div className="login-error-msg" style={{ color: '#ff4d4d', marginBottom: '15px', fontSize: '14px', fontWeight: 'bold' }}>{errorMsg}</div>}
+
             <form id="loginForm" onSubmit={handleLogin}>
               <div className="login-input-group">
                 <label htmlFor="username">Username</label>
@@ -75,8 +104,8 @@ export default function LoginPage() {
                 />
               </div>
 
-              <button type="submit" className="btn-login-submit" id="loginSubmitBtn">
-                Login
+              <button type="submit" className={`btn-login-submit ${isLoading ? 'loading' : ''}`} id="loginSubmitBtn" disabled={isLoading}>
+                {isLoading ? 'Authenticating...' : 'Login'}
               </button>
             </form>
           </div>

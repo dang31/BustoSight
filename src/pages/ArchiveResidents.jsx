@@ -1,18 +1,58 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 import '../css/BarangayList.css';
 import '../css/ArchiveResidents.css';
 
 export default function ArchiveResidents() {
   const [archived, setArchived] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const data = JSON.parse(localStorage.getItem('archivedResidents')) || [];
-    setArchived(data);
+    fetchArchived();
   }, []);
 
-  const handleRestore = (index) => {
+  const fetchArchived = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('residents')
+        .select('*')
+        .eq('is_archived', true);
+
+      if (error) throw error;
+
+      const mappedData = data.map(r => ({
+        id: r.id,
+        h_no: r.h_no,
+        last: r.last_name,
+        first: r.first_name,
+        mid: r.middle_name,
+        q: r.qualifier,
+        bp: r.birth_place,
+        bd: r.birth_date,
+        s: r.sex,
+        cs: r.civil_status,
+        cz: r.citizenship,
+        oc: r.occupation,
+        rel: r.relation_to_head,
+        isVoter: r.is_voter,
+        brgy: r.barangay,
+        archiveDate: r.archive_date ? new Date(r.archive_date).toLocaleDateString() : 'N/A'
+      }));
+
+      setArchived(mappedData);
+    } catch (err) {
+      console.error('Error fetching archived:', err);
+      const cached = JSON.parse(localStorage.getItem('archivedResidents')) || [];
+      setArchived(cached);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRestore = async (res) => {
     if (!window.confirm('Are you sure you want to restore this resident to the active list?')) return;
 
     const adminPassword = prompt('SECURITY CHECK: Enter Admin Password to confirm restoration:');
@@ -22,19 +62,28 @@ export default function ArchiveResidents() {
       return;
     }
 
-    const archivedData = [...archived];
-    const activeData = JSON.parse(localStorage.getItem('tanawanData')) || [];
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('residents')
+        .update({ 
+          is_archived: false, 
+          archive_date: null 
+        })
+        .eq('id', res.id);
 
-    const restoredPerson = archivedData[index];
-    delete restoredPerson.archiveDate;
+      if (error) throw error;
 
-    const newActiveData = [...activeData, restoredPerson];
-    const newArchivedData = archivedData.filter((_, i) => i !== index);
-
-    localStorage.setItem('tanawanData', JSON.stringify(newActiveData));
-    localStorage.setItem('archivedResidents', JSON.stringify(newArchivedData));
-    setArchived(newArchivedData);
-    alert('Success! The resident has been restored.');
+      const updatedArchived = archived.filter(r => r.id !== res.id);
+      setArchived(updatedArchived);
+      
+      alert('Success! The resident has been restored.');
+    } catch (err) {
+      console.error('Error restoring:', err);
+      alert('Failed to restore: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const filtered = archived.filter(res => {
@@ -86,9 +135,15 @@ export default function ArchiveResidents() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length > 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan="8" style={{ textAlign: 'center', padding: '50px' }}>
+                      <div className="loading-spinner">Loading archive...</div>
+                    </td>
+                  </tr>
+                ) : filtered.length > 0 ? (
                   filtered.map((res, i) => (
-                    <tr key={i}>
+                    <tr key={res.id || i}>
                       <td>{res.h_no || 'N/A'}</td>
                       <td><strong>{res.last}, {res.first} {res.mid || ''}</strong></td>
                       <td>{res.brgy || 'Unknown'}</td>
@@ -97,7 +152,7 @@ export default function ArchiveResidents() {
                       <td>{res.archiveDate || 'N/A'}</td>
                       <td><span className="status-badge">Archived</span></td>
                       <td>
-                        <button className="btn-restore" onClick={() => handleRestore(i)}>
+                        <button className="btn-restore" onClick={() => handleRestore(res)}>
                           Restore
                         </button>
                       </td>
