@@ -79,6 +79,16 @@
   scroll-behavior: smooth;
 }
 
+.form-warning {
+  background: #fff4e5;
+  border: 1px solid #f6ad55;
+  color: #9c4221;
+  padding: 14px 18px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 18px;
+  font-size: 13px;
+}
+
 .form-white-body::-webkit-scrollbar { width: 6px; }
 .form-white-body::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 10px; }
 

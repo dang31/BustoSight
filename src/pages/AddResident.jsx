@@ -17,6 +17,43 @@ export default function AddResident() {
   });
   const [members, setMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [formWarning, setFormWarning] = useState('');
+
+  const validateStep = (step = currentStep) => {
+    if (step === 1) {
+      if (!household.hh_num || !household.house_no || !household.street || !household.purok || !household.brgy) {
+        return 'Please fill in all required household information fields.';
+      }
+    }
+
+    if (step === 2) {
+      if (!head.lname || !head.fname || !head.pob || !head.dob) {
+        return 'Please fill in all required household head fields.';
+      }
+    }
+
+    if (step === 3) {
+      for (let i = 0; i < members.length; i += 1) {
+        const member = members[i];
+        const hasAnyMemberValue = member.lname || member.fname || member.rel || member.dob || member.sex || member.civil || member.q || member.is_senior || member.is_pwd || member.is_voter;
+        if (hasAnyMemberValue && (!member.lname || !member.fname || !member.rel)) {
+          return `Please complete the required fields for member ${i + 1} or remove the incomplete member.`;
+        }
+      }
+    }
+
+    return '';
+  };
+
+  const validateAll = () => {
+    const householdWarning = validateStep(1);
+    if (householdWarning) return householdWarning;
+
+    const headWarning = validateStep(2);
+    if (headWarning) return headWarning;
+
+    return validateStep(3);
+  };
 
   const addMember = () => {
     setMembers([...members, {
@@ -36,14 +73,31 @@ export default function AddResident() {
   };
 
   const handleStep = (dir) => {
+    if (dir === 1) {
+      const warning = validateStep();
+      if (warning) {
+        setFormWarning(warning);
+        return;
+      }
+    }
+
     if (currentStep === 4 && dir === 1) {
       saveData();
       return;
     }
+
+    setFormWarning('');
     setCurrentStep(currentStep + dir);
   };
 
   const saveData = async () => {
+    const warning = validateAll();
+    if (warning) {
+      setFormWarning(warning);
+      return;
+    }
+
+    setFormWarning('');
     setIsLoading(true);
     try {
       const common = {
@@ -144,7 +198,10 @@ export default function AddResident() {
 
           <div className="form-white-body">
             <form onSubmit={(e) => e.preventDefault()}>
-              
+              {formWarning && (
+                <div className="form-warning">⚠ {formWarning}</div>
+              )}
+
               {currentStep === 1 && (
                 <div className="form-step animate-fade-up">
                   <h2 className="form-section-title">Household Information</h2>
@@ -281,7 +338,7 @@ export default function AddResident() {
                   <div className="summary-section">
                     <h3>Head of Household</h3>
                     <div className="summary-grid">
-                      <span><b>Name:</b> {head.last}, {head.first}</span>
+                      <span><b>Name:</b> {head.lname}, {head.fname}</span>
                       <span><b>Classification:</b> {[head.is_senior && 'Senior', head.is_pwd && 'PWD', head.is_voter && 'Voter'].filter(Boolean).join(', ') || 'Regular'}</span>
                     </div>
                   </div>
@@ -294,7 +351,7 @@ export default function AddResident() {
                       <tbody>
                         {members.map((m, i) => (
                           <tr key={i}>
-                            <td>{i+1}</td><td>{m.last}, {m.first}</td><td>{m.rel}</td>
+                            <td>{i+1}</td><td>{m.lname}, {m.fname}</td><td>{m.rel}</td>
                             <td>{[m.is_senior && 'S', m.is_pwd && 'P', m.is_voter && 'V'].filter(Boolean).join('/') || '-'}</td>
                           </tr>
                         ))}

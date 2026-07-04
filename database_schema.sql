@@ -16,6 +16,21 @@ CREATE TABLE residents (
     citizenship TEXT DEFAULT 'FILIPINO',
     occupation TEXT,
     relation_to_head TEXT,
+    age INTEGER,
+    residence_type TEXT,
+    is_household_head BOOLEAN DEFAULT FALSE,
+    religion TEXT,
+    educational_attainment TEXT,
+    is_pwd BOOLEAN DEFAULT FALSE,
+    has_pwd_id BOOLEAN DEFAULT FALSE,
+    is_senior BOOLEAN DEFAULT FALSE,
+    has_senior_id BOOLEAN DEFAULT FALSE,
+    is_solo_parent BOOLEAN DEFAULT FALSE,
+    has_solo_parent_id BOOLEAN DEFAULT FALSE,
+    age_at_first_birth INTEGER,
+    teenage_pregnancy_case BOOLEAN DEFAULT FALSE,
+    current_teenage_mother BOOLEAN DEFAULT FALSE,
+    is_4ps BOOLEAN DEFAULT FALSE,
     is_voter TEXT,
     barangay TEXT NOT NULL,
     is_archived BOOLEAN DEFAULT FALSE,
@@ -26,37 +41,9 @@ CREATE TABLE residents (
 -- Enable Row Level Security (RLS)
 ALTER TABLE residents ENABLE ROW LEVEL SECURITY;
 
--- Create policies (Example: Allow authenticated users to do everything)
-CREATE POLICY "Allow all actions for authenticated users" 
+-- Create policies (Allow all actions for both anon and authenticated users)
+CREATE POLICY "Allow all actions for all roles" 
 ON residents FOR ALL 
-USING (auth.role() = 'authenticated');
+USING (true)
+WITH CHECK (true);
 
--- Example: Allow public read access (if needed)
--- CREATE POLICY "Allow public read access" ON residents FOR SELECT USING (true);
-
--- Create Profiles/Users Table
-CREATE TABLE profiles (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    employee_id TEXT UNIQUE,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    email TEXT UNIQUE,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    role TEXT DEFAULT 'Staff',
-    status TEXT DEFAULT 'Active',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Enable RLS
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-
--- Policies for profiles
-CREATE POLICY "Allow all actions for authenticated users" 
-ON profiles FOR ALL 
-USING (auth.role() = 'authenticated');
-
--- Optional: Allow public select for login (if not using Supabase Auth yet)
-CREATE POLICY "Allow public select for login" 
-ON profiles FOR SELECT 
-USING (true);
