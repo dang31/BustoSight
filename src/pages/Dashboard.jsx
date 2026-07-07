@@ -255,7 +255,7 @@ export default function Dashboard() {
         </header>
 
         {/* Tab Navigation */}
-        <div className="dashboard-tabs">
+        <div className="dashboard-tabs ">
           <button 
             className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveTab('overview')}
