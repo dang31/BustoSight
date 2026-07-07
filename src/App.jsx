@@ -7,6 +7,7 @@ import AddResident from './pages/AddResident';
 import Reports from './pages/Reports';
 import ManageAccounts from './pages/ManageAccounts';
 import ArchiveResidents from './pages/ArchiveResidents';
+import UploadData from './pages/UploadData';
 import './css/global.css';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/manage-accounts" element={<ManageAccounts />} />
         <Route path="/archive" element={<ArchiveResidents />} />
+        <Route path="/upload" element={<UploadData />} />
       </Routes>
     </Router>
   );

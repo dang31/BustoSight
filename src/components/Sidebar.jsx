@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { label: 'Barangay List', path: '/barangay' },
   { label: 'Reports', path: '/reports' },
   { label: 'Add Residents', path: '/add-resident' },
+  { label: 'Upload Files', path: '/upload' },
   { label: 'Manage Account', path: '/manage-accounts' },
 ];
 

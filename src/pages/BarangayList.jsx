@@ -20,15 +20,39 @@ export default function BarangayList() {
   const fetchResidents = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('residents')
-        .select('*')
-        .eq('is_archived', false);
+      // Supabase caps queries at 1,000 rows by default.
+      // Paginate in batches until all records are fetched.
+      const PAGE_SIZE = 1000;
+      let allData = [];
+      let page = 0;
+      let keepGoing = true;
 
-      if (error) throw error;
+      while (keepGoing) {
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+
+        const { data, error } = await supabase
+          .from('residents')
+          .select('*')
+          .eq('is_archived', false)
+          .range(from, to);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+        }
+
+        // If we got fewer rows than the page size, we've reached the end
+        if (!data || data.length < PAGE_SIZE) {
+          keepGoing = false;
+        } else {
+          page++;
+        }
+      }
 
       // Map Supabase columns to UI state structure
-      const mappedData = data.map(r => ({
+      const mappedData = allData.map(r => ({
         id: r.id,
         h_no: r.h_no,
         last: r.last_name,
@@ -46,12 +70,27 @@ export default function BarangayList() {
         oc: r.occupation,
         rel: r.relation_to_head,
         isVoter: r.is_voter,
-        brgy: r.barangay
+        brgy: r.barangay,
+        age: r.age,
+        residenceType: r.residence_type,
+        isHead: r.is_household_head,
+        religion: r.religion,
+        edu: r.educational_attainment,
+        isPwd: r.is_pwd,
+        hasPwdId: r.has_pwd_id,
+        isSenior: r.is_senior,
+        hasSeniorId: r.has_senior_id,
+        isSoloParent: r.is_solo_parent,
+        hasSoloParentId: r.has_solo_parent_id,
+        ageFirstBirth: r.age_at_first_birth,
+        teenagePregnancy: r.teenage_pregnancy_case,
+        teenageMother: r.current_teenage_mother,
+        is4ps: r.is_4ps
       }));
 
       setAllRecords(mappedData);
-      
-      // Sync to localStorage as backup if needed
+
+      // Sync to localStorage as backup
       localStorage.setItem('tanawanData', JSON.stringify(mappedData));
     } catch (err) {
       console.error('Error fetching residents:', err);
@@ -145,9 +184,9 @@ export default function BarangayList() {
 
   const generateMockData = () => {
     const mockResidents = [
-      { h_no: 'MOCK-001', last: 'Dela Cruz', first: 'Juan', mid: 'P', q: '', no: '123', st: 'Main St', p: 'Purok 1', bp: 'Bustos', bd: '1990-01-01', s: 'M', cs: 'Single', cz: 'FILIPINO', oc: 'Engineer', rel: 'HEAD', isVoter: 'YES', brgy: activeBrgy },
-      { h_no: 'MOCK-001', last: 'Dela Cruz', first: 'Maria', mid: 'S', q: '', no: '123', st: 'Main St', p: 'Purok 1', bp: 'Bustos', bd: '1992-05-15', s: 'F', cs: 'Married', cz: 'FILIPINO', oc: 'Teacher', rel: 'WIFE', isVoter: 'YES', brgy: activeBrgy },
-      { h_no: 'MOCK-002', last: 'Santos', first: 'Ricardo', mid: 'L', q: 'JR', no: '45', st: 'Daisy St', p: 'Purok 3', bp: 'Baliuag', bd: '1985-11-20', s: 'M', cs: 'Single', cz: 'FILIPINO', oc: 'Driver', rel: 'HEAD', isVoter: 'NO', brgy: activeBrgy },
+      { h_no: 'MOCK-001', last: 'Dela Cruz', first: 'Juan', mid: 'P', q: '', no: '123', st: 'Main St', p: 'Purok 1', bp: 'Bustos', bd: '1990-01-01', s: 'M', cs: 'Single', cz: 'FILIPINO', oc: 'Engineer', rel: 'HEAD', isVoter: 'YES', brgy: activeBrgy, age: 36, residenceType: 'Owner', isHead: true, religion: 'Catholic', edu: 'College', isPwd: false, hasPwdId: false, isSenior: false, hasSeniorId: false, isSoloParent: false, hasSoloParentId: false, ageFirstBirth: null, teenagePregnancy: false, teenageMother: false, is4ps: false },
+      { h_no: 'MOCK-001', last: 'Dela Cruz', first: 'Maria', mid: 'S', q: '', no: '123', st: 'Main St', p: 'Purok 1', bp: 'Bustos', bd: '1992-05-15', s: 'F', cs: 'Married', cz: 'FILIPINO', oc: 'Teacher', rel: 'WIFE', isVoter: 'YES', brgy: activeBrgy, age: 34, residenceType: 'Owner', isHead: false, religion: 'Catholic', edu: 'College', isPwd: false, hasPwdId: false, isSenior: false, hasSeniorId: false, isSoloParent: false, hasSoloParentId: false, ageFirstBirth: null, teenagePregnancy: false, teenageMother: false, is4ps: false },
+      { h_no: 'MOCK-002', last: 'Santos', first: 'Ricardo', mid: 'L', q: 'JR', no: '45', st: 'Daisy St', p: 'Purok 3', bp: 'Baliuag', bd: '1985-11-20', s: 'M', cs: 'Single', cz: 'FILIPINO', oc: 'Driver', rel: 'HEAD', isVoter: 'NO', brgy: activeBrgy, age: 40, residenceType: 'Tenant', isHead: true, religion: 'Christian', edu: 'High School', isPwd: false, hasPwdId: false, isSenior: false, hasSeniorId: false, isSoloParent: false, hasSoloParentId: false, ageFirstBirth: null, teenagePregnancy: false, teenageMother: false, is4ps: false },
     ];
     
     const newRecords = [...allRecords, ...mockResidents];
@@ -181,7 +220,11 @@ export default function BarangayList() {
             no: c[5] || '', st: c[6] || '', p: c[7] || '', bp: c[8] || '', bd: c[9] || '',
             s: c[10] || '', cs: c[11] || '', cz: c[12] || '', oc: c[13] || '', rel: c[14] || '',
             isVoter: 'N/A',
-            brgy: activeBrgy
+            brgy: activeBrgy,
+            age: null, residenceType: 'N/A', isHead: false, religion: 'N/A', edu: 'N/A',
+            isPwd: false, hasPwdId: false, isSenior: false, hasSeniorId: false,
+            isSoloParent: false, hasSoloParentId: false, ageFirstBirth: null,
+            teenagePregnancy: false, teenageMother: false, is4ps: false
           });
         }
       });
@@ -270,14 +313,16 @@ export default function BarangayList() {
                   <tr>
                     <th>HH NO.</th><th>LAST NAME</th><th>FIRST NAME</th><th>MIDDLE</th><th>QUAL.</th>
                     <th>NO.</th><th>STREET</th><th>PUROK</th><th>BIRTH PLACE</th><th>BIRTH DATE</th>
-                    <th>SEX</th><th>CIVIL STATUS</th><th>CITIZENSHIP</th><th>OCCUPATION</th><th>REL. TO HEAD</th>
-                    <th>VOTER?</th><th>ACTION</th>
+                    <th>AGE</th><th>SEX</th><th>CIVIL STATUS</th><th>CITIZENSHIP</th><th>OCCUPATION</th><th>REL. TO HEAD</th>
+                    <th>RES. TYPE</th><th>RELIGION</th><th>EDUCATION</th><th>PWD?</th><th>SR. CITIZEN?</th>
+                    <th>SOLO PARENT?</th><th>4PS?</th><th>TEEN PREG?</th><th>TEEN MOTHER?</th><th>VOTER?</th>
+                    <th>ACTION</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan="17" style={{ textAlign: 'center', padding: '30px' }}>
+                      <td colSpan="27" style={{ textAlign: 'center', padding: '30px' }}>
                         <div className="loading-spinner">Loading residents...</div>
                       </td>
                     </tr>
@@ -287,8 +332,19 @@ export default function BarangayList() {
                         <td>{res.h_no}</td><td>{res.last}</td><td>{res.first}</td>
                         <td>{res.mid}</td><td>{res.q}</td><td>{res.no}</td>
                         <td>{res.st}</td><td>{res.p}</td><td>{res.bp}</td>
-                        <td>{res.bd}</td><td>{res.s}</td><td>{res.cs}</td>
+                        <td>{res.bd}</td>
+                        <td>{res.age !== null && res.age !== undefined ? res.age : 'N/A'}</td>
+                        <td>{res.s}</td><td>{res.cs}</td>
                         <td>{res.cz || 'FILIPINO'}</td><td>{res.oc || 'N/A'}</td><td>{res.rel}</td>
+                        <td>{res.residenceType || 'N/A'}</td>
+                        <td>{res.religion || 'N/A'}</td>
+                        <td>{res.edu || 'N/A'}</td>
+                        <td>{res.isPwd ? 'Yes' : 'No'}</td>
+                        <td>{res.isSenior ? 'Yes' : 'No'}</td>
+                        <td>{res.isSoloParent ? 'Yes' : 'No'}</td>
+                        <td>{res.is4ps ? 'Yes' : 'No'}</td>
+                        <td>{res.teenagePregnancy ? 'Yes' : 'No'}</td>
+                        <td>{res.teenageMother ? 'Yes' : 'No'}</td>
                         <td><strong>{res.isVoter || 'N/A'}</strong></td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <button className="btn-archive-row" onClick={() => handleArchive(res)}>
@@ -299,7 +355,7 @@ export default function BarangayList() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="17" style={{ textAlign: 'center', padding: '30px', color: '#999' }}>
+                      <td colSpan="27" style={{ textAlign: 'center', padding: '30px', color: '#999' }}>
                         Walang record sa Barangay {activeBrgy}.
                       </td>
                     </tr>
@@ -330,7 +386,13 @@ export default function BarangayList() {
                 <tbody>
                   {selectedHousehold.members.map((m, i) => (
                     <tr key={i} className={(m.rel || '').toUpperCase() === 'HEAD' ? 'head-row' : ''}>
-                      <td>{m.last}, {m.first} {m.mid}</td>
+                      <td>
+                        {m.last}, {m.first} {m.mid}
+                        {m.isSenior && <span style={{ marginLeft: '5px', fontSize: '9px', background: '#3182ce', color: 'white', padding: '2px 6px', borderRadius: '4px', display: 'inline-block' }}>Senior</span>}
+                        {m.isPwd && <span style={{ marginLeft: '5px', fontSize: '9px', background: '#38a169', color: 'white', padding: '2px 6px', borderRadius: '4px', display: 'inline-block' }}>PWD</span>}
+                        {m.isSoloParent && <span style={{ marginLeft: '5px', fontSize: '9px', background: '#e53e3e', color: 'white', padding: '2px 6px', borderRadius: '4px', display: 'inline-block' }}>Solo Parent</span>}
+                        {m.is4ps && <span style={{ marginLeft: '5px', fontSize: '9px', background: '#f6ad55', color: 'white', padding: '2px 6px', borderRadius: '4px', display: 'inline-block' }}>4Ps</span>}
+                      </td>
                       <td>{m.rel || 'MEMBER'}</td>
                       <td>{m.s || ''}</td>
                       <td>{m.bd || ''}</td>
