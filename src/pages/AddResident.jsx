@@ -26,6 +26,7 @@ export default function AddResident() {
       }
     }
 
+    // Step 2: Household Head Validation
     if (step === 2) {
       if (!head.lname || !head.fname || !head.pob || !head.dob) {
         return 'Please fill in all required household head fields.';
