@@ -350,8 +350,9 @@ export default function BarangayList() {
                     <th className="text-center">ACTION</th>
                   </tr>
                 </thead>
-                
+
                 <tbody>
+                  
                   {isLoading ? (
                     <tr>
                       <td colSpan="25" style={{ textAlign: 'center', padding: '30px' }}>
