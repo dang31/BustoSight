@@ -247,6 +247,15 @@ export default function BarangayList() {
     result.push(cell.trim()); return result;
   }
 
+  const getCivilStatusBadge = (status) => {
+    const s = (status || '').toLowerCase().trim();
+    if (s.includes('single')) return <span className="status-badge single">Single</span>;
+    if (s.includes('married')) return <span className="status-badge married">Married</span>;
+    if (s.includes('widow')) return <span className="status-badge widowed">Widowed</span>;
+    if (s.includes('separat')) return <span className="status-badge separated">Separated</span>;
+    return <span className="status-badge others">{status || 'N/A'}</span>;
+  };
+
   return (
     <div className="dashboard-wrapper">
       <div className="bg-image" />
@@ -259,7 +268,7 @@ export default function BarangayList() {
         </header>
 
         <div className="main-layout">
-          <div className="brgy-selector">
+          <div className="brgy-selector animate-fade-up">
             <div className="brgy-header">Barangays</div>
             <div className="brgy-list">
               {brgyStats.map(b => (
@@ -275,14 +284,17 @@ export default function BarangayList() {
           </div>
 
           <div className="table-section">
-            <div className="table-controls">
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Search name or HH No..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="table-controls animate-fade-up">
+              <div className="search-container">
+                <i className="fa-solid fa-magnifying-glass search-icon"></i>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Search HH No., Full Name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
               <input
                 type="file"
                 id="csvFileInput"
@@ -291,71 +303,129 @@ export default function BarangayList() {
                 onChange={handleImportCSV}
               />
               <button className="btn btn-import" onClick={() => document.getElementById('csvFileInput').click()}>
-                Import Data
+                <i className="fa-solid fa-file-import"></i> Import Data
               </button>
               <button className="btn btn-view-archive" onClick={() => navigate('/archive')}>
-                View Archive
+                <i className="fa-solid fa-box-archive"></i> View Archive
               </button>
               <button className="btn btn-add" onClick={() => navigate('/add-resident')}>
-                Add Resident
+                <i className="fa-solid fa-user-plus"></i> Add Resident
               </button>
-              <button className="btn btn-delete-all" onClick={handleDeleteBrgyData}>
-                Delete All {activeBrgy}
-              </button>
-              <button className="btn btn-mock" onClick={generateMockData}>
-                Add Mock Data
-              </button>
+              {/* <button className="btn btn-delete-all" onClick={handleDeleteBrgyData}>
+                <i className="fa-solid fa-trash-can"></i> Delete All {activeBrgy}
+              </button> */}
+              {/* <button className="btn btn-mock" onClick={generateMockData}>
+                <i className="fa-solid fa-database"></i> Add Mock Data
+              </button> */}
             </div>
 
-            <div className="table-wrapper">
+            <div className="table-wrapper animate-fade-up">
               <table>
                 <thead>
                   <tr>
-                    <th>HH NO.</th><th>LAST NAME</th><th>FIRST NAME</th><th>MIDDLE</th><th>QUAL.</th>
-                    <th>NO.</th><th>STREET</th><th>PUROK</th><th>BIRTH PLACE</th><th>BIRTH DATE</th>
-                    <th>AGE</th><th>SEX</th><th>CIVIL STATUS</th><th>CITIZENSHIP</th><th>OCCUPATION</th><th>REL. TO HEAD</th>
-                    <th>RES. TYPE</th><th>RELIGION</th><th>EDUCATION</th><th>PWD?</th><th>SR. CITIZEN?</th>
-                    <th>SOLO PARENT?</th><th>4PS?</th><th>TEEN PREG?</th><th>TEEN MOTHER?</th><th>VOTER?</th>
-                    <th>ACTION</th>
+                    <th className="text-center">HH NO.</th>
+                    <th className="text-left">FULL NAME</th>
+                    <th className="text-center col-mobile-hide">QUAL.</th>
+                    <th className="text-center col-tablet-hide">NO.</th>
+                    <th className="text-left col-tablet-hide">STREET</th>
+                    <th className="text-left col-tablet-hide">PUROK</th>
+                    <th className="text-left col-tablet-hide">BIRTH PLACE</th>
+                    <th className="text-center col-mobile-hide">BIRTH DATE</th>
+                    <th className="text-center">AGE</th>
+                    <th className="text-center">SEX</th>
+                    <th className="text-center">CIVIL STATUS</th>
+                    <th className="text-left col-tablet-hide">CITIZENSHIP</th>
+                    <th className="text-left col-mobile-hide">OCCUPATION</th>
+                    <th className="text-left col-mobile-hide">REL. TO HEAD</th>
+                    <th className="text-left col-tablet-hide">RES. TYPE</th>
+                    <th className="text-left col-tablet-hide">RELIGION</th>
+                    <th className="text-left col-tablet-hide">EDUCATION</th>
+                    <th className="text-center col-mobile-hide">PWD?</th>
+                    <th className="text-center col-mobile-hide">SR. CITIZEN?</th>
+                    <th className="text-center col-mobile-hide">SOLO PARENT?</th>
+                    <th className="text-center col-mobile-hide">4PS?</th>
+                    <th className="text-center col-tablet-hide">TEEN PREG?</th>
+                    <th className="text-center col-tablet-hide">TEEN MOTHER?</th>
+                    <th className="text-center col-mobile-hide">VOTER?</th>
+                    <th className="text-center">ACTION</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan="27" style={{ textAlign: 'center', padding: '30px' }}>
+                      <td colSpan="25" style={{ textAlign: 'center', padding: '30px' }}>
                         <div className="loading-spinner">Loading residents...</div>
                       </td>
                     </tr>
                   ) : filteredRecords.length > 0 ? (
-                    filteredRecords.map((res, i) => (
-                      <tr key={res.id || i} onClick={() => openHousehold(res.h_no)}>
-                        <td>{res.h_no}</td><td>{res.last}</td><td>{res.first}</td>
-                        <td>{res.mid}</td><td>{res.q}</td><td>{res.no}</td>
-                        <td>{res.st}</td><td>{res.p}</td><td>{res.bp}</td>
-                        <td>{res.bd}</td>
-                        <td>{res.age !== null && res.age !== undefined ? res.age : 'N/A'}</td>
-                        <td>{res.s}</td><td>{res.cs}</td>
-                        <td>{res.cz || 'FILIPINO'}</td><td>{res.oc || 'N/A'}</td><td>{res.rel}</td>
-                        <td>{res.residenceType || 'N/A'}</td>
-                        <td>{res.religion || 'N/A'}</td>
-                        <td>{res.edu || 'N/A'}</td>
-                        <td>{res.isPwd ? 'Yes' : 'No'}</td>
-                        <td>{res.isSenior ? 'Yes' : 'No'}</td>
-                        <td>{res.isSoloParent ? 'Yes' : 'No'}</td>
-                        <td>{res.is4ps ? 'Yes' : 'No'}</td>
-                        <td>{res.teenagePregnancy ? 'Yes' : 'No'}</td>
-                        <td>{res.teenageMother ? 'Yes' : 'No'}</td>
-                        <td><strong>{res.isVoter || 'N/A'}</strong></td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <button className="btn-archive-row" onClick={() => handleArchive(res)}>
-                            Archive
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    filteredRecords.map((res, i) => {
+                      const middle = res.mid ? (res.mid.trim().endsWith('.') ? res.mid.trim() : res.mid.trim()[0] + '.') + ' ' : '';
+                      const fullName = `${res.first} ${middle}${res.last}`;
+                      return (
+                        <tr key={res.id || i} onClick={() => openHousehold(res.h_no)}>
+                          <td className="text-center">{res.h_no}</td>
+                          <td className="text-left font-semibold">{fullName}</td>
+                          <td className="text-center col-mobile-hide">{res.q || '—'}</td>
+                          <td className="text-center col-tablet-hide">{res.no || '—'}</td>
+                          <td className="text-left col-tablet-hide">{res.st || '—'}</td>
+                          <td className="text-left col-tablet-hide">{res.p || '—'}</td>
+                          <td className="text-left col-tablet-hide">{res.bp || '—'}</td>
+                          <td className="text-center col-mobile-hide">{res.bd || '—'}</td>
+                          <td className="text-center">{res.age !== null && res.age !== undefined ? res.age : '—'}</td>
+                          <td className="text-center">
+                            <span className={`sex-badge ${(res.s || '').toLowerCase() === 'm' || (res.s || '').toLowerCase() === 'male' ? 'male' : 'female'}`}>
+                              {res.s || '—'}
+                            </span>
+                          </td>
+                          <td className="text-center">{getCivilStatusBadge(res.cs)}</td>
+                          <td className="text-left col-tablet-hide">{res.cz || 'FILIPINO'}</td>
+                          <td className="text-left col-mobile-hide">{res.oc || '—'}</td>
+                          <td className="text-left col-mobile-hide">{res.rel || '—'}</td>
+                          <td className="text-left col-tablet-hide">{res.residenceType || '—'}</td>
+                          <td className="text-left col-tablet-hide">{res.religion || '—'}</td>
+                          <td className="text-left col-tablet-hide">{res.edu || '—'}</td>
+                          <td className="text-center col-mobile-hide">
+                            <span className={`boolean-badge ${res.isPwd ? 'yes' : 'no'}`}>{res.isPwd ? 'Yes' : 'No'}</span>
+                          </td>
+                          <td className="text-center col-mobile-hide">
+                            <span className={`boolean-badge ${res.isSenior ? 'yes' : 'no'}`}>{res.isSenior ? 'Yes' : 'No'}</span>
+                          </td>
+                          <td className="text-center col-mobile-hide">
+                            <span className={`boolean-badge ${res.isSoloParent ? 'yes' : 'no'}`}>{res.isSoloParent ? 'Yes' : 'No'}</span>
+                          </td>
+                          <td className="text-center col-mobile-hide">
+                            <span className={`boolean-badge ${res.is4ps ? 'yes' : 'no'}`}>{res.is4ps ? 'Yes' : 'No'}</span>
+                          </td>
+                          <td className="text-center col-tablet-hide">
+                            <span className={`boolean-badge ${res.teenagePregnancy ? 'yes' : 'no'}`}>{res.teenagePregnancy ? 'Yes' : 'No'}</span>
+                          </td>
+                          <td className="text-center col-tablet-hide">
+                            <span className={`boolean-badge ${res.teenageMother ? 'yes' : 'no'}`}>{res.teenageMother ? 'Yes' : 'No'}</span>
+                          </td>
+                          <td className="text-center col-mobile-hide">
+                            <span className={`boolean-badge voter-badge ${(res.isVoter || '').toUpperCase() === 'YES' ? 'yes' : 'no'}`}>
+                              {res.isVoter || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="actions-cell">
+                              <button className="action-btn view-btn" onClick={() => openHousehold(res.h_no)} title="View Household">
+                                <i className="fa-solid fa-eye"></i>
+                              </button>
+                              <button className="action-btn edit-btn" onClick={() => alert('Edit feature is under development.')} title="Edit Resident">
+                                <i className="fa-solid fa-pen-to-square"></i>
+                              </button>
+                              <button className="action-btn delete-btn" onClick={() => handleArchive(res)} title="Archive Resident">
+                                <i className="fa-solid fa-trash-can"></i>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
-                      <td colSpan="27" style={{ textAlign: 'center', padding: '30px', color: '#999' }}>
+                      <td colSpan="25" style={{ textAlign: 'center', padding: '30px', color: '#999' }}>
                         Walang record sa Barangay {activeBrgy}.
                       </td>
                     </tr>
