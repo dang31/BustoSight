@@ -350,6 +350,7 @@ export default function BarangayList() {
                     <th className="text-center">ACTION</th>
                   </tr>
                 </thead>
+                
                 <tbody>
                   {isLoading ? (
                     <tr>
