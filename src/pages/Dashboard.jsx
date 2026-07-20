@@ -61,6 +61,8 @@ export default function Dashboard() {
   const [modal, setModal] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
+  const [brgySearch, setBrgySearch] = useState('');
+  const [brgySort, setBrgySort] = useState({ key: 'name', direction: 'asc' });
 
   // Derived stats
   const [stats, setStats] = useState({
@@ -224,6 +226,43 @@ export default function Dashboard() {
     }
     loadData();
   }, []);
+
+  const handleSort = (key) => {
+    setBrgySort(prev => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const filteredBrgyData = brgyData.filter(b => 
+    b.name.toLowerCase().includes(brgySearch.toLowerCase())
+  );
+
+  const sortedBrgyData = [...filteredBrgyData].sort((a, b) => {
+    let aVal = a[brgySort.key];
+    let bVal = b[brgySort.key];
+
+    if (typeof aVal === 'string') {
+      return brgySort.direction === 'asc' 
+        ? aVal.localeCompare(bVal) 
+        : bVal.localeCompare(aVal);
+    }
+
+    if (aVal < bVal) return brgySort.direction === 'asc' ? -1 : 1;
+    if (aVal > bVal) return brgySort.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const brgyTotals = filteredBrgyData.reduce((acc, curr) => {
+    acc.count += curr.count;
+    acc.households += curr.households;
+    acc.seniors += curr.seniors;
+    acc.pwd += curr.pwd;
+    acc.voters += curr.voters;
+    return acc;
+  }, { count: 0, households: 0, seniors: 0, pwd: 0, voters: 0 });
 
   // --- Derived chart data ---
   const barChartData = {
@@ -439,44 +478,103 @@ export default function Dashboard() {
     </div>
   );
 
-  const renderBarangayAnalysis = () => (
-    <div className="tab-content animate-fade-up">
-      <div className="charts-grid" style={{ gridTemplateColumns: '1fr' }}>
-        <div className="chart-item">
-          <h4>Population by Barangay</h4>
-          <div className="chart-container" style={{ height: '500px' }}>
-            {!isLoading && <Bar data={barChartData} options={{ ...barOpts, maintainAspectRatio: false }} />}
+  const renderBarangayAnalysis = () => {
+    const headers = [
+      { label: 'Barangay', key: 'name', align: 'left' },
+      { label: 'Population', key: 'count', align: 'right' },
+      { label: 'Households', key: 'households', align: 'right' },
+      { label: 'Senior Citizens', key: 'seniors', align: 'right' },
+      { label: 'PWD', key: 'pwd', align: 'right' },
+      { label: 'Registered Voters', key: 'voters', align: 'right' }
+    ];
+
+    return (
+      <div className="tab-content animate-fade-up">
+        <div className="charts-grid" style={{ gridTemplateColumns: '1fr' }}>
+          <div className="chart-item">
+            <h4>Population by Barangay</h4>
+            <div className="chart-container" style={{ height: '500px' }}>
+              {!isLoading && <Bar data={barChartData} options={{ ...barOpts, maintainAspectRatio: false }} />}
+            </div>
+          </div>
+        </div>
+
+        {/* Barangay breakdown table */}
+        <div className="chart-item table-card" style={{ marginTop: '24px' }}>
+          <div className="table-header-container">
+            <h4 className="table-title">Barangay Summary Table</h4>
+            <div className="table-search-wrapper">
+              <span className="search-icon">🔍</span>
+              <input
+                type="text"
+                placeholder="Search Barangay..."
+                value={brgySearch}
+                onChange={(e) => setBrgySearch(e.target.value)}
+                className="table-search-input"
+              />
+              {brgySearch && (
+                <button className="clear-search-btn" onClick={() => setBrgySearch('')}>×</button>
+              )}
+            </div>
+          </div>
+
+          <div className="table-responsive-wrapper">
+            <table className="custom-dashboard-table">
+              <thead>
+                <tr>
+                  {headers.map(h => (
+                    <th
+                      key={h.key}
+                      onClick={() => handleSort(h.key)}
+                      style={{ textAlign: h.align }}
+                      className={`sortable-header ${brgySort.key === h.key ? 'active' : ''}`}
+                    >
+                      <span className="header-text">{h.label}</span>
+                      <span className="sort-arrow">
+                        {brgySort.key === h.key ? (brgySort.direction === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedBrgyData.length > 0 ? (
+                  sortedBrgyData.map((b, i) => (
+                    <tr key={b.name} className="table-row">
+                      <td className="cell-barangay" style={{ textAlign: 'left' }}>{b.name}</td>
+                      <td className="cell-number" style={{ textAlign: 'right' }}>{b.count.toLocaleString()}</td>
+                      <td className="cell-number" style={{ textAlign: 'right' }}>{b.households.toLocaleString()}</td>
+                      <td className="cell-number" style={{ textAlign: 'right' }}>{b.seniors.toLocaleString()}</td>
+                      <td className="cell-number" style={{ textAlign: 'right' }}>{b.pwd.toLocaleString()}</td>
+                      <td className="cell-number" style={{ textAlign: 'right' }}>{b.voters.toLocaleString()}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="no-data-cell">
+                      No matching barangays found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              {sortedBrgyData.length > 0 && (
+                <tfoot>
+                  <tr className="table-total-row">
+                    <td className="cell-barangay" style={{ textAlign: 'left', fontWeight: 'bold' }}>Total</td>
+                    <td className="cell-number" style={{ textAlign: 'right', fontWeight: 'bold' }}>{brgyTotals.count.toLocaleString()}</td>
+                    <td className="cell-number" style={{ textAlign: 'right', fontWeight: 'bold' }}>{brgyTotals.households.toLocaleString()}</td>
+                    <td className="cell-number" style={{ textAlign: 'right', fontWeight: 'bold' }}>{brgyTotals.seniors.toLocaleString()}</td>
+                    <td className="cell-number" style={{ textAlign: 'right', fontWeight: 'bold' }}>{brgyTotals.pwd.toLocaleString()}</td>
+                    <td className="cell-number" style={{ textAlign: 'right', fontWeight: 'bold' }}>{brgyTotals.voters.toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           </div>
         </div>
       </div>
-
-      {/* Barangay breakdown table */}
-      <div className="chart-item" style={{ marginTop: '24px' }}>
-        <h4>Barangay Summary Table</h4>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', marginTop: '8px' }}>
-          <thead>
-            <tr style={{ background: '#f0f4ff' }}>
-              {['Barangay', 'Population', 'Households', 'Senior Citizens', 'PWD', 'Registered Voters'].map(h => (
-                <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {brgyData.map((b, i) => (
-              <tr key={b.name} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                <td style={{ padding: '7px 12px', fontWeight: 500 }}>{b.name}</td>
-                <td style={{ padding: '7px 12px' }}>{b.count.toLocaleString()}</td>
-                <td style={{ padding: '7px 12px' }}>{b.households.toLocaleString()}</td>
-                <td style={{ padding: '7px 12px' }}>{b.seniors.toLocaleString()}</td>
-                <td style={{ padding: '7px 12px' }}>{b.pwd.toLocaleString()}</td>
-                <td style={{ padding: '7px 12px' }}>{b.voters.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderDemographics = () => {
     // PWD
