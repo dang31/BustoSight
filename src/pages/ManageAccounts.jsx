@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { createClient } from '@supabase/supabase-js';
 import Sidebar from '../components/Sidebar';
 import { supabase } from '../lib/supabase';
 import '../css/ManageAccounts.css';
@@ -27,6 +29,7 @@ export default function ManageAccounts() {
 
   // Action Dropdown Menu state
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
   const menuRef = useRef(null);
 
   // Modals state
@@ -67,15 +70,21 @@ export default function ManageAccounts() {
     fetchAccounts();
   }, []);
 
-  // Close action dropdown menu when clicking outside
+  // Close action dropdown menu when clicking outside or scrolling
   useEffect(() => {
     const handleClickOutside = (e) => {
+      if (e.target.closest('.btn-action-icon')) return;
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setOpenMenuId(null);
       }
     };
+    const handleScroll = () => setOpenMenuId(null);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, []);
 
   const fetchAccounts = async () => {
@@ -285,29 +294,43 @@ export default function ManageAccounts() {
     if (!validateForm(false)) return;
 
     setIsLoading(true);
-    const newAcc = {
-      employee_id: formData.employee_id.trim() || null,
-      first_name: formData.first_name.trim(),
-      last_name: formData.last_name.trim(),
-      email: formData.email.trim() || null,
-      username: formData.username.trim(),
-      password: formData.password,
-      role: formData.role,
-      status: formData.status,
-      archived: false,
-      created_at: new Date().toISOString(),
-    };
 
     try {
-      const { error } = await supabase.from('profiles').insert([newAcc]);
+      // Create a secondary client for auth creation to avoid logging out the current admin session
+      const authClient = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        {
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        }
+      );
+
+      // Supabase auth requires email
+      const signupEmail = formData.email?.trim() || `${formData.username.trim()}@bustos.gov.ph`;
+
+      const { data, error } = await authClient.auth.signUp({
+        email: signupEmail,
+        password: formData.password,
+        options: {
+          data: {
+            employee_id: formData.employee_id.trim() || null,
+            first_name: formData.first_name.trim(),
+            last_name: formData.last_name.trim(),
+            username: formData.username.trim(),
+            role: formData.role,
+          }
+        }
+      });
+
       if (error) throw error;
+      
+      // Wait a moment for the database trigger to insert the profile
+      await new Promise(resolve => setTimeout(resolve, 1000));
       fetchAccounts();
-      showToast('Account registered successfully!', 'success');
+      showToast('Account registered securely!', 'success');
     } catch (err) {
-      console.warn('Supabase insert fallback:', err.message);
-      newAcc.id = 'usr-' + Date.now();
-      updateAccountsState([newAcc, ...accounts]);
-      showToast('Account registered successfully.', 'success');
+      console.warn('Account creation failed:', err.message);
+      showToast(`Error: ${err.message}`, 'error');
     } finally {
       setIsLoading(false);
       closeModal();
@@ -354,36 +377,20 @@ export default function ManageAccounts() {
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    if (!passwordData.newPassword) {
-      setFormErrors({ newPassword: 'New password is required' });
-      return;
-    }
-    if (passwordData.newPassword.length < 6) {
-      setFormErrors({ newPassword: 'Minimum 6 characters' });
-      return;
-    }
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setFormErrors({ confirmPassword: 'Passwords do not match' });
-      return;
-    }
 
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ password: passwordData.newPassword, updated_at: new Date().toISOString() })
-        .eq('id', modalState.data.id);
-
+      // In a secure RLS setup, admins cannot arbitrarily update passwords without the service_role key.
+      // We use Supabase Auth reset password feature instead.
+      const targetEmail = modalState.data.email || `${modalState.data.username}@bustos.gov.ph`;
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail);
       if (error) throw error;
-      fetchAccounts();
-      showToast('Password changed successfully!', 'success');
+
+      showToast('Password reset email sent securely!', 'success');
     } catch (err) {
-      console.warn('Supabase password update fallback:', err.message);
-      const updated = accounts.map((a) =>
-        a.id === modalState.data.id ? { ...a, password: passwordData.newPassword } : a
-      );
-      updateAccountsState(updated);
-      showToast('Password changed successfully.', 'success');
+      console.warn('Password reset error:', err.message);
+      showToast(`Error: ${err.message}`, 'error');
     } finally {
       setIsLoading(false);
       closeModal();
@@ -622,12 +629,12 @@ export default function ManageAccounts() {
             </div>
           </div>
 
-          <div className="acc-stat-card">
+          {/* <div className="acc-stat-card">
             <div className="acc-stat-info">
               <span>Archived Users</span>
               <h2>{isLoading ? '...' : stats.archivedUsers}</h2>
             </div>
-          </div>
+          </div> */}
 
           <div className="acc-stat-card">
             <div className="acc-stat-info">
@@ -655,12 +662,12 @@ export default function ManageAccounts() {
               >
                 Active Accounts ({stats.totalUsers})
               </button>
-              <button
+              {/* <button
                 className={`acc-tab-btn ${activeTab === 'archived' ? 'active' : ''}`}
                 onClick={() => setActiveTab('archived')}
               >
                 Archived Accounts ({stats.archivedUsers})
-              </button>
+              </button> */}
             </div>
 
             <button className="btn-add-account" onClick={openCreateModal}>
@@ -876,11 +883,19 @@ export default function ManageAccounts() {
                             </td>
                             <td style={{ textAlign: 'center', position: 'relative' }}>
                               {/* Clean Dropdown Menu Action Button */}
-                              <div className="action-menu-container" ref={isMenuOpen ? menuRef : null}>
+                              <div className="action-menu-container">
                                 <button
                                   className={`btn-action-icon ${isMenuOpen ? 'active' : ''}`}
                                   title="Account Actions"
-                                  onClick={() => setOpenMenuId(isMenuOpen ? null : acc.id)}
+                                  onClick={(e) => {
+                                    if (isMenuOpen) {
+                                      setOpenMenuId(null);
+                                    } else {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                      setOpenMenuId(acc.id);
+                                    }
+                                  }}
                                 >
                                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                     <circle cx="12" cy="5" r="2" />
@@ -889,8 +904,12 @@ export default function ManageAccounts() {
                                   </svg>
                                 </button>
 
-                                {isMenuOpen && (
-                                  <div className="action-dropdown-menu animate-fade-up">
+                                {isMenuOpen && createPortal(
+                                  <div 
+                                    className="action-dropdown-menu animate-fade-up"
+                                    ref={menuRef}
+                                    style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 99999 }}
+                                  >
                                     <button
                                       className="dropdown-item"
                                       onClick={() => openViewModal(acc)}
@@ -963,7 +982,8 @@ export default function ManageAccounts() {
                                         )}
                                       </>
                                     )}
-                                  </div>
+                                  </div>,
+                                  document.body
                                 )}
                               </div>
                             </td>
@@ -1276,55 +1296,28 @@ export default function ManageAccounts() {
         </div>
       )}
 
-      {/* --- MODAL: CHANGE PASSWORD --- */}
+      {/* --- MODAL: CHANGE PASSWORD / RESET EMAIL --- */}
       {modalState.type === 'changePassword' && (
         <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
           <div className="acc-modal-content sm-modal animate-fade-up">
             <div className="modal-header-blue">
-              <h2>Change Account Password</h2>
+              <h2>Reset Account Password</h2>
               <span className="close-modal" onClick={closeModal}>
                 ×
               </span>
             </div>
             <form onSubmit={handleChangePassword} className="modal-body-form">
-              <p style={{ fontSize: '13px', color: 'var(--gray-600)', marginBottom: '16px' }}>
-                Updating password for <strong>@{modalState.data?.username}</strong>
+              <p style={{ fontSize: '13.5px', color: 'var(--gray-600)', marginBottom: '16px', lineHeight: '1.5' }}>
+                For security reasons, administrators cannot directly set a user's password. 
+                Are you sure you want to send a secure password reset link to <strong>@{modalState.data?.username}</strong>?
               </p>
-
-              <div className="field-group">
-                <label>New Password *</label>
-                <input
-                  type="password"
-                  placeholder="Enter new password"
-                  value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                  required
-                />
-                {formErrors.newPassword && <span className="err-msg">{formErrors.newPassword}</span>}
-              </div>
-
-              <div className="field-group" style={{ marginTop: '12px' }}>
-                <label>Confirm New Password *</label>
-                <input
-                  type="password"
-                  placeholder="Confirm new password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) =>
-                    setPasswordData({ ...passwordData, confirmPassword: e.target.value })
-                  }
-                  required
-                />
-                {formErrors.confirmPassword && (
-                  <span className="err-msg">{formErrors.confirmPassword}</span>
-                )}
-              </div>
 
               <div className="modal-footer-btns">
                 <button type="button" className="btn-cancel" onClick={closeModal}>
                   Cancel
                 </button>
                 <button type="submit" className="btn-submit" disabled={isLoading}>
-                  {isLoading ? 'Updating...' : 'Update Password'}
+                  {isLoading ? 'Sending...' : 'Send Reset Link'}
                 </button>
               </div>
             </form>

@@ -458,7 +458,7 @@
   border-radius: var(--radius-md);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
   min-width: 160px;
-  z-index: 100;
+  z-index: 1000;
   padding: 6px;
   display: flex;
   flex-direction: column;
