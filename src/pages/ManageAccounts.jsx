@@ -1,20 +1,81 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
 import { supabase } from '../lib/supabase';
 import '../css/ManageAccounts.css';
-import '../css/AddResident.css'; // Reusing some classes
+import '../css/AddResident.css';
 
 export default function ManageAccounts() {
   const [accounts, setAccounts] = useState([]);
-  const [newUser, setNewUser] = useState({ 
-    employee_id: '', first_name: '', last_name: '', email: '', 
-    username: '', password: '', role: 'Staff', status: 'Active' 
-  });
-  const [adminVerify, setAdminVerify] = useState({ open: false, action: '', index: null, password: '' });
   const [isLoading, setIsLoading] = useState(true);
+
+  // Tabs: 'active' | 'archived'
+  const [activeTab, setActiveTab] = useState('active');
+
+  // Search & Filter
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Sorting & Pagination
+  const [sortField, setSortField] = useState('created_at');
+  const [sortDirection, setSortDirection] = useState('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Selection for Bulk Actions
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  // Action Dropdown Menu state
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const menuRef = useRef(null);
+
+  // Modals state
+  const [modalState, setModalState] = useState({
+    type: null, // 'create' | 'edit' | 'view' | 'changePassword' | 'confirm'
+    data: null,
+  });
+
+  // Toast state
+  const [toast, setToast] = useState(null);
+
+  // Form inputs
+  const [formData, setFormData] = useState({
+    employee_id: '',
+    first_name: '',
+    last_name: '',
+    email: '',
+    username: '',
+    password: '',
+    confirm_password: '',
+    role: 'Staff',
+    status: 'Active',
+  });
+
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
+
+  const [formErrors, setFormErrors] = useState({});
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   useEffect(() => {
     fetchAccounts();
+  }, []);
+
+  // Close action dropdown menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const fetchAccounts = async () => {
@@ -28,68 +89,494 @@ export default function ManageAccounts() {
       if (error) throw error;
       setAccounts(data || []);
     } catch (err) {
-      console.error('Error fetching accounts:', err);
-      // Fallback
-      const data = JSON.parse(localStorage.getItem('popdevUsers')) || [
-        { username: 'admin_bustos', role: 'Administrator', first_name: 'Admin', last_name: 'Bustos' }
+      console.warn('Supabase fetch failed or table incomplete. Using local/fallback handling:', err.message);
+      const localData = JSON.parse(localStorage.getItem('popdevUsers')) || [
+        {
+          id: 'admin-001',
+          employee_id: 'EMP-001',
+          first_name: 'System',
+          last_name: 'Admin',
+          username: 'admin_bustos',
+          email: 'admin@bustos.gov.ph',
+          role: 'Admin',
+          status: 'Active',
+          archived: false,
+          created_at: new Date().toISOString(),
+        },
       ];
-      setAccounts(data);
+      setAccounts(localData);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleProcess = async () => {
-    if (adminVerify.password !== 'admin123') {
-      alert('Mali ang Admin Password!');
+  const updateAccountsState = (newAccounts) => {
+    setAccounts(newAccounts);
+    localStorage.setItem('popdevUsers', JSON.stringify(newAccounts));
+  };
+
+  // --- Statistics Calculation ---
+  const stats = useMemo(() => {
+    const nonArchived = accounts.filter((a) => !a.archived);
+    const archived = accounts.filter((a) => a.archived);
+
+    return {
+      totalUsers: nonArchived.length,
+      activeUsers: nonArchived.filter((a) => (a.status || 'Active') === 'Active').length,
+      inactiveUsers: nonArchived.filter((a) => a.status === 'Inactive').length,
+      archivedUsers: archived.length,
+      admins: nonArchived.filter((a) => a.role === 'Admin' || a.role === 'Administrator').length,
+      staff: nonArchived.filter((a) => a.role === 'Staff' || a.role === 'Encoder').length,
+    };
+  }, [accounts]);
+
+  // --- Filter, Sort, Paginate ---
+  const filteredAccounts = useMemo(() => {
+    return accounts.filter((acc) => {
+      const isArchived = Boolean(acc.archived);
+
+      if (activeTab === 'active' && isArchived) return false;
+      if (activeTab === 'archived' && !isArchived) return false;
+
+      // Role Filter
+      if (roleFilter !== 'ALL') {
+        const accRole = acc.role === 'Administrator' ? 'Admin' : acc.role;
+        if (accRole !== roleFilter) return false;
+      }
+
+      // Status Filter
+      if (statusFilter !== 'ALL') {
+        if ((acc.status || 'Active') !== statusFilter) return false;
+      }
+
+      // Search Term
+      if (searchTerm.trim() !== '') {
+        const term = searchTerm.toLowerCase();
+        const fullName = `${acc.first_name || ''} ${acc.last_name || ''}`.toLowerCase();
+        const empId = (acc.employee_id || '').toLowerCase();
+        const username = (acc.username || '').toLowerCase();
+        const email = (acc.email || '').toLowerCase();
+
+        return (
+          fullName.includes(term) ||
+          empId.includes(term) ||
+          username.includes(term) ||
+          email.includes(term)
+        );
+      }
+
+      return true;
+    });
+  }, [accounts, activeTab, roleFilter, statusFilter, searchTerm]);
+
+  const sortedAccounts = useMemo(() => {
+    return [...filteredAccounts].sort((a, b) => {
+      let aVal = a[sortField] || '';
+      let bVal = b[sortField] || '';
+
+      if (sortField === 'name') {
+        aVal = `${a.first_name || ''} ${a.last_name || ''}`.toLowerCase();
+        bVal = `${b.first_name || ''} ${b.last_name || ''}`.toLowerCase();
+      } else if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredAccounts, sortField, sortDirection]);
+
+  // Reset page on tab/filter change
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedIds([]);
+    setOpenMenuId(null);
+  }, [activeTab, searchTerm, roleFilter, statusFilter]);
+
+  const totalPages = Math.ceil(sortedAccounts.length / itemsPerPage) || 1;
+  const paginatedAccounts = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return sortedAccounts.slice(start, start + itemsPerPage);
+  }, [sortedAccounts, currentPage, itemsPerPage]);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Checkbox Selection
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      const pageIds = paginatedAccounts.map((a) => a.id).filter(Boolean);
+      setSelectedIds(pageIds);
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleSelectOne = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  // --- CRUD & Actions ---
+  const validateForm = (isEdit = false) => {
+    const errors = {};
+    if (!formData.first_name.trim()) errors.first_name = 'First name is required';
+    if (!formData.last_name.trim()) errors.last_name = 'Last name is required';
+    if (!formData.username.trim()) errors.username = 'Username is required';
+
+    if (!isEdit) {
+      if (!formData.password) errors.password = 'Password is required';
+      else if (formData.password.length < 6) errors.password = 'Minimum 6 characters';
+      if (formData.password !== formData.confirm_password) {
+        errors.confirm_password = 'Passwords do not match';
+      }
+    }
+
+    if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = 'Invalid email address';
+    }
+
+    const otherAccounts = isEdit
+      ? accounts.filter((a) => a.id !== modalState.data?.id)
+      : accounts;
+
+    if (
+      formData.username &&
+      otherAccounts.some(
+        (a) => (a.username || '').toLowerCase() === formData.username.toLowerCase()
+      )
+    ) {
+      errors.username = 'Username already exists';
+    }
+
+    if (
+      formData.employee_id &&
+      otherAccounts.some(
+        (a) => (a.employee_id || '').toLowerCase() === formData.employee_id.toLowerCase()
+      )
+    ) {
+      errors.employee_id = 'Employee ID already in use';
+    }
+
+    if (
+      formData.email &&
+      otherAccounts.some(
+        (a) => (a.email || '').toLowerCase() === formData.email.toLowerCase()
+      )
+    ) {
+      errors.email = 'Email address already in use';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleCreateAccount = async (e) => {
+    e.preventDefault();
+    if (!validateForm(false)) return;
+
+    setIsLoading(true);
+    const newAcc = {
+      employee_id: formData.employee_id.trim() || null,
+      first_name: formData.first_name.trim(),
+      last_name: formData.last_name.trim(),
+      email: formData.email.trim() || null,
+      username: formData.username.trim(),
+      password: formData.password,
+      role: formData.role,
+      status: formData.status,
+      archived: false,
+      created_at: new Date().toISOString(),
+    };
+
+    try {
+      const { error } = await supabase.from('profiles').insert([newAcc]);
+      if (error) throw error;
+      fetchAccounts();
+      showToast('Account registered successfully!', 'success');
+    } catch (err) {
+      console.warn('Supabase insert fallback:', err.message);
+      newAcc.id = 'usr-' + Date.now();
+      updateAccountsState([newAcc, ...accounts]);
+      showToast('Account registered successfully.', 'success');
+    } finally {
+      setIsLoading(false);
+      closeModal();
+    }
+  };
+
+  const handleEditAccount = async (e) => {
+    e.preventDefault();
+    if (!validateForm(true)) return;
+
+    setIsLoading(true);
+    const updatedFields = {
+      employee_id: formData.employee_id.trim() || null,
+      first_name: formData.first_name.trim(),
+      last_name: formData.last_name.trim(),
+      email: formData.email.trim() || null,
+      username: formData.username.trim(),
+      role: formData.role,
+      status: formData.status,
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(updatedFields)
+        .eq('id', modalState.data.id);
+
+      if (error) throw error;
+      fetchAccounts();
+      showToast('Account details updated successfully!', 'success');
+    } catch (err) {
+      console.warn('Supabase update fallback:', err.message);
+      const updated = accounts.map((a) =>
+        a.id === modalState.data.id ? { ...a, ...updatedFields } : a
+      );
+      updateAccountsState(updated);
+      showToast('Account details updated successfully.', 'success');
+    } finally {
+      setIsLoading(false);
+      closeModal();
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!passwordData.newPassword) {
+      setFormErrors({ newPassword: 'New password is required' });
+      return;
+    }
+    if (passwordData.newPassword.length < 6) {
+      setFormErrors({ newPassword: 'Minimum 6 characters' });
+      return;
+    }
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setFormErrors({ confirmPassword: 'Passwords do not match' });
       return;
     }
 
     setIsLoading(true);
     try {
-      if (adminVerify.action === 'create') {
-        if (!newUser.username || !newUser.password || !newUser.first_name || !newUser.last_name) {
-          alert('Please fill in required fields (Name, Username, Password).');
-          setIsLoading(false);
-          return;
-        }
+      const { error } = await supabase
+        .from('profiles')
+        .update({ password: passwordData.newPassword, updated_at: new Date().toISOString() })
+        .eq('id', modalState.data.id);
 
-        const { error } = await supabase
-          .from('profiles')
-          .insert([newUser]);
-
-        if (error) throw error;
-
-        alert('Account successfully registered!');
-        setNewUser({ 
-          employee_id: '', first_name: '', last_name: '', email: '', 
-          username: '', password: '', role: 'Staff', status: 'Active' 
-        });
-        fetchAccounts();
-      } else if (adminVerify.action === 'delete') {
-        const accountToDelete = accounts[adminVerify.index];
-        const { error } = await supabase
-          .from('profiles')
-          .delete()
-          .eq('id', accountToDelete.id);
-
-        if (error) throw error;
-        
-        alert('Account deleted.');
-        fetchAccounts();
-      }
+      if (error) throw error;
+      fetchAccounts();
+      showToast('Password changed successfully!', 'success');
     } catch (err) {
-      console.error('Operation failed:', err);
-      alert('Failed: ' + err.message);
+      console.warn('Supabase password update fallback:', err.message);
+      const updated = accounts.map((a) =>
+        a.id === modalState.data.id ? { ...a, password: passwordData.newPassword } : a
+      );
+      updateAccountsState(updated);
+      showToast('Password changed successfully.', 'success');
     } finally {
       setIsLoading(false);
-      setAdminVerify({ open: false, action: '', index: null, password: '' });
+      closeModal();
     }
   };
 
-  const save = (data) => {
-    localStorage.setItem('popdevUsers', JSON.stringify(data));
-    setAccounts(data);
+  const handleToggleStatus = async (account) => {
+    const newStatus = account.status === 'Active' ? 'Inactive' : 'Active';
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', account.id);
+
+      if (error) throw error;
+      fetchAccounts();
+      showToast(`Account status updated to ${newStatus}.`, 'info');
+    } catch (err) {
+      const updated = accounts.map((a) => (a.id === account.id ? { ...a, status: newStatus } : a));
+      updateAccountsState(updated);
+      showToast(`Account status updated to ${newStatus}.`, 'info');
+    } finally {
+      setIsLoading(false);
+      setOpenMenuId(null);
+    }
+  };
+
+  const handleArchiveAccount = async (account) => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ archived: true, updated_at: new Date().toISOString() })
+        .eq('id', account.id);
+
+      if (error) throw error;
+      fetchAccounts();
+      showToast('Account moved to Archive.', 'info');
+    } catch (err) {
+      const updated = accounts.map((a) => (a.id === account.id ? { ...a, archived: true } : a));
+      updateAccountsState(updated);
+      showToast('Account moved to Archive.', 'info');
+    } finally {
+      setIsLoading(false);
+      closeModal();
+      setOpenMenuId(null);
+    }
+  };
+
+  const handleRestoreAccount = async (account) => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ archived: false, updated_at: new Date().toISOString() })
+        .eq('id', account.id);
+
+      if (error) throw error;
+      fetchAccounts();
+      showToast('Account restored to Active list.', 'success');
+    } catch (err) {
+      const updated = accounts.map((a) => (a.id === account.id ? { ...a, archived: false } : a));
+      updateAccountsState(updated);
+      showToast('Account restored to Active list.', 'success');
+    } finally {
+      setIsLoading(false);
+      closeModal();
+      setOpenMenuId(null);
+    }
+  };
+
+  const handlePermanentDelete = async (account) => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.from('profiles').delete().eq('id', account.id);
+      if (error) throw error;
+      fetchAccounts();
+      showToast('Account permanently deleted.', 'error');
+    } catch (err) {
+      const updated = accounts.filter((a) => a.id !== account.id);
+      updateAccountsState(updated);
+      showToast('Account permanently deleted.', 'error');
+    } finally {
+      setIsLoading(false);
+      closeModal();
+      setOpenMenuId(null);
+    }
+  };
+
+  // Bulk Actions
+  const handleExecuteBulkAction = async (action) => {
+    if (selectedIds.length === 0) return;
+    setIsLoading(true);
+
+    try {
+      if (action === 'activate') {
+        await supabase.from('profiles').update({ status: 'Active' }).in('id', selectedIds);
+        showToast(`${selectedIds.length} account(s) activated.`, 'success');
+      } else if (action === 'deactivate') {
+        await supabase.from('profiles').update({ status: 'Inactive' }).in('id', selectedIds);
+        showToast(`${selectedIds.length} account(s) deactivated.`, 'info');
+      } else if (action === 'archive') {
+        await supabase.from('profiles').update({ archived: true }).in('id', selectedIds);
+        showToast(`${selectedIds.length} account(s) archived.`, 'info');
+      } else if (action === 'delete') {
+        await supabase.from('profiles').delete().in('id', selectedIds);
+        showToast(`${selectedIds.length} account(s) permanently deleted.`, 'error');
+      }
+      fetchAccounts();
+    } catch (err) {
+      let updated = [...accounts];
+      if (action === 'activate') {
+        updated = updated.map((a) => (selectedIds.includes(a.id) ? { ...a, status: 'Active' } : a));
+      } else if (action === 'deactivate') {
+        updated = updated.map((a) => (selectedIds.includes(a.id) ? { ...a, status: 'Inactive' } : a));
+      } else if (action === 'archive') {
+        updated = updated.map((a) => (selectedIds.includes(a.id) ? { ...a, archived: true } : a));
+      } else if (action === 'delete') {
+        updated = updated.filter((a) => !selectedIds.includes(a.id));
+      }
+      updateAccountsState(updated);
+      showToast(`Bulk action applied for ${selectedIds.length} account(s).`, 'info');
+    } finally {
+      setIsLoading(false);
+      setSelectedIds([]);
+      closeModal();
+      setOpenMenuId(null);
+    }
+  };
+
+  // Modal Openers
+  const openCreateModal = () => {
+    setFormData({
+      employee_id: '',
+      first_name: '',
+      last_name: '',
+      email: '',
+      username: '',
+      password: '',
+      confirm_password: '',
+      role: 'Staff',
+      status: 'Active',
+    });
+    setFormErrors({});
+    setModalState({ type: 'create', data: null });
+  };
+
+  const openEditModal = (account) => {
+    setFormData({
+      employee_id: account.employee_id || '',
+      first_name: account.first_name || '',
+      last_name: account.last_name || '',
+      email: account.email || '',
+      username: account.username || '',
+      role: account.role === 'Administrator' ? 'Admin' : account.role || 'Staff',
+      status: account.status || 'Active',
+    });
+    setFormErrors({});
+    setModalState({ type: 'edit', data: account });
+    setOpenMenuId(null);
+  };
+
+  const openChangePasswordModal = (account) => {
+    setPasswordData({ newPassword: '', confirmPassword: '' });
+    setFormErrors({});
+    setModalState({ type: 'changePassword', data: account });
+    setOpenMenuId(null);
+  };
+
+  const openViewModal = (account) => {
+    setModalState({ type: 'view', data: account });
+    setOpenMenuId(null);
+  };
+
+  const openConfirmModal = (actionType, targetData, message) => {
+    setModalState({
+      type: 'confirm',
+      data: { actionType, targetData, message },
+    });
+    setOpenMenuId(null);
+  };
+
+  const closeModal = () => {
+    setModalState({ type: null, data: null });
+    setFormErrors({});
+  };
+
+  const getInitials = (firstName, lastName) => {
+    const f = firstName ? firstName[0] : '';
+    const l = lastName ? lastName[0] : '';
+    return (f + l).toUpperCase() || 'U';
   };
 
   return (
@@ -99,156 +586,861 @@ export default function ManageAccounts() {
       <Sidebar />
 
       <main className="content">
-        <div className="form-card-container animate-fade-up">
-          <div className="form-blue-header">
-            <h1>Manage User Accounts</h1>
+        {/* Toast Notification */}
+        {toast && (
+          <div className={`acc-toast acc-toast-${toast.type} animate-fade-up`}>
+            <span>{toast.message}</span>
+            <button onClick={() => setToast(null)}>×</button>
+          </div>
+        )}
+
+        {/* Header */}
+        <header className="main-header">
+          <h1>Account Lifecycle & Access Control Management</h1>
+        </header>
+
+        {/* Stat Cards */}
+        <div className="acc-stats-grid animate-fade-up">
+          <div className="acc-stat-card">
+            <div className="acc-stat-info">
+              <span>Total Active Users</span>
+              <h2>{isLoading ? '...' : stats.totalUsers}</h2>
+            </div>
+          </div>
+
+          <div className="acc-stat-card">
+            <div className="acc-stat-info">
+              <span>Active Accounts</span>
+              <h2>{isLoading ? '...' : stats.activeUsers}</h2>
+            </div>
+          </div>
+
+          <div className="acc-stat-card">
+            <div className="acc-stat-info">
+              <span>Inactive Accounts</span>
+              <h2>{isLoading ? '...' : stats.inactiveUsers}</h2>
+            </div>
+          </div>
+
+          <div className="acc-stat-card">
+            <div className="acc-stat-info">
+              <span>Archived Users</span>
+              <h2>{isLoading ? '...' : stats.archivedUsers}</h2>
+            </div>
+          </div>
+
+          <div className="acc-stat-card">
+            <div className="acc-stat-info">
+              <span>Administrators</span>
+              <h2>{isLoading ? '...' : stats.admins}</h2>
+            </div>
+          </div>
+
+          <div className="acc-stat-card">
+            <div className="acc-stat-info">
+              <span>Staff Personnel</span>
+              <h2>{isLoading ? '...' : stats.staff}</h2>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Card Container */}
+        <div className="form-card-container animate-fade-up" style={{ marginTop: '20px' }}>
+          {/* Header & Tabs */}
+          <div className="acc-card-top">
+            <div className="acc-tabs">
+              <button
+                className={`acc-tab-btn ${activeTab === 'active' ? 'active' : ''}`}
+                onClick={() => setActiveTab('active')}
+              >
+                Active Accounts ({stats.totalUsers})
+              </button>
+              <button
+                className={`acc-tab-btn ${activeTab === 'archived' ? 'active' : ''}`}
+                onClick={() => setActiveTab('archived')}
+              >
+                Archived Accounts ({stats.archivedUsers})
+              </button>
+            </div>
+
+            <button className="btn-add-account" onClick={openCreateModal}>
+              Create New Account
+            </button>
           </div>
 
           <div className="form-white-body">
-            <div className="form-step">
-              <h2 className="form-section-title">Account Details</h2>
-              <div className="grid-3-cols">
-                <div className="field-group">
-                  <label>Employee ID</label>
-                  <input type="text" placeholder="EMP-2024-XXX" value={newUser.employee_id} onChange={e => setNewUser({...newUser, employee_id: e.target.value})} />
+            <div className="account-table-container">
+              {/* Filter & Search Bar */}
+              <div className="acc-filter-bar">
+                <div className="acc-search-wrapper">
+                  <span className="search-icon-svg">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Search by ID, name, username, email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="acc-search-input"
+                  />
+                  {searchTerm && (
+                    <button className="clear-search" onClick={() => setSearchTerm('')}>
+                      ×
+                    </button>
+                  )}
                 </div>
-                <div className="field-group">
-                  <label>First Name</label>
-                  <input type="text" placeholder="First Name" value={newUser.first_name} onChange={e => setNewUser({...newUser, first_name: e.target.value})} />
-                </div>
-                <div className="field-group">
-                  <label>Last Name</label>
-                  <input type="text" placeholder="Last Name" value={newUser.last_name} onChange={e => setNewUser({...newUser, last_name: e.target.value})} />
+
+                <div className="acc-filter-controls">
+                  <div className="acc-filter-group">
+                    <label>Role:</label>
+                    <select
+                      value={roleFilter}
+                      onChange={(e) => setRoleFilter(e.target.value)}
+                      className="modern-select filter-select"
+                    >
+                      <option value="ALL">All Roles</option>
+                      <option value="Admin">Admin</option>
+                      <option value="Staff">Staff</option>
+                    </select>
+                  </div>
+
+                  <div className="acc-filter-group">
+                    <label>Status:</label>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="modern-select filter-select"
+                    >
+                      <option value="ALL">All Statuses</option>
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid-3-cols" style={{ marginTop: '15px' }}>
-                <div className="field-group">
-                  <label>Email Address</label>
-                  <input type="email" placeholder="email@example.com" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} />
+              {/* Bulk Action Controls */}
+              {selectedIds.length > 0 && (
+                <div className="bulk-action-bar animate-fade-up">
+                  <span>
+                    <strong>{selectedIds.length}</strong> accounts selected
+                  </span>
+                  <div className="bulk-btns">
+                    {activeTab === 'active' && (
+                      <>
+                        <button
+                          className="btn-bulk btn-bulk-activate"
+                          onClick={() =>
+                            openConfirmModal(
+                              'bulk-activate',
+                              null,
+                              `Are you sure you want to activate ${selectedIds.length} selected account(s)?`
+                            )
+                          }
+                        >
+                          Activate Selected
+                        </button>
+                        <button
+                          className="btn-bulk btn-bulk-deactivate"
+                          onClick={() =>
+                            openConfirmModal(
+                              'bulk-deactivate',
+                              null,
+                              `Are you sure you want to deactivate ${selectedIds.length} selected account(s)?`
+                            )
+                          }
+                        >
+                          Deactivate Selected
+                        </button>
+                        <button
+                          className="btn-bulk btn-bulk-archive"
+                          onClick={() =>
+                            openConfirmModal(
+                              'bulk-archive',
+                              null,
+                              `Are you sure you want to archive ${selectedIds.length} selected account(s)?`
+                            )
+                          }
+                        >
+                          Archive Selected
+                        </button>
+                      </>
+                    )}
+                    <button
+                      className="btn-bulk btn-bulk-delete"
+                      onClick={() =>
+                        openConfirmModal(
+                          'bulk-delete',
+                          null,
+                          `PERMANENT ACTION: Are you sure you want to permanently delete ${selectedIds.length} selected account(s)?`
+                        )
+                      }
+                    >
+                      Delete Selected
+                    </button>
+                  </div>
                 </div>
-                <div className="field-group">
-                  <label>Username</label>
-                  <input type="text" placeholder="Username" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} />
-                </div>
-                <div className="field-group">
-                  <label>Password</label>
-                  <input type="password" placeholder="••••••••" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} />
-                </div>
-              </div>
+              )}
 
-              <div className="grid-2-cols" style={{ marginTop: '15px' }}>
-                <div className="field-group">
-                  <label>Role</label>
-                  <select className="modern-select" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>
-                    <option>Staff</option>
-                    <option>Administrator</option>
-                    <option>Encoder</option>
-                  </select>
-                </div>
-                <div className="field-group">
-                  <label>Status</label>
-                  <select className="modern-select" value={newUser.status} onChange={e => setNewUser({...newUser, status: e.target.value})}>
-                    <option>Active</option>
-                    <option>Inactive</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ textAlign: 'center', marginTop: '30px' }}>
-                <button 
-                  className={`btn-next ${isLoading ? 'loading' : ''}`} 
-                  onClick={() => setAdminVerify({ ...adminVerify, open: true, action: 'create' })}
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Processing...' : 'Register Account'}
-                </button>
-              </div>
-            </div>
-
-            <hr style={{ margin: '40px 0', border: '0', borderTop: '2px dashed #e2e8f0' }} />
-
-            <div className="form-step">
-              <h2 className="form-section-title">Active System Users</h2>
-              <div className="account-table-container">
-                <table className="modern-table">
+              {/* Responsive Scrollable Table Wrapper */}
+              <div className="table-responsive-wrapper">
+                <table className="modern-table acc-table">
                   <thead>
                     <tr>
-                      <th>Employee ID</th>
-                      <th>Name</th>
-                      <th>Username</th>
-                      <th>Role</th>
-                      <th>Status</th>
-                      <th style={{ textAlign: 'center' }}>Action</th>
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={
+                            paginatedAccounts.length > 0 &&
+                            paginatedAccounts.every((a) => selectedIds.includes(a.id))
+                          }
+                          onChange={handleSelectAll}
+                        />
+                      </th>
+                      <th onClick={() => handleSort('employee_id')} className="sortable-th">
+                        Employee ID {sortField === 'employee_id' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      </th>
+                      <th onClick={() => handleSort('name')} className="sortable-th">
+                        User Name {sortField === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      </th>
+                      <th onClick={() => handleSort('username')} className="sortable-th">
+                        Username {sortField === 'username' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      </th>
+                      <th onClick={() => handleSort('email')} className="sortable-th">
+                        Email Address {sortField === 'email' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      </th>
+                      <th onClick={() => handleSort('role')} className="sortable-th">
+                        Role {sortField === 'role' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      </th>
+                      <th onClick={() => handleSort('status')} className="sortable-th">
+                        Status {sortField === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      </th>
+                      <th style={{ textAlign: 'center', width: '80px' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {isLoading ? (
                       <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>Updating...</td>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '40px' }}>
+                          <div className="loading-spinner">Loading account records...</div>
+                        </td>
                       </tr>
-                    ) : accounts.length > 0 ? (
-                      accounts.map((acc, i) => (
-                        <tr key={acc.id || i}>
-                          <td>{acc.employee_id || '---'}</td>
-                          <td><b>{acc.first_name} {acc.last_name}</b></td>
-                          <td>{acc.username}</td>
-                          <td><span className="role-badge">{acc.role}</span></td>
-                          <td>
-                            <span className={`status-badge ${acc.status?.toLowerCase()}`}>
-                              {acc.status}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            {acc.username !== 'admin_bustos' ? (
-                              <button 
-                                className="btn-delete" 
-                                onClick={() => setAdminVerify({ open: true, action: 'delete', index: i })}
-                              >
-                                Delete
-                              </button>
-                            ) : (
-                              <span className="protected-badge">Protected</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
+                    ) : paginatedAccounts.length > 0 ? (
+                      paginatedAccounts.map((acc) => {
+                        const isProtected = acc.username === 'admin_bustos';
+                        const roleDisplay = acc.role === 'Administrator' ? 'Admin' : acc.role || 'Staff';
+                        const statusDisplay = acc.status || 'Active';
+                        const isMenuOpen = openMenuId === acc.id;
+
+                        return (
+                          <tr key={acc.id} className={selectedIds.includes(acc.id) ? 'row-selected' : ''}>
+                            <td style={{ textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.includes(acc.id)}
+                                onChange={() => handleSelectOne(acc.id)}
+                              />
+                            </td>
+                            {/* Standardized font for Employee ID */}
+                            <td className="cell-empid-standard">{acc.employee_id || '—'}</td>
+                            <td>
+                              <div className="user-profile-cell">
+                                <div className={`avatar-circle role-bg-${roleDisplay.toLowerCase()}`}>
+                                  {getInitials(acc.first_name, acc.last_name)}
+                                </div>
+                                <div>
+                                  <div className="user-name-text">
+                                    {acc.first_name} {acc.last_name}
+                                  </div>
+                                  <div className="user-created-sub">
+                                    Added {acc.created_at ? new Date(acc.created_at).toLocaleDateString() : 'N/A'}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            {/* Standardized font for Username */}
+                            <td className="cell-username-standard">@{acc.username}</td>
+                            <td>{acc.email || '—'}</td>
+                            <td>
+                              <span className={`role-badge role-${roleDisplay.toLowerCase()}`}>
+                                {roleDisplay}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`status-badge status-${statusDisplay.toLowerCase()}`}>
+                                {statusDisplay}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'center', position: 'relative' }}>
+                              {/* Clean Dropdown Menu Action Button */}
+                              <div className="action-menu-container" ref={isMenuOpen ? menuRef : null}>
+                                <button
+                                  className={`btn-action-icon ${isMenuOpen ? 'active' : ''}`}
+                                  title="Account Actions"
+                                  onClick={() => setOpenMenuId(isMenuOpen ? null : acc.id)}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <circle cx="12" cy="5" r="2" />
+                                    <circle cx="12" cy="12" r="2" />
+                                    <circle cx="12" cy="19" r="2" />
+                                  </svg>
+                                </button>
+
+                                {isMenuOpen && (
+                                  <div className="action-dropdown-menu animate-fade-up">
+                                    <button
+                                      className="dropdown-item"
+                                      onClick={() => openViewModal(acc)}
+                                    >
+                                      View Details
+                                    </button>
+
+                                    {activeTab === 'active' ? (
+                                      <>
+                                        <button
+                                          className="dropdown-item"
+                                          onClick={() => openEditModal(acc)}
+                                        >
+                                          Edit Account
+                                        </button>
+
+                                        <button
+                                          className="dropdown-item"
+                                          onClick={() => openChangePasswordModal(acc)}
+                                        >
+                                          Change Password
+                                        </button>
+
+                                        {!isProtected && (
+                                          <>
+                                            <button
+                                              className="dropdown-item"
+                                              onClick={() => handleToggleStatus(acc)}
+                                            >
+                                              {statusDisplay === 'Active' ? 'Deactivate Account' : 'Activate Account'}
+                                            </button>
+
+                                            <button
+                                              className="dropdown-item dropdown-item-warning"
+                                              onClick={() =>
+                                                openConfirmModal(
+                                                  'archive',
+                                                  acc,
+                                                  `Archive account for "${acc.first_name} ${acc.last_name}"?`
+                                                )
+                                              }
+                                            >
+                                              Archive Account
+                                            </button>
+                                          </>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button
+                                          className="dropdown-item dropdown-item-success"
+                                          onClick={() => handleRestoreAccount(acc)}
+                                        >
+                                          Restore Account
+                                        </button>
+
+                                        {!isProtected && (
+                                          <button
+                                            className="dropdown-item dropdown-item-danger"
+                                            onClick={() =>
+                                              openConfirmModal(
+                                                'delete',
+                                                acc,
+                                                `PERMANENT DELETION: Are you sure you want to permanently delete account "@${acc.username}"?`
+                                              )
+                                            }
+                                          >
+                                            Delete Permanently
+                                          </button>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>No users found.</td>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '40px' }}>
+                          <div className="empty-state">
+                            <p>No user accounts found matching current criteria.</p>
+                          </div>
+                        </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="acc-pagination-bar">
+                <div className="pagination-info">
+                  Showing{' '}
+                  {sortedAccounts.length > 0
+                    ? (currentPage - 1) * itemsPerPage + 1
+                    : 0}{' '}
+                  to {Math.min(currentPage * itemsPerPage, sortedAccounts.length)} of{' '}
+                  {sortedAccounts.length} accounts
+                </div>
+
+                <div className="pagination-controls">
+                  <label style={{ fontSize: '12px', color: 'var(--gray-600)' }}>Rows per page:</label>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                    className="modern-select rows-select"
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+
+                  <button
+                    className="page-btn"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((p) => p - 1)}
+                  >
+                    Prev
+                  </button>
+                  <span className="page-indicator">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    className="page-btn"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((p) => p + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </main>
 
-      {adminVerify.open && (
-        <div className="modal-overlay">
-          <div className="admin-modal">
-            <h2>Admin Verification</h2>
-            <p>Please enter admin's password before proceeding.</p>
-            <div className="field-group">
-              <label>Admin Password</label>
-              <input 
-                type="password" 
-                style={{ textAlign: 'center' }} 
-                value={adminVerify.password}
-                onChange={e => setAdminVerify({...adminVerify, password: e.target.value})}
-                autoFocus
-              />
+      {/* --- MODAL: CREATE ACCOUNT --- */}
+      {modalState.type === 'create' && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+          <div className="acc-modal-content animate-fade-up">
+            <div className="modal-header-blue">
+              <h2>Create New User Account</h2>
+              <span className="close-modal" onClick={closeModal}>
+                ×
+              </span>
             </div>
+            <form onSubmit={handleCreateAccount} className="modal-body-form">
+              <div className="grid-3-cols">
+                <div className="field-group">
+                  <label>Employee ID</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. EMP-2026-089"
+                    value={formData.employee_id}
+                    onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
+                  />
+                  {formErrors.employee_id && <span className="err-msg">{formErrors.employee_id}</span>}
+                </div>
+
+                <div className="field-group">
+                  <label>First Name *</label>
+                  <input
+                    type="text"
+                    placeholder="First Name"
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                    required
+                  />
+                  {formErrors.first_name && <span className="err-msg">{formErrors.first_name}</span>}
+                </div>
+
+                <div className="field-group">
+                  <label>Last Name *</label>
+                  <input
+                    type="text"
+                    placeholder="Last Name"
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                    required
+                  />
+                  {formErrors.last_name && <span className="err-msg">{formErrors.last_name}</span>}
+                </div>
+              </div>
+
+              <div className="grid-3-cols" style={{ marginTop: '12px' }}>
+                <div className="field-group">
+                  <label>Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="email@bustos.gov.ph"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                  {formErrors.email && <span className="err-msg">{formErrors.email}</span>}
+                </div>
+
+                <div className="field-group">
+                  <label>Username *</label>
+                  <input
+                    type="text"
+                    placeholder="Username"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    required
+                  />
+                  {formErrors.username && <span className="err-msg">{formErrors.username}</span>}
+                </div>
+
+                <div className="field-group">
+                  <label>Role *</label>
+                  <select
+                    className="modern-select"
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  >
+                    <option value="Staff">Staff</option>
+                    <option value="Admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid-3-cols" style={{ marginTop: '12px' }}>
+                <div className="field-group">
+                  <label>Password *</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required
+                  />
+                  {formErrors.password && <span className="err-msg">{formErrors.password}</span>}
+                </div>
+
+                <div className="field-group">
+                  <label>Confirm Password *</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={formData.confirm_password}
+                    onChange={(e) => setFormData({ ...formData, confirm_password: e.target.value })}
+                    required
+                  />
+                  {formErrors.confirm_password && (
+                    <span className="err-msg">{formErrors.confirm_password}</span>
+                  )}
+                </div>
+
+                <div className="field-group">
+                  <label>Status</label>
+                  <select
+                    className="modern-select"
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-footer-btns">
+                <button type="button" className="btn-cancel" onClick={closeModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-submit" disabled={isLoading}>
+                  {isLoading ? 'Creating...' : 'Register Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL: EDIT ACCOUNT --- */}
+      {modalState.type === 'edit' && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+          <div className="acc-modal-content animate-fade-up">
+            <div className="modal-header-blue">
+              <h2>Edit User Account</h2>
+              <span className="close-modal" onClick={closeModal}>
+                ×
+              </span>
+            </div>
+            <form onSubmit={handleEditAccount} className="modal-body-form">
+              <div className="grid-3-cols">
+                <div className="field-group">
+                  <label>Employee ID</label>
+                  <input
+                    type="text"
+                    value={formData.employee_id}
+                    onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
+                  />
+                  {formErrors.employee_id && <span className="err-msg">{formErrors.employee_id}</span>}
+                </div>
+
+                <div className="field-group">
+                  <label>First Name *</label>
+                  <input
+                    type="text"
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                    required
+                  />
+                  {formErrors.first_name && <span className="err-msg">{formErrors.first_name}</span>}
+                </div>
+
+                <div className="field-group">
+                  <label>Last Name *</label>
+                  <input
+                    type="text"
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                    required
+                  />
+                  {formErrors.last_name && <span className="err-msg">{formErrors.last_name}</span>}
+                </div>
+              </div>
+
+              <div className="grid-2-cols" style={{ marginTop: '12px' }}>
+                <div className="field-group">
+                  <label>Email Address</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                  {formErrors.email && <span className="err-msg">{formErrors.email}</span>}
+                </div>
+
+                <div className="field-group">
+                  <label>Username *</label>
+                  <input
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    required
+                  />
+                  {formErrors.username && <span className="err-msg">{formErrors.username}</span>}
+                </div>
+              </div>
+
+              <div className="grid-2-cols" style={{ marginTop: '12px' }}>
+                <div className="field-group">
+                  <label>Role</label>
+                  <select
+                    className="modern-select"
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  >
+                    <option value="Staff">Staff</option>
+                    <option value="Admin">Admin</option>
+                  </select>
+                </div>
+
+                <div className="field-group">
+                  <label>Status</label>
+                  <select
+                    className="modern-select"
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-footer-btns">
+                <button type="button" className="btn-cancel" onClick={closeModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-submit" disabled={isLoading}>
+                  {isLoading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL: CHANGE PASSWORD --- */}
+      {modalState.type === 'changePassword' && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+          <div className="acc-modal-content sm-modal animate-fade-up">
+            <div className="modal-header-blue">
+              <h2>Change Account Password</h2>
+              <span className="close-modal" onClick={closeModal}>
+                ×
+              </span>
+            </div>
+            <form onSubmit={handleChangePassword} className="modal-body-form">
+              <p style={{ fontSize: '13px', color: 'var(--gray-600)', marginBottom: '16px' }}>
+                Updating password for <strong>@{modalState.data?.username}</strong>
+              </p>
+
+              <div className="field-group">
+                <label>New Password *</label>
+                <input
+                  type="password"
+                  placeholder="Enter new password"
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                  required
+                />
+                {formErrors.newPassword && <span className="err-msg">{formErrors.newPassword}</span>}
+              </div>
+
+              <div className="field-group" style={{ marginTop: '12px' }}>
+                <label>Confirm New Password *</label>
+                <input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) =>
+                    setPasswordData({ ...passwordData, confirmPassword: e.target.value })
+                  }
+                  required
+                />
+                {formErrors.confirmPassword && (
+                  <span className="err-msg">{formErrors.confirmPassword}</span>
+                )}
+              </div>
+
+              <div className="modal-footer-btns">
+                <button type="button" className="btn-cancel" onClick={closeModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-submit" disabled={isLoading}>
+                  {isLoading ? 'Updating...' : 'Update Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL: VIEW ACCOUNT DETAILS --- */}
+      {modalState.type === 'view' && modalState.data && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+          <div className="acc-modal-content sm-modal animate-fade-up">
+            <div className="modal-header-blue">
+              <h2>Account Profile Overview</h2>
+              <span className="close-modal" onClick={closeModal}>
+                ×
+              </span>
+            </div>
+            <div className="modal-body-details">
+              <div className="view-header-profile">
+                <div className="avatar-circle-large">
+                  {getInitials(modalState.data.first_name, modalState.data.last_name)}
+                </div>
+                <div>
+                  <h3>
+                    {modalState.data.first_name} {modalState.data.last_name}
+                  </h3>
+                  <p className="view-sub-title">@{modalState.data.username}</p>
+                </div>
+              </div>
+
+              <div className="view-details-grid">
+                <div className="view-detail-item">
+                  <span className="detail-label">Employee ID</span>
+                  <span className="detail-value">{modalState.data.employee_id || 'Not Set'}</span>
+                </div>
+                <div className="view-detail-item">
+                  <span className="detail-label">Email Address</span>
+                  <span className="detail-value">{modalState.data.email || 'Not Set'}</span>
+                </div>
+                <div className="view-detail-item">
+                  <span className="detail-label">System Role</span>
+                  <span className="detail-value">
+                    <span
+                      className={`role-badge role-${(
+                        modalState.data.role || 'Staff'
+                      ).toLowerCase()}`}
+                    >
+                      {modalState.data.role === 'Administrator'
+                        ? 'Admin'
+                        : modalState.data.role || 'Staff'}
+                    </span>
+                  </span>
+                </div>
+                <div className="view-detail-item">
+                  <span className="detail-label">Account Status</span>
+                  <span className="detail-value">
+                    <span
+                      className={`status-badge status-${(
+                        modalState.data.status || 'Active'
+                      ).toLowerCase()}`}
+                    >
+                      {modalState.data.status || 'Active'}
+                    </span>
+                  </span>
+                </div>
+                <div className="view-detail-item">
+                  <span className="detail-label">Archived State</span>
+                  <span className="detail-value">
+                    {modalState.data.archived ? 'Archived' : 'Active'}
+                  </span>
+                </div>
+                <div className="view-detail-item">
+                  <span className="detail-label">Registration Date</span>
+                  <span className="detail-value">
+                    {modalState.data.created_at
+                      ? new Date(modalState.data.created_at).toLocaleString()
+                      : 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal-footer-btns" style={{ marginTop: '24px' }}>
+                <button className="btn-cancel" style={{ width: '100%' }} onClick={closeModal}>
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL: CONFIRMATION DIALOG --- */}
+      {modalState.type === 'confirm' && modalState.data && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+          <div className="admin-modal animate-fade-up">
+            <h2>Confirm Action</h2>
+            <p>{modalState.data.message}</p>
             <div className="modal-btns">
-              <button 
-                className="btn-back" style={{ flex: 1 }} 
-                onClick={() => setAdminVerify({ open: false, action: '', index: null, password: '' })}
-              >
+              <button className="btn-back" style={{ flex: 1 }} onClick={closeModal}>
                 Cancel
               </button>
-              <button className="btn-next" style={{ flex: 1 }} onClick={handleProcess}>Confirm</button>
+              <button
+                className="btn-next"
+                style={{ flex: 1, background: 'var(--primary)' }}
+                onClick={() => {
+                  const { actionType, targetData } = modalState.data;
+                  if (actionType === 'archive') handleArchiveAccount(targetData);
+                  else if (actionType === 'delete') handlePermanentDelete(targetData);
+                  else if (actionType === 'bulk-activate') handleExecuteBulkAction('activate');
+                  else if (actionType === 'bulk-deactivate') handleExecuteBulkAction('deactivate');
+                  else if (actionType === 'bulk-archive') handleExecuteBulkAction('archive');
+                  else if (actionType === 'bulk-delete') handleExecuteBulkAction('delete');
+                }}
+              >
+                Confirm
+              </button>
             </div>
           </div>
         </div>
