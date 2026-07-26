@@ -16,21 +16,51 @@ export default function LoginPage() {
     setErrorMsg('');
 
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('username', username)
-        .eq('password', password)
-        .eq('status', 'Active')
-        .single();
+      // Supabase Auth requires an email. If the user enters a username, 
+      // we first look up their actual email from the profiles table.
+      let loginEmail = username;
 
-      if (error || !data) {
-        setErrorMsg('Invalid username or password, or account is inactive.');
+      if (!username.includes('@')) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('username', username)
+          .single();
+        
+        if (profileData && profileData.email) {
+          loginEmail = profileData.email;
+        } else {
+          // Fallback if no email is set in the profile but they try to log in
+          loginEmail = `${username}@bustos.gov.ph`;
+        }
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: password,
+      });
+
+      if (authError || !authData.user) {
+        setErrorMsg(authError?.message || 'Invalid username or password.');
         return;
       }
 
-      // Store user session info if needed
-      localStorage.setItem('popdev_user', JSON.stringify(data));
+      // Fetch the user's profile to check their status and roles
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (profileError || !profile || profile.status !== 'Active') {
+        // If account is inactive or missing, log them out
+        await supabase.auth.signOut();
+        setErrorMsg('Your account is inactive or disabled.');
+        return;
+      }
+
+      // Store user session info for the frontend
+      localStorage.setItem('popdev_user', JSON.stringify(profile));
       navigate('/dashboard');
     } catch (err) {
       console.error('Login error:', err);
