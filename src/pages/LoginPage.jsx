@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import '../css/LoginPage.css';
 
@@ -9,6 +9,18 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const location = useLocation();
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    if (location.state?.message) {
+      setToast({ message: location.state.message, type: 'error' });
+      setTimeout(() => setToast(null), 3500);
+      
+      // Clear state so it doesn't reappear on refresh
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -75,6 +87,14 @@ export default function LoginPage() {
       {/* Shared background layers */}
       <div className="bg-image" />
       <div className="overlay" />
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`login-toast login-toast-${toast.type} animate-fade-up`}>
+          <span>{toast.message}</span>
+          <button onClick={() => setToast(null)}>×</button>
+        </div>
+      )}
 
       {/* Back button */}
       <Link to="/" className="back-btn">← Back to Home</Link>

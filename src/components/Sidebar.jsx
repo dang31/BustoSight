@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard' },
@@ -15,9 +16,23 @@ export default function Sidebar() {
   const { pathname } = useLocation();
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleLogout = () => {
+  const storedUser = localStorage.getItem('popdev_user');
+  const userProfile = storedUser ? JSON.parse(storedUser) : null;
+  const userRole = userProfile?.role || 'Staff';
+
+  const filteredNavItems = NAV_ITEMS.filter((item) => {
+    if (userRole !== 'Admin' && userRole !== 'Administrator') {
+      if (item.path === '/upload' || item.path === '/manage-accounts') {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const handleLogout = async () => {
     if (window.confirm('Are you sure you want to logout?')) {
-      sessionStorage.clear();
+      await supabase.auth.signOut();
+      localStorage.removeItem('popdev_user');
       navigate('/login');
     }
   };
@@ -40,7 +55,7 @@ export default function Sidebar() {
         <nav className="nav-menu">
           <p className="label">Population Development</p>
           <ul>
-            {NAV_ITEMS.map((item) => (
+            {filteredNavItems.map((item) => (
               <li
                 key={item.path}
                 className={pathname === item.path ? 'active' : ''}

@@ -255,3 +255,41 @@
     padding: 36px 28px;
   }
 }
+
+/* --- Toast Notification --- */
+.login-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 14px 20px;
+  border-radius: var(--radius-sm);
+  background: white;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 9999;
+  font-weight: 500;
+  font-size: 0.95rem;
+  border-left: 5px solid transparent;
+  color: var(--gray-800, #333);
+}
+
+.login-toast-error {
+  border-left-color: #ff4d4d;
+}
+
+.login-toast button {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.login-toast button:hover {
+  color: #334155;
+}
