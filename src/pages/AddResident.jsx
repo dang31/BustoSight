@@ -95,9 +95,11 @@ export default function AddResident() {
 
   const validateStep = (step = currentStep) => {
     if (step === 1) {
-      if (!household.hh_num || !household.house_no || !household.street || !household.purok || !household.brgy) {
-        return 'Please fill in all required household information fields.';
-      }
+      if (!household.hh_num) return 'Household Number is required.';
+      if (!household.house_no) return 'House Number is required.';
+      if (!household.street) return 'Street name is required.';
+      if (!household.purok) return 'Purok / Sitio is required.';
+      if (!household.brgy) return 'Please select a Barangay.';
       if (household.residence_type === 'Other' && !household.residence_type_other) {
         return 'Please specify the residence type.';
       }
@@ -105,17 +107,21 @@ export default function AddResident() {
 
     // Step 2: Household Head Validation
     if (step === 2) {
-      if (!head.lname || !head.fname || !head.pob || !head.dob) {
-        return 'Please fill in all required household head fields.';
-      }
+      if (!head.lname) return 'Last Name is required for the Household Head.';
+      if (!head.fname) return 'First Name is required for the Household Head.';
+      if (!head.pob) return 'Place of Birth is required for the Household Head.';
+      if (!head.dob) return 'Date of Birth is required for the Household Head.';
+      if (head.age !== '' && head.age <= 18) return 'Household head must be over 18 years old.';
     }
 
     if (step === 3) {
       for (let i = 0; i < members.length; i += 1) {
         const member = members[i];
         const hasAnyMemberValue = member.lname || member.fname || member.rel || member.dob || member.pob || member.religion || member.edu || member.occupation;
-        if (hasAnyMemberValue && (!member.lname || !member.fname || !member.rel)) {
-          return `Please complete the required fields (First Name, Last Name, and Relation) for member ${i + 1} or remove the incomplete member.`;
+        if (hasAnyMemberValue) {
+           if (!member.lname) return `Member ${i + 1} is missing a Last Name.`;
+           if (!member.fname) return `Member ${i + 1} is missing a First Name.`;
+           if (!member.rel) return `Member ${i + 1} is missing a Relationship to Head.`;
         }
       }
     }
@@ -165,6 +171,9 @@ export default function AddResident() {
     if (dir === 1) {
       const warning = validateStep();
       if (warning) {
+        if (warning.includes('18 years old')) {
+          alert('Invalid: Household head must be over 18 years old.');
+        }
         setFormWarning(warning);
         return;
       }
@@ -315,6 +324,43 @@ export default function AddResident() {
     }
   };
 
+  const handleBrgyChange = async (e) => {
+    const selectedBrgy = e.target.value;
+    setHousehold({ ...household, brgy: selectedBrgy });
+    
+    if (!selectedBrgy) return;
+
+    // Auto-generate Household Number
+    const prefix = selectedBrgy.substring(0, 3).toUpperCase();
+    
+    try {
+      const { data, error } = await supabase
+        .from('residents')
+        .select('h_no')
+        .ilike('h_no', `${prefix}%`);
+        
+      if (error) {
+        console.error('Error fetching HH num:', error);
+        return;
+      }
+      
+      let maxNum = 0;
+      if (data && data.length > 0) {
+        data.forEach(row => {
+          const numMatch = row.h_no?.match(new RegExp(`^${prefix}(\\d+)$`, 'i'));
+          if (numMatch) {
+            const num = parseInt(numMatch[1], 10);
+            if (num > maxNum) maxNum = num;
+          }
+        });
+      }
+      
+      setHousehold(prev => ({ ...prev, brgy: selectedBrgy, hh_num: `${prefix}${maxNum + 1}` }));
+    } catch (err) {
+      console.error('Failed to auto-generate HH number', err);
+    }
+  };
+
   return (
     <div className="dashboard-wrapper">
       <div className="bg-image" />
@@ -338,7 +384,7 @@ export default function AddResident() {
             <h1>{currentStep === 4 ? 'Review Registration Details' : 'Add Resident Form'}</h1>
           </div>
 
-          <div className="form-white-body">
+          <div className={`form-white-body ${currentStep === 4 ? 'step-4-static' : ''}`}>
             <form onSubmit={(e) => e.preventDefault()}>
               {formWarning && (
                 <div className="form-warning">⚠ {formWarning}</div>
@@ -368,7 +414,7 @@ export default function AddResident() {
                   <div className="grid-3-cols" style={{ marginTop: '20px' }}>
                     <div className="field-group">
                       <label>Barangay</label>
-                      <select className="modern-select" value={household.brgy} onChange={e => setHousehold({...household, brgy: e.target.value})}>
+                      <select className="modern-select" value={household.brgy} onChange={handleBrgyChange}>
                         <option value="" disabled>Select Barangay</option>
                         {brgyStats.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
                       </select>
@@ -453,7 +499,21 @@ export default function AddResident() {
                     </div>
                     <div className="field-group"><label>Religion</label><input type="text" placeholder="e.g. Roman Catholic" value={head.religion} onChange={e => setHead({...head, religion: e.target.value})} /></div>
                     <div className="field-group"><label>Citizenship</label><input type="text" value={head.citizenship} onChange={e => setHead({...head, citizenship: e.target.value})} /></div>
-                    <div className="field-group"><label>Educational Attainment</label><input type="text" placeholder="e.g. College Graduate" value={head.edu} onChange={e => setHead({...head, edu: e.target.value})} /></div>
+                    <div className="field-group">
+                      <label>Educational Attainment</label>
+                      <select className="modern-select" value={head.edu} onChange={e => setHead({...head, edu: e.target.value})}>
+                        <option value="" disabled>Select Education</option>
+                        <option value="No Education">No Education</option>
+                        <option value="Elementary Level">Elementary Level</option>
+                        <option value="Elementary Graduate">Elementary Graduate</option>
+                        <option value="High School Level">High School Level</option>
+                        <option value="High School Graduate">High School Graduate</option>
+                        <option value="Vocational">Vocational</option>
+                        <option value="College Level">College Level</option>
+                        <option value="College Graduate">College Graduate</option>
+                        <option value="Post Graduate">Post Graduate</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="grid-3-cols" style={{ marginTop: '15px' }}>
@@ -655,7 +715,21 @@ export default function AddResident() {
                                 </div>
 
                                 <div className="grid-4-cols" style={{ marginTop: '15px' }}>
-                                  <div className="field-group"><label>Educational Attainment</label><input type="text" placeholder="e.g. High School Graduate" value={m.edu} onChange={e => updateMember(i, 'edu', e.target.value)} /></div>
+                                  <div className="field-group">
+                                    <label>Educational Attainment</label>
+                                    <select className="modern-select" value={m.edu} onChange={e => updateMember(i, 'edu', e.target.value)}>
+                                      <option value="" disabled>Select Education</option>
+                                      <option value="No Education">No Education</option>
+                                      <option value="Elementary Level">Elementary Level</option>
+                                      <option value="Elementary Graduate">Elementary Graduate</option>
+                                      <option value="High School Level">High School Level</option>
+                                      <option value="High School Graduate">High School Graduate</option>
+                                      <option value="Vocational">Vocational</option>
+                                      <option value="College Level">College Level</option>
+                                      <option value="College Graduate">College Graduate</option>
+                                      <option value="Post Graduate">Post Graduate</option>
+                                    </select>
+                                  </div>
                                   <div className="field-group"><label>Occupation</label><input type="text" placeholder="e.g. Student" value={m.occupation} onChange={e => updateMember(i, 'occupation', e.target.value)} /></div>
                                   <div className="field-group">
                                     <label>Voter Information</label>

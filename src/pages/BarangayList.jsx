@@ -7,6 +7,10 @@ import '../css/BarangayList.css';
 
 export default function BarangayList() {
   const navigate = useNavigate();
+  const storedUser = localStorage.getItem('popdev_user');
+  const userProfile = storedUser ? JSON.parse(storedUser) : null;
+  const userRole = userProfile?.role || 'Staff';
+  const isStaff = userRole !== 'Admin' && userRole !== 'Administrator';
   const [activeBrgy, setActiveBrgy] = useState('Poblacion');
   const [allRecords, setAllRecords] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -417,9 +421,11 @@ export default function BarangayList() {
                               <button className="action-btn edit-btn" onClick={() => alert('Edit feature is under development.')} title="Edit Resident">
                                 <i className="fa-solid fa-pen-to-square"></i>
                               </button>
-                              <button className="action-btn delete-btn" onClick={() => handleArchive(res)} title="Archive Resident">
-                                <i className="fa-solid fa-trash-can"></i>
-                              </button>
+                              {!isStaff && (
+                                <button className="action-btn delete-btn" onClick={() => handleArchive(res)} title="Archive Resident">
+                                  <i className="fa-solid fa-trash-can"></i>
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
