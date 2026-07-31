@@ -9,10 +9,11 @@
   background: rgba(255, 255, 255, 0.95);
   padding: 6px;
   border-radius: var(--radius-md);
-  margin-bottom: 24px;
+  margin: 0 auto 24px;
   box-shadow: var(--card-shadow);
   border: 1px solid rgba(44, 82, 130, 0.08);
   width: fit-content;
+  max-width: 100%;
 }
 
 .tab-btn {
@@ -207,6 +208,7 @@
   box-shadow: var(--card-shadow);
   border: 1px solid rgba(44, 82, 130, 0.06);
   transition: var(--transition);
+  min-width: 0;
 }
 
 .chart-item:hover {
