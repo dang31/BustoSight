@@ -16,6 +16,14 @@
   max-width: 100%;
 }
 
+.header-text {
+  font-size: 10.5px;
+  color: var(--gray-50);
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
 .tab-btn {
   padding: 10px 24px;
   border: none;
