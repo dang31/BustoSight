@@ -396,6 +396,31 @@
   background: #f8fafc;
 }
 
+/* Scrollable wrapper for the members table in Step 4 review */
+.summary-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+  margin-top: 16px;
+}
+
+.summary-table-wrapper .summary-table {
+  margin-top: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 700px;
+}
+
+.summary-table-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+.summary-table-wrapper::-webkit-scrollbar-thumb {
+  background: var(--gray-300);
+  border-radius: 10px;
+}
+
 /* ---- RESPONSIVE ADD RESIDENT ---- */
 @media (max-width: 1024px) {
   .form-white-body {
