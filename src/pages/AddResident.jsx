@@ -502,7 +502,6 @@ export default function AddResident() {
     } catch (err) {
       console.error("Failed to auto-generate HH number", err);
     }
-
   };
   const resetForm = () => {
     const confirmed = window.confirm(
@@ -517,7 +516,7 @@ export default function AddResident() {
     setFormWarning("");
     setCurrentStep(1);
   };
-  
+
   return (
     <div className="dashboard-wrapper">
       <div className="bg-image" />
@@ -539,7 +538,14 @@ export default function AddResident() {
         </div>
 
         <div className="form-card-container">
-          <div className="form-blue-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div
+            className="form-blue-header"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <h1>
               {currentStep === 4
                 ? "Review Registration Details"
@@ -547,31 +553,31 @@ export default function AddResident() {
             </h1>
 
             <button
-                  type="button"
-                  className="btn-clear-fields"
-                  onClick={resetForm}
-                  disabled={isLoading}
-                  style={{
-                    background: "none",
-                    border: "1px solid #cbd5e1",
-                    color: "#f5f5f5ff",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    padding: "10px 18px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    textShadow: "0 1px 2px rgba(0,0,0,0.2)",
-                    transition: "background 0.2s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.2)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "none";  
-                  }}
-                >
-                  Clear Fields
-                </button>
+              type="button"
+              className="btn-clear-fields"
+              onClick={resetForm}
+              disabled={isLoading}
+              style={{
+                background: "none",
+                border: "1px solid #cbd5e1",
+                color: "#f5f5f5ff",
+                fontSize: "13px",
+                fontWeight: "600",
+                padding: "10px 18px",
+                borderRadius: "8px",
+                cursor: "pointer",
+                textShadow: "0 1px 2px rgba(0,0,0,0.2)",
+                transition: "background 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.2)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "none";
+              }}
+            >
+              Clear Fields
+            </button>
           </div>
 
           <div

@@ -22,6 +22,78 @@ const BARANGAYS = [
   'Malawak'
 ];
 
+// Years selectable for tagging a batch of imported data.
+// Adjust the start year as needed for older records you plan to migrate.
+const START_YEAR = 2020;
+const CURRENT_YEAR = new Date().getFullYear();
+const DATA_YEAR_OPTIONS = Array.from(
+  { length: CURRENT_YEAR - START_YEAR + 1 },
+  (_, i) => CURRENT_YEAR - i
+);
+
+// Canonical column definitions, used for BOTH scanning (to build the summary/
+// validation) and uploading (to build each resident row). Keeping this in one
+// place means a header typo or matching bug only ever needs fixing once, and
+// scanning/upload can never silently disagree with each other.
+//
+// `required: true` columns MUST be found in the sheet's header row, or the
+// whole sheet is rejected (excluded from upload) with a clear error listing
+// exactly which column(s) couldn't be matched. This is what catches typos
+// like "Voter Informatation" or corrupted headers like "Household FALSE"
+// instead of silently importing null/N/A values.
+const COLUMN_DEFS = [
+  { key: 'hhNo', label: 'Household No.', required: true, match: h => h.includes('household') },
+  { key: 'houseNo', label: 'House No.', required: false, match: h => h.includes('house') && !h.includes('household') },
+  { key: 'purok', label: 'Street/Purok/Sitio', required: false, match: h => h.includes('street/purok/sitio') || h === 'purok' || h === 'street' },
+  { key: 'resType', label: 'Residence Type', required: false, match: h => h.includes('residence type') },
+  { key: 'isHead', label: 'Is Household Head', required: false, match: h => h.includes('is household head') },
+  { key: 'rel', label: 'Relationship to Head', required: false, match: h => h.includes('relationship to head') || h.includes('relation to head') },
+  { key: 'last', label: 'Last Name', required: true, match: h => h.includes('last name') },
+  { key: 'first', label: 'First Name', required: true, match: h => h.includes('first name') },
+  { key: 'mid', label: 'Middle Name', required: false, match: h => h.includes('middle name') },
+  { key: 'qual', label: 'Name Extension/Qualifier', required: false, match: h => h.includes('name extension') || h === 'qualifier' },
+  { key: 'dob', label: 'Birth Date', required: true, match: h => h.includes('birth date') },
+  { key: 'pob', label: 'Birth Place', required: false, match: h => h.includes('birth place') || h.includes('place of birth') },
+  { key: 'age', label: 'Age', required: false, match: h => h === 'age' },
+  { key: 'sex', label: 'Sex', required: true, match: h => h === 'sex' },
+  { key: 'civil', label: 'Civil Status', required: false, match: h => h.includes('civil status') },
+  { key: 'religion', label: 'Religion', required: false, match: h => h === 'religion' },
+  { key: 'citizenship', label: 'Citizenship', required: false, match: h => h === 'citizenship' },
+  { key: 'edu', label: 'Educational Attainment', required: false, match: h => h.includes('educational attainment') || h.includes('education') },
+  { key: 'occ', label: 'Occupation', required: false, match: h => h === 'occupation' },
+  { key: 'voter', label: 'Voter Information', required: true, match: h => h.includes('voter') },
+  { key: 'pwd', label: 'PWD', required: false, match: h => h === 'pwd' },
+  { key: 'hasPwdId', label: 'Has PWD ID', required: false, match: h => h.includes('has pwd id') },
+  { key: 'senior', label: 'Senior Citizen', required: false, match: h => h.includes('senior citizen') },
+  { key: 'hasSeniorId', label: 'Has Senior Citizen ID', required: false, match: h => h.includes('has senior citizen id') || h.includes('has senior id') },
+  { key: 'solo', label: 'Solo Parent', required: false, match: h => h.includes('solo parent') },
+  { key: 'hasSoloId', label: 'Has Solo Parent ID', required: false, match: h => h.includes('has solo parent id') || h.includes('has solo id') },
+  { key: 'ageFirstBirth', label: 'Age at First Birth', required: false, match: h => h.includes('age at first birth') },
+  { key: 'teenPreg', label: 'Teenage Pregnancy Case', required: false, match: h => h.includes('teenage pregnancy case') || h.includes('teenage pregnancy') },
+  { key: 'teenMother', label: 'Current Teenage Mother', required: false, match: h => h.includes('current teenage mother') },
+  { key: 'beneficiary4ps', label: '4Ps Beneficiary', required: false, match: h => h.includes('4ps beneficiary') || h.includes('4ps') }
+];
+
+// Scans a sheet's header row against COLUMN_DEFS. Returns the column index
+// for every field (indices), plus a list of required-column labels that
+// could not be matched (missingRequired) - a non-empty list means the sheet
+// should be rejected rather than silently uploaded with bad/missing data.
+function analyzeHeaders(headers) {
+  const lower = headers.map(h => (h || '').toLowerCase().trim());
+  const indices = {};
+  const missingRequired = [];
+
+  COLUMN_DEFS.forEach((def) => {
+    const idx = lower.findIndex(def.match);
+    indices[def.key] = idx;
+    if (def.required && idx === -1) {
+      missingRequired.push(def.label);
+    }
+  });
+
+  return { indices, missingRequired };
+}
+
 export default function UploadData() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -37,6 +109,7 @@ export default function UploadData() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadComplete, setUploadComplete] = useState(false);
   const [totalRowsToUpload, setTotalRowsToUpload] = useState(0);
+  const [dataYear, setDataYear] = useState('');
 
   const addLog = (message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -177,20 +250,29 @@ export default function UploadData() {
           // Headers are row 0. Data rows are rows from 1 onwards.
           const headers = rows[0].map(h => h ? String(h).trim() : '');
 
-          // Verify we have relevant demographic fields
-          const lastNameIdx = headers.findIndex(h => h.toLowerCase().includes('last name'));
-          const firstNameIdx = headers.findIndex(h => h.toLowerCase().includes('first name'));
+          // Validate ALL required columns are present against the canonical
+          // definitions - catches typos (e.g. "Voter Informatation") and
+          // corrupted/mislabeled headers (e.g. "Household FALSE") up front,
+          // instead of silently importing null/N/A for those fields.
+          const { indices, missingRequired } = analyzeHeaders(headers);
 
-          if (lastNameIdx === -1 || firstNameIdx === -1) {
+          if (missingRequired.length > 0) {
             summary.push({
               sheetName,
               barangayName: matchedBrgy,
               rowCount: 0,
-              status: 'Missing Columns (Last Name/First Name)'
+              status: `Missing/Unrecognized Columns: ${missingRequired.join(', ')}`
             });
-            addLog(`Barangay "${matchedBrgy}" is missing critical columns.`, 'error');
+            addLog(
+              `Barangay "${matchedBrgy}" is missing or has unrecognized column(s): ${missingRequired.join(', ')}. This sheet will NOT be uploaded until fixed.`,
+              'error'
+            );
             return;
           }
+
+          const lastNameIdx = indices.last;
+          const firstNameIdx = indices.first;
+          const hhNoIdxForCount = indices.hhNo;
 
           // Count non-empty residents rows
           let validRowCount = 0;
@@ -200,7 +282,7 @@ export default function UploadData() {
 
             const lastName = row[lastNameIdx];
             const firstName = row[firstNameIdx];
-            const hhNo = row[headers.findIndex(h => h.toLowerCase().includes('household no'))];
+            const hhNo = row[hhNoIdxForCount];
 
             if (cleanString(lastName) || cleanString(firstName) || cleanString(hhNo)) {
               validRowCount++;
@@ -221,7 +303,7 @@ export default function UploadData() {
 
         setParsedSummary(summary);
         setTotalRowsToUpload(totalRows);
-        addLog(`Analysis complete. Found a total of ${totalRows} records in matches sheets. Click Upload to start.`, 'success');
+        addLog(`Analysis complete. Found a total of ${totalRows} records in matches sheets. Select the data year and click Upload to start.`, 'success');
       } catch (error) {
         console.error('Error parsing excel:', error);
         addLog(`Error parsing file: ${error.message}`, 'error');
@@ -247,6 +329,7 @@ export default function UploadData() {
     setLogs([]);
     setUploadComplete(false);
     setTotalRowsToUpload(0);
+    setDataYear('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -255,9 +338,14 @@ export default function UploadData() {
   const uploadToSupabase = async () => {
     if (parsedSummary.length === 0 || totalRowsToUpload === 0) return;
 
+    if (!dataYear) {
+      alert('Please select the year this data belongs to before uploading.');
+      return;
+    }
+
     setIsUploading(true);
     setUploadProgress(0);
-    addLog('Starting import to Supabase database...', 'info');
+    addLog(`Starting import to Supabase database for data year ${dataYear}...`, 'info');
 
     let totalUploaded = 0;
     const CHUNK_SIZE = 200;
@@ -270,40 +358,32 @@ export default function UploadData() {
         const rows = item.rowsData;
         const headers = rows[0].map(h => h ? String(h).trim() : '');
 
-        // Locate indexes for mapping
-        const hhNoIdx = headers.findIndex(h => h.toLowerCase().includes('household no'));
-        const houseNoIdx = headers.findIndex(h => h.toLowerCase().includes('house no'));
-        const purokIdx = headers.findIndex(h => h.toLowerCase().includes('street/purok/sitio') || h.toLowerCase() === 'purok' || h.toLowerCase() === 'street');
-        const resTypeIdx = headers.findIndex(h => h.toLowerCase().includes('residence type'));
-        const isHeadIdx = headers.findIndex(h => h.toLowerCase().includes('is household head'));
-        const relIdx = headers.findIndex(h => h.toLowerCase().includes('relationship to head') || h.toLowerCase().includes('relation to head'));
-        const lastIdx = headers.findIndex(h => h.toLowerCase().includes('last name'));
-        const firstIdx = headers.findIndex(h => h.toLowerCase().includes('first name'));
-        const midIdx = headers.findIndex(h => h.toLowerCase().includes('middle name'));
-        const qualIdx = headers.findIndex(h => h.toLowerCase().includes('name extension') || h.toLowerCase() === 'qualifier');
-        const dobIdx = headers.findIndex(h => h.toLowerCase().includes('birth date'));
-        const pobIdx = headers.findIndex(h => h.toLowerCase().includes('birth place') || h.toLowerCase().includes('place of birth'));
-        const ageIdx = headers.findIndex(h => h.toLowerCase() === 'age');
-        const sexIdx = headers.findIndex(h => h.toLowerCase() === 'sex');
-        const civilIdx = headers.findIndex(h => h.toLowerCase().includes('civil status'));
-        const religionIdx = headers.findIndex(h => h.toLowerCase() === 'religion');
-        const citizenshipIdx = headers.findIndex(h => h.toLowerCase() === 'citizenship');
-        const eduIdx = headers.findIndex(h => h.toLowerCase().includes('educational attainment') || h.toLowerCase().includes('education'));
-        const occIdx = headers.findIndex(h => h.toLowerCase() === 'occupation');
-        const pwdIdx = headers.findIndex(h => h.toLowerCase() === 'pwd');
-        const hasPwdIdIdx = headers.findIndex(h => h.toLowerCase().includes('has pwd id'));
-        const seniorIdx = headers.findIndex(h => h.toLowerCase().includes('senior citizen'));
-        const hasSeniorIdIdx = headers.findIndex(h => h.toLowerCase().includes('has senior citizen id') || h.toLowerCase().includes('has senior id'));
-        const soloIdx = headers.findIndex(h => h.toLowerCase().includes('solo parent'));
-        const hasSoloIdx = headers.findIndex(h => h.toLowerCase().includes('has solo parent id') || h.toLowerCase().includes('has solo id'));
-        const ageFirstBirthIdx = headers.findIndex(h => h.toLowerCase().includes('age at first birth'));
-        const teenPregIdx = headers.findIndex(h => h.toLowerCase().includes('teenage pregnancy case') || h.toLowerCase().includes('teenage pregnancy'));
-        const teenMotherIdx = headers.findIndex(h => h.toLowerCase().includes('current teenage mother'));
-        const beneficiary4psIdx = headers.findIndex(h => h.toLowerCase().includes('4ps beneficiary') || h.toLowerCase().includes('4ps'));
+        // Re-validate against the same canonical definitions used during
+        // scanning. This is a safety net - the scanning step already excludes
+        // sheets with missing required columns from parsedSummary, so this
+        // should never trigger in practice, but it guarantees the upload can
+        // never proceed with a header it can't confidently map.
+        const { indices, missingRequired } = analyzeHeaders(headers);
+        if (missingRequired.length > 0) {
+          addLog(
+            `ABORTED Barangay "${item.barangayName}": missing/unrecognized column(s): ${missingRequired.join(', ')}.`,
+            'error'
+          );
+          throw new Error(
+            `Barangay ${item.barangayName} has missing or unrecognized column(s): ${missingRequired.join(', ')}. Fix the spreadsheet headers and re-upload.`
+          );
+        }
 
-        // Find Voter Information column. The spreadsheet has two columns of this name, the text one comes first.
-        // We will grab the first occurrence in the headers array.
-        const voterIdx = headers.indexOf('Voter Information');
+        const {
+          hhNo: hhNoIdx, houseNo: houseNoIdx, purok: purokIdx, resType: resTypeIdx,
+          isHead: isHeadIdx, rel: relIdx, last: lastIdx, first: firstIdx, mid: midIdx,
+          qual: qualIdx, dob: dobIdx, pob: pobIdx, age: ageIdx, sex: sexIdx,
+          civil: civilIdx, religion: religionIdx, citizenship: citizenshipIdx,
+          edu: eduIdx, occ: occIdx, voter: voterIdx, pwd: pwdIdx, hasPwdId: hasPwdIdIdx,
+          senior: seniorIdx, hasSeniorId: hasSeniorIdIdx, solo: soloIdx,
+          hasSoloId: hasSoloIdx, ageFirstBirth: ageFirstBirthIdx, teenPreg: teenPregIdx,
+          teenMother: teenMotherIdx, beneficiary4ps: beneficiary4psIdx
+        } = indices;
 
         const residentsBatch = [];
 
@@ -353,7 +433,8 @@ export default function UploadData() {
             is_4ps: beneficiary4psIdx !== -1 ? parseBool(row[beneficiary4psIdx]) : false,
             is_voter: voterIdx !== -1 ? cleanString(row[voterIdx]) : null,
             barangay: item.barangayName,
-            is_archived: false
+            is_archived: false,
+            data_year: parseInt(dataYear, 10)
           };
 
           residentsBatch.push(resident);
@@ -377,9 +458,9 @@ export default function UploadData() {
         addLog(`Successfully uploaded ${residentsBatch.length} records for ${item.barangayName}.`, 'success');
       }
 
-      addLog(`Database upload complete! Total successfully imported records: ${totalUploaded}.`, 'success');
+      addLog(`Database upload complete! Total successfully imported records: ${totalUploaded} (data year: ${dataYear}).`, 'success');
       setUploadComplete(true);
-      alert(`Import Successful! Added ${totalUploaded} residents to Supabase.`);
+      alert(`Import Successful! Added ${totalUploaded} residents to Supabase for data year ${dataYear}.`);
     } catch (err) {
       console.error('Error uploading to Supabase:', err);
       addLog(`CRITICAL ERROR during upload: ${err.message}`, 'error');
@@ -445,6 +526,28 @@ export default function UploadData() {
                 >
                   Remove File
                 </button>
+              </div>
+            )}
+
+            {/* Data year selector - required before upload */}
+            {file && !isParsing && (
+              <div className="data-year-select-box">
+                <label htmlFor="dataYearSelect" className="data-year-label">
+                  Data Year <span style={{ color: '#e53e3e' }}>*</span>
+                  <span className="data-year-hint"> — which year does this batch of records belong to?</span>
+                </label>
+                <select
+                  id="dataYearSelect"
+                  className="data-year-select"
+                  value={dataYear}
+                  onChange={(e) => setDataYear(e.target.value)}
+                  disabled={isUploading || uploadComplete}
+                >
+                  <option value="">-- Select Year --</option>
+                  {DATA_YEAR_OPTIONS.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
               </div>
             )}
 
@@ -527,9 +630,13 @@ export default function UploadData() {
                   type="button"
                   className="btn-upload-submit"
                   onClick={uploadToSupabase}
-                  disabled={isUploading || parsedSummary.length === 0 || totalRowsToUpload === 0}
+                  disabled={isUploading || parsedSummary.length === 0 || totalRowsToUpload === 0 || !dataYear}
                 >
-                  {isUploading ? 'Uploading...' : `Upload ${totalRowsToUpload} Records`}
+                  {isUploading
+                    ? 'Uploading...'
+                    : !dataYear
+                    ? 'Select a Data Year to Continue'
+                    : `Upload ${totalRowsToUpload} Records (${dataYear})`}
                 </button>
               )}
             </div>
