@@ -65,45 +65,7 @@ const barOpts = {
   },
 };
 
-/** Paginated fetch — bypasses the 1,000-row Supabase default limit */
-async function fetchAllResidents() {
-  const PAGE_SIZE = 1000;
-  let allData = [];
-  let page = 0;
-  let keepGoing = true;
 
-  while (keepGoing) {
-    const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    const { data, error } = await supabase
-      .from("residents")
-      .select(
-        "barangay, sex, age, is_pwd, is_senior, is_solo_parent, is_4ps, is_voter, h_no, is_household_head, occupation, teenage_pregnancy_case, current_teenage_mother, has_senior_id, has_pwd_id, data_year, created_at",
-      )
-      .eq("is_archived", false)
-      .order("id", { ascending: true })
-      .range(from, to);
-
-    if (error) throw error;
-    if (data && data.length > 0) allData = [...allData, ...data];
-    if (!data || data.length < PAGE_SIZE) keepGoing = false;
-    else page++;
-  }
-  return allData;
-}
-
-/**
- * Resolve which year a resident belongs to.
- * data_year (set explicitly at upload) is authoritative; created_at is a
- * fallback for legacy rows that predate the data_year column.
- */
-function resolveYear(r) {
-  if (r.data_year != null && r.data_year !== "") {
-    const y = Number(r.data_year);
-    return Number.isNaN(y) ? null : y;
-  }
-  return r.created_at ? new Date(r.created_at).getFullYear() : null;
-}
 
 /**
  * Ordinary Least-Squares linear regression.
@@ -187,6 +149,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [brgySearch, setBrgySearch] = useState("");
   const [brgySort, setBrgySort] = useState({ key: "name", direction: "asc" });
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
 
   // Derived stats
   const [stats, setStats] = useState({
@@ -239,190 +202,90 @@ export default function Dashboard() {
     async function loadData() {
       setIsLoading(true);
       try {
-        const residents = await fetchAllResidents();
-
-        // Aggregate stats
-        let totalHhSet = new Set();
-        let totalSeniors = 0,
-          totalPwd = 0,
-          totalSoloParent = 0,
-          total4ps = 0;
-        let maleCount = 0,
-          femaleCount = 0;
-        let children = 0,
-          working = 0,
-          senior = 0;
-        let totalVoters = 0;
-
-        let pwdWithId = 0,
-          pwdNoId = 0;
-        let seniorWithId = 0,
-          seniorNoId = 0;
-        let registeredVoters = 0,
-          nonVoters = 0;
-        let teenPregnancyCases = 0,
-          currentTeenMothers = 0;
-        let employedCount = 0,
-          unemployedCount = 0;
-
-        // Per-year accumulators for linear regression
-        const yearlyPop = {}; // year -> count
-        const yearlySenior = {}; // year -> count
-        const yearlyVoter = {}; // year -> count
-        const yearlyTeenPreg = {}; // year -> count
-        const yearlyEmployed = {}; // year -> count
-
-        // Per-barangay maps
-        const brgyMap = {};
-        BARANGAY_ORDER.forEach((b) => {
-          brgyMap[b] = {
-            count: 0,
-            seniors: 0,
-            pwd: 0,
-            hhSet: new Set(),
-            voters: 0,
-            teenPreg: 0,
-            teenMother: 0,
-          };
-        });
-
-        for (const r of residents) {
-          const brgy = r.barangay;
-          const year = resolveYear(r);
-
-          // Global totals
-          if (r.h_no) totalHhSet.add(`${brgy}__${r.h_no}`);
-
-          // Accumulate per-year population
-          if (year) {
-            yearlyPop[year] = (yearlyPop[year] || 0) + 1;
-          }
-
-          if (r.is_senior) {
-            totalSeniors++;
-            if (r.has_senior_id) seniorWithId++;
-            else seniorNoId++;
-            if (year) yearlySenior[year] = (yearlySenior[year] || 0) + 1;
-          }
-          if (r.is_pwd) {
-            totalPwd++;
-            if (r.has_pwd_id) pwdWithId++;
-            else pwdNoId++;
-          }
-          if (r.is_solo_parent) totalSoloParent++;
-          if (r.is_4ps) total4ps++;
-
-          const sex = (r.sex || "").toUpperCase().trim();
-          if (sex === "M" || sex === "MALE") maleCount++;
-          else if (sex === "F" || sex === "FEMALE") femaleCount++;
-
-          const age = parseInt(r.age, 10);
-          if (!isNaN(age)) {
-            if (age <= 17) children++;
-            else if (age <= 59) working++;
-            else senior++;
-          }
-
-          const voterStr = (r.is_voter || "").toLowerCase();
-          if (voterStr.includes("registered")) {
-            totalVoters++;
-            registeredVoters++;
-            if (year) yearlyVoter[year] = (yearlyVoter[year] || 0) + 1;
-          } else {
-            nonVoters++;
-          }
-
-          if (r.teenage_pregnancy_case) {
-            teenPregnancyCases++;
-            if (year) yearlyTeenPreg[year] = (yearlyTeenPreg[year] || 0) + 1;
-          }
-          if (r.current_teenage_mother) currentTeenMothers++;
-
-          const occ = r.occupation;
-          const isEmp =
-            occ &&
-            occ.trim() !== "" &&
-            ![
-              "none",
-              "unemployed",
-              "n/a",
-              "na",
-              "student",
-              "housewife",
-              "none.",
-            ].includes(occ.toLowerCase().trim());
-          if (isEmp) {
-            employedCount++;
-            if (year) yearlyEmployed[year] = (yearlyEmployed[year] || 0) + 1;
-          } else {
-            unemployedCount++;
-          }
-
-          // Per-barangay
-          if (brgyMap[brgy]) {
-            brgyMap[brgy].count++;
-            if (r.h_no) brgyMap[brgy].hhSet.add(r.h_no);
-            if (r.is_senior) brgyMap[brgy].seniors++;
-            if (r.is_pwd) brgyMap[brgy].pwd++;
-            if (voterStr.includes("registered")) brgyMap[brgy].voters++;
-            if (r.teenage_pregnancy_case) brgyMap[brgy].teenPreg++;
-            if (r.current_teenage_mother) brgyMap[brgy].teenMother++;
-          }
+        const targetYearArg = selectedYear === "all" ? null : Number(selectedYear);
+        const { data, error } = await supabase.rpc('get_dashboard_stats', { target_year: targetYearArg });
+        
+        if (error) {
+          throw error;
         }
 
-        setStats({
-          totalPopulation: residents.length,
-          totalHouseholds: totalHhSet.size,
-          totalSeniors,
-          totalVoters,
-          totalPwd,
-          totalSoloParent,
-          total4ps,
-          maleCount,
-          femaleCount,
-          childrenCount: children,
-          workingAgeCount: working,
-          seniorCount: senior,
-          pwdWithId,
-          pwdNoId,
-          seniorWithId,
-          seniorNoId,
-          registeredVoters,
-          nonVoters,
-          teenPregnancyCases,
-          currentTeenMothers,
-          employed: employedCount,
-          unemployed: unemployedCount,
-        });
+        if (data) {
+          setStats({
+            totalPopulation: data.global?.totalPopulation || 0,
+            totalHouseholds: data.global?.totalHouseholds || 0,
+            totalSeniors: data.global?.totalSeniors || 0,
+            totalVoters: data.global?.registeredVoters || 0,
+            totalPwd: data.global?.totalPwd || 0,
+            totalSoloParent: data.global?.totalSoloParent || 0,
+            total4ps: data.global?.total4ps || 0,
+            maleCount: data.global?.maleCount || 0,
+            femaleCount: data.global?.femaleCount || 0,
+            childrenCount: data.global?.childrenCount || 0,
+            workingAgeCount: data.global?.workingAgeCount || 0,
+            seniorCount: data.global?.seniorCount || 0,
+            pwdWithId: data.global?.pwdWithId || 0,
+            pwdNoId: data.global?.pwdNoId || 0,
+            seniorWithId: data.global?.seniorWithId || 0,
+            seniorNoId: data.global?.seniorNoId || 0,
+            registeredVoters: data.global?.registeredVoters || 0,
+            nonVoters: data.global?.nonVoters || 0,
+            teenPregnancyCases: data.global?.teenPregnancyCases || 0,
+            currentTeenMothers: data.global?.currentTeenMothers || 0,
+            employed: data.global?.employed || 0,
+            unemployed: data.global?.unemployed || 0,
+          });
 
-        setBrgyData(
-          BARANGAY_ORDER.map((name) => ({
-            name,
-            count: brgyMap[name]?.count || 0,
-            seniors: brgyMap[name]?.seniors || 0,
-            pwd: brgyMap[name]?.pwd || 0,
-            households: brgyMap[name]?.hhSet?.size || 0,
-            voters: brgyMap[name]?.voters || 0,
-            teenPreg: brgyMap[name]?.teenPreg || 0,
-            teenMother: brgyMap[name]?.teenMother || 0,
-          })),
-        );
+          const brgyMap = {};
+          if (Array.isArray(data.barangays)) {
+            data.barangays.forEach(b => {
+              brgyMap[b.name] = b;
+            });
+          }
 
-        // Build per-year point arrays and run regressions
-        const toPoints = (obj) =>
-          Object.entries(obj).map(([yr, cnt]) => ({ x: Number(yr), y: cnt }));
-        setPopRegression(linearRegression(toPoints(yearlyPop)));
-        setSeniorRegression(linearRegression(toPoints(yearlySenior)));
-        setVoterRegression(linearRegression(toPoints(yearlyVoter)));
-        setTeenPregRegression(linearRegression(toPoints(yearlyTeenPreg)));
-        setEmploymentRegression(linearRegression(toPoints(yearlyEmployed)));
+          setBrgyData(
+            BARANGAY_ORDER.map((name) => ({
+              name,
+              count: brgyMap[name]?.count || 0,
+              seniors: brgyMap[name]?.seniors || 0,
+              pwd: brgyMap[name]?.pwd || 0,
+              households: brgyMap[name]?.households || 0,
+              voters: brgyMap[name]?.voters || 0,
+              teenPreg: brgyMap[name]?.teenPreg || 0,
+              teenMother: brgyMap[name]?.teenMother || 0,
+            })),
+          );
 
-        // Store raw yearly population for the overview chart
-        setYearlyPopData(
-          Object.entries(yearlyPop)
-            .map(([yr, cnt]) => ({ year: Number(yr), count: cnt }))
-            .sort((a, b) => a.year - b.year),
-        );
+          const yearlyPop = {};
+          const yearlySenior = {};
+          const yearlyVoter = {};
+          const yearlyTeenPreg = {};
+          const yearlyEmployed = {};
+
+          if (data.yearly) {
+            Object.entries(data.yearly).forEach(([yr, stats]) => {
+              yearlyPop[yr] = stats.pop || 0;
+              yearlySenior[yr] = stats.senior || 0;
+              yearlyVoter[yr] = stats.voter || 0;
+              yearlyTeenPreg[yr] = stats.teenPreg || 0;
+              yearlyEmployed[yr] = stats.employed || 0;
+            });
+          }
+
+          const toPoints = (obj) =>
+            Object.entries(obj).map(([yr, cnt]) => ({ x: Number(yr), y: cnt }));
+
+          setPopRegression(linearRegression(toPoints(yearlyPop)));
+          setSeniorRegression(linearRegression(toPoints(yearlySenior)));
+          setVoterRegression(linearRegression(toPoints(yearlyVoter)));
+          setTeenPregRegression(linearRegression(toPoints(yearlyTeenPreg)));
+          setEmploymentRegression(linearRegression(toPoints(yearlyEmployed)));
+
+          setYearlyPopData(
+            Object.entries(yearlyPop)
+              .map(([yr, cnt]) => ({ year: Number(yr), count: cnt }))
+              .sort((a, b) => a.year - b.year),
+          );
+        }
       } catch (err) {
         console.error("Dashboard fetch error:", err);
       } finally {
@@ -430,7 +293,7 @@ export default function Dashboard() {
       }
     }
     loadData();
-  }, []);
+  }, [selectedYear]);
 
   const handleSort = (key) => {
     setBrgySort((prev) => {
@@ -1187,8 +1050,32 @@ export default function Dashboard() {
       <Sidebar />
 
       <main className="content">
-        <header className="main-header">
-          <h1>BustoSight: Population Dashboard</h1>
+        <header className="main-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+            <h1>BustoSight: Population Dashboard</h1>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "6px",
+                border: "1px solid #ccc",
+                fontSize: "14px",
+                backgroundColor: "#fff",
+                color: "#333",
+                cursor: "pointer",
+              }}
+            >
+              <option value="all">All Time</option>
+              {Array.from(new Set([new Date().getFullYear(), ...yearlyPopData.map(d => d.year)]))
+                .sort((a, b) => b - a)
+                .map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+            </select>
+          </div>
           {isLoading && (
             <span
               style={{ fontSize: "13px", color: "#718096", marginLeft: "12px" }}

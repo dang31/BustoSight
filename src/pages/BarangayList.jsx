@@ -14,58 +14,69 @@ export default function BarangayList() {
   const [activeBrgy, setActiveBrgy] = useState("Poblacion");
   const [allRecords, setAllRecords] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedYear, setSelectedYear] = useState("all");
   const [selectedHousehold, setSelectedHousehold] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const itemsPerPage = 50;
+
+  // Statically generated years for filter
+  const currentYear = new Date().getFullYear();
+  const availableYears = Array.from(
+    { length: currentYear - 2019 },
+    (_, i) => currentYear - i,
+  );
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      setCurrentPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeBrgy, selectedYear]);
+
   useEffect(() => {
     fetchResidents();
-  }, []);
+  }, [activeBrgy, debouncedSearchQuery, selectedYear, currentPage]);
 
   const fetchResidents = async () => {
     setIsLoading(true);
     try {
-      // Supabase caps queries at 1,000 rows by default.
-      // Paginate in batches until all records are fetched.
-      const PAGE_SIZE = 1000;
-      let allData = [];
-      let page = 0;
-      let keepGoing = true;
+      const from = (currentPage - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
 
-      while (keepGoing) {
-        const from = page * PAGE_SIZE;
-        const to = from + PAGE_SIZE - 1;
+      let query = supabase
+        .from("residents")
+        .select("*", { count: "exact" })
+        .eq("is_archived", false)
+        .eq("barangay", activeBrgy)
+        .order("id", { ascending: true })
+        .range(from, to);
 
-        // .order() is required here: .range() pagination is only guaranteed
-        // to be stable/non-overlapping across separate requests when the
-        // results are explicitly sorted. Without it, rows can be silently
-        // skipped or duplicated between pages once the table exceeds
-        // PAGE_SIZE rows - which is exactly what caused some records
-        // (e.g. an entire data_year batch) to go missing from the app
-        // despite existing in the database.
-        const { data, error } = await supabase
-          .from("residents")
-          .select("*")
-          .eq("is_archived", false)
-          .order("id", { ascending: true })
-          .range(from, to);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allData = [...allData, ...data];
-        }
-
-        // If we got fewer rows than the page size, we've reached the end
-        if (!data || data.length < PAGE_SIZE) {
-          keepGoing = false;
-        } else {
-          page++;
-        }
+      if (debouncedSearchQuery) {
+        const q = `%${debouncedSearchQuery}%`;
+        query = query.or(
+          `last_name.ilike.${q},first_name.ilike.${q},house_no.ilike.${q}`,
+        );
       }
 
+      if (selectedYear !== "all") {
+        query = query.eq("data_year", selectedYear);
+      }
+
+      const { data, count, error } = await query;
+      if (error) throw error;
+
       // Map Supabase columns to UI state structure
-      const mappedData = allData.map((r) => ({
+      const mappedData = (data || []).map((r) => ({
         id: r.id,
         h_no: r.h_no,
         last: r.last_name,
@@ -104,6 +115,7 @@ export default function BarangayList() {
       }));
 
       setAllRecords(mappedData);
+      setTotalRecords(count || 0);
     } catch (err) {
       console.error("Error fetching residents:", err);
     } finally {
@@ -111,43 +123,7 @@ export default function BarangayList() {
     }
   };
 
-  // Resolve the year a record belongs to. data_year is the source of truth
-  // (set explicitly during upload/migration); created_at is only a fallback
-  // for legacy rows that predate the data_year column.
-  const getRecordYear = (res) => {
-    if (
-      res.dataYear !== null &&
-      res.dataYear !== undefined &&
-      res.dataYear !== ""
-    ) {
-      const y = Number(res.dataYear);
-      return Number.isNaN(y) ? null : y;
-    }
-    return res.createdAt ? new Date(res.createdAt).getFullYear() : null;
-  };
-
-  // Build the list of years available in the data, newest first
-  const availableYears = Array.from(
-    new Set(
-      allRecords
-        .map(getRecordYear)
-        .filter((y) => y !== null && !Number.isNaN(y)),
-    ),
-  ).sort((a, b) => b - a);
-
-  const filteredRecords = allRecords.filter((res) => {
-    const residentBrgy = res.brgy || "Poblacion";
-    const matchesBrgy = residentBrgy.toLowerCase() === activeBrgy.toLowerCase();
-    const query = searchQuery.toLowerCase();
-    const matchesSearch =
-      (res.last || "").toLowerCase().includes(query) ||
-      (res.first || "").toLowerCase().includes(query) ||
-      (res.h_no || "").toLowerCase().includes(query);
-    const recordYear = getRecordYear(res);
-    const matchesYear =
-      selectedYear === "all" || recordYear === Number(selectedYear);
-    return matchesBrgy && matchesSearch && matchesYear;
-  });
+  const filteredRecords = allRecords;
 
   const handleArchive = async (res) => {
     if (
@@ -161,13 +137,26 @@ export default function BarangayList() {
       "Security Check: Please enter Admin Password to archive this record:",
     );
     if (adminPassword === null) return;
-    if (adminPassword !== "admin123") {
-      alert("Access Denied: Incorrect Admin Password.");
-      return;
-    }
 
     setIsLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !user.email) {
+        setIsLoading(false);
+        alert("Session error. Could not verify your identity. Please log in again.");
+        return;
+      }
+
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: adminPassword,
+      });
+
+      if (authError) {
+        setIsLoading(false);
+        alert("Access Denied: Incorrect Admin Password.");
+        return;
+      }
       const { error } = await supabase
         .from("residents")
         .update({
@@ -204,13 +193,26 @@ export default function BarangayList() {
       "Security Check: Please enter Admin Password to delete these records:",
     );
     if (adminPassword === null) return;
-    if (adminPassword !== "admin123") {
-      alert("Access Denied: Incorrect Admin Password.");
-      return;
-    }
 
     setIsLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !user.email) {
+        setIsLoading(false);
+        alert("Session error. Could not verify your identity. Please log in again.");
+        return;
+      }
+
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: adminPassword,
+      });
+
+      if (authError) {
+        setIsLoading(false);
+        alert("Access Denied: Incorrect Admin Password.");
+        return;
+      }
       const { error } = await supabase
         .from("residents")
         .delete()
@@ -218,12 +220,7 @@ export default function BarangayList() {
 
       if (error) throw error;
 
-      const updatedRecords = allRecords.filter(
-        (res) =>
-          (res.brgy || "Poblacion").toLowerCase() !== activeBrgy.toLowerCase(),
-      );
-      setAllRecords(updatedRecords);
-
+      fetchResidents();
       alert(`Successfully deleted all records in Barangay ${activeBrgy}!`);
     } catch (err) {
       console.error("Error deleting records:", err);
@@ -352,12 +349,60 @@ export default function BarangayList() {
     alert("Mock data generated successfully!");
   };
 
-  const openHousehold = (hhNo) => {
+  const openHousehold = async (hhNo) => {
     if (!hhNo) return;
-    const members = allRecords.filter((r) => r.h_no === hhNo);
-    // Sort so HEAD comes first
-    members.sort((a, b) => ((a.rel || "").toUpperCase() === "HEAD" ? -1 : 1));
-    setSelectedHousehold({ hhNo, members });
+    try {
+      const { data, error } = await supabase
+        .from("residents")
+        .select("*")
+        .eq("house_no", hhNo)
+        .eq("is_archived", false);
+
+      if (error) throw error;
+
+      const members = (data || []).map((r) => ({
+        id: r.id,
+        h_no: r.h_no,
+        last: r.last_name,
+        first: r.first_name,
+        mid: r.middle_name,
+        q: r.qualifier,
+        no: r.house_no,
+        st: r.street,
+        p: r.purok,
+        bp: r.birth_place,
+        bd: r.birth_date,
+        s: r.sex,
+        cs: r.civil_status,
+        cz: r.citizenship,
+        oc: r.occupation,
+        rel: r.relation_to_head,
+        isVoter: r.is_voter,
+        brgy: r.barangay,
+        age: r.age,
+        residenceType: r.residence_type,
+        isHead: r.is_household_head,
+        religion: r.religion,
+        edu: r.educational_attainment,
+        isPwd: r.is_pwd,
+        hasPwdId: r.has_pwd_id,
+        isSenior: r.is_senior,
+        hasSeniorId: r.has_senior_id,
+        isSoloParent: r.is_solo_parent,
+        hasSoloParentId: r.has_solo_parent_id,
+        ageFirstBirth: r.age_at_first_birth,
+        teenagePregnancy: r.teenage_pregnancy_case,
+        teenageMother: r.current_teenage_mother,
+        is4ps: r.is_4ps,
+        createdAt: r.created_at,
+        dataYear: r.data_year,
+      }));
+
+      members.sort((a, b) => ((a.rel || "").toUpperCase() === "HEAD" ? -1 : 1));
+      setSelectedHousehold({ hhNo, members });
+    } catch (err) {
+      console.error("Error fetching household members:", err);
+    }
   };
 
   const handleImportCSV = (e) => {
@@ -562,19 +607,19 @@ export default function BarangayList() {
                     <th className="text-left col-tablet-hide">RES. TYPE</th>
                     <th className="text-left col-tablet-hide">RELIGION</th>
                     <th className="text-left col-tablet-hide">EDUCATION</th>
-                    <th className="text-center col-mobile-hide">PWD?</th>
+                    <th className="text-center col-mobile-hide">PWD</th>
                     <th className="text-center col-mobile-hide">
-                      SR. CITIZEN?
+                      SR. CITIZEN
                     </th>
                     <th className="text-center col-mobile-hide">
-                      SOLO PARENT?
+                      SOLO PARENT
                     </th>
-                    <th className="text-center col-mobile-hide">4PS?</th>
-                    <th className="text-center col-tablet-hide">TEEN PREG?</th>
+                    <th className="text-center col-mobile-hide">4PS</th>
+                    <th className="text-center col-tablet-hide">TEEN PREG</th>
                     <th className="text-center col-tablet-hide">
-                      TEEN MOTHER?
+                      TEEN MOTHER
                     </th>
-                    <th className="text-center col-mobile-hide">VOTER?</th>
+                    <th className="text-center col-mobile-hide">VOTER</th>
                     <th className="text-center">ACTION</th>
                   </tr>
                 </thead>
@@ -760,6 +805,36 @@ export default function BarangayList() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalRecords > 0 && (
+              <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', padding: '10px', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+                <span style={{ fontSize: '0.9rem', color: '#555' }}>
+                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalRecords)} of {totalRecords} records
+                </span>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    className="btn" 
+                    disabled={currentPage === 1 || isLoading} 
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    style={{ padding: '6px 12px', opacity: (currentPage === 1 || isLoading) ? 0.5 : 1, cursor: (currentPage === 1 || isLoading) ? 'not-allowed' : 'pointer', background: '#e2e8f0', color: '#334155', border: 'none', borderRadius: '4px' }}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.9rem', fontWeight: 'bold', color: '#333' }}>
+                    Page {currentPage} of {Math.ceil(totalRecords / itemsPerPage)}
+                  </span>
+                  <button 
+                    className="btn" 
+                    disabled={currentPage >= Math.ceil(totalRecords / itemsPerPage) || isLoading} 
+                    onClick={() => setCurrentPage(prev => prev + 1)}
+                    style={{ padding: '6px 12px', opacity: (currentPage >= Math.ceil(totalRecords / itemsPerPage) || isLoading) ? 0.5 : 1, cursor: (currentPage >= Math.ceil(totalRecords / itemsPerPage) || isLoading) ? 'not-allowed' : 'pointer', background: '#e2e8f0', color: '#334155', border: 'none', borderRadius: '4px' }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </main>

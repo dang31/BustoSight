@@ -57,13 +57,26 @@ export default function ArchiveResidents() {
 
     const adminPassword = prompt('SECURITY CHECK: Enter Admin Password to confirm restoration:');
     if (adminPassword === null) return;
-    if (adminPassword !== 'admin123') {
-      alert('Error: Incorrect Admin Password.');
-      return;
-    }
 
     setIsLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !user.email) {
+        setIsLoading(false);
+        alert('Session error. Could not verify your identity. Please log in again.');
+        return;
+      }
+
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: adminPassword,
+      });
+
+      if (authError) {
+        setIsLoading(false);
+        alert('Error: Incorrect Admin Password.');
+        return;
+      }
       const { error } = await supabase
         .from('residents')
         .update({ 
