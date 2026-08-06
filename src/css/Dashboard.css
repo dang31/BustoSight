@@ -9,10 +9,19 @@
   background: rgba(255, 255, 255, 0.95);
   padding: 6px;
   border-radius: var(--radius-md);
-  margin-bottom: 24px;
+  margin: 0 auto 24px;
   box-shadow: var(--card-shadow);
   border: 1px solid rgba(44, 82, 130, 0.08);
   width: fit-content;
+  max-width: 100%;
+}
+
+.header-text {
+  font-size: 10.5px;
+  color: var(--gray-50);
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+  font-weight: 600;
 }
 
 .tab-btn {
@@ -207,6 +216,7 @@
   box-shadow: var(--card-shadow);
   border: 1px solid rgba(44, 82, 130, 0.06);
   transition: var(--transition);
+  min-width: 0;
 }
 
 .chart-item:hover {
@@ -469,7 +479,7 @@
   background-color: #f8fbff;
   color: var(--primary-dark);
   font-weight: 700;
-  padding: 14px 16px;
+  padding: 8px 16px;
   border-bottom: 2px solid var(--gray-200);
   white-space: nowrap;
   letter-spacing: 0.3px;
@@ -498,7 +508,7 @@
 }
 
 .custom-dashboard-table td {
-  padding: 12px 16px;
+  padding: 6px 16px;
   border-bottom: 1px solid var(--gray-100);
   color: var(--gray-700);
   white-space: nowrap;

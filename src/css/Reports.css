@@ -132,23 +132,40 @@
 
 /* Print styles */
 @media print {
-  body * { visibility: hidden; }
-  #printable-area, #printable-area * { visibility: visible; }
+  html, body, #root, .dashboard-wrapper {
+    height: auto !important;
+    overflow: visible !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body > *:not(#root),
+  #root > *:not(.dashboard-wrapper),
+  .dashboard-wrapper > *:not(#printable-area) {
+    display: none !important;
+  }
+
   #printable-area {
     display: block !important;
-    position: absolute;
-    left: 0; top: 0;
     width: 100%;
-    padding: 30px;
+    padding: 0;
     font-family: 'Times New Roman', serif;
   }
+  
   .report-section {
     display: none;
-    page-break-after: always;
   }
+  
   .report-section.show-print {
     display: block !important;
   }
+
+  .report-section ~ .report-section {
+    page-break-before: always;
+    break-before: page;
+  }
+  
   .no-print { display: none !important; }
 
   /* Print table styles */
@@ -164,9 +181,18 @@
     padding: 8px 10px;
     font-size: 12px;
   }
+  #printable-area thead {
+    display: table-header-group;
+  }
+  #printable-area tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
   #printable-area thead th {
-    background: #2c5282;
-    color: white;
+    background: #2c5282 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
     position: static;
   }
   #printable-area h3 {

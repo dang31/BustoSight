@@ -236,6 +236,7 @@ img {
   overflow-y: auto;
   height: 100vh;
   scroll-behavior: smooth;
+  min-width: 0;
 }
 
 /* Scrollbar */

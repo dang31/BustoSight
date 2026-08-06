@@ -168,7 +168,7 @@
   background: white;
   border-radius: var(--radius-md);
   border: 1px solid var(--gray-200);
-  overflow: hidden;
+  /* overflow: hidden removed to prevent dropdown clipping */
   box-shadow: var(--shadow-sm);
   width: 100%;
 }
@@ -606,7 +606,7 @@
   letter-spacing: 0.5px;
 }
 
-.close-modal {
+.acc-close-modal {
   font-size: 22px;
   cursor: pointer;
   opacity: 0.85;
@@ -614,7 +614,7 @@
   line-height: 1;
 }
 
-.close-modal:hover {
+.acc-close-modal:hover {
   opacity: 1;
 }
 
@@ -728,3 +728,34 @@
 .btn-next:hover {
   background: var(--primary-dark);
 }
+
+/* ============================================
+   ENHANCED ERROR UX
+   ============================================ */
+.input-error {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+  color: #991b1b;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+.input-error:focus {
+  border-color: #dc2626 !important;
+}
+
+.err-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #dc2626;
+  font-size: 11.5px;
+  font-weight: 600;
+  margin-top: 6px;
+  animation: fadeInScale 0.2s ease-out forwards;
+}
+
+.err-msg::before {
+  content: "⚠️";
+  font-size: 11px;
+}
+

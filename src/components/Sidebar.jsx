@@ -22,7 +22,7 @@ export default function Sidebar() {
 
   const filteredNavItems = NAV_ITEMS.filter((item) => {
     if (userRole !== 'Admin' && userRole !== 'Administrator') {
-      if (item.path === '/upload' || item.path === '/manage-accounts') {
+      if (item.path === '/upload' || item.path === '/manage-accounts' || item.path === '/add-resident') {
         return false;
       }
     }

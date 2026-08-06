@@ -1,26 +1,137 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { createClient } from '@supabase/supabase-js';
-import Sidebar from '../components/Sidebar';
-import { supabase } from '../lib/supabase';
-import '../css/ManageAccounts.css';
-import '../css/AddResident.css';
+import { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
+import { createClient } from "@supabase/supabase-js";
+import Sidebar from "../components/Sidebar";
+import { supabase } from "../lib/supabase";
+import "../css/ManageAccounts.css";
+import "../css/AddResident.css";
+
+const CustomDropdown = ({ value, onChange, options, minWidth = '140px', label = '', direction = 'down', disabled = false }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedLabel = options.find(o => o.value === value)?.label || value;
+
+  const menuStyle = direction === 'up' ? {
+    bottom: '100%',
+    marginBottom: '6px'
+  } : {
+    top: '100%',
+    marginTop: '6px'
+  };
+
+  return (
+    <div style={{ position: 'relative', minWidth, width: '100%', opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? 'none' : 'auto' }} ref={dropdownRef}>
+      <div
+        onClick={(e) => { if (!disabled) { e.stopPropagation(); setIsOpen(!isOpen); } }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8.5px 12px',
+          background: 'white',
+          border: isOpen ? '1px solid var(--primary)' : '1px solid var(--gray-300)',
+          borderRadius: '8px',
+          color: 'var(--gray-800)',
+          fontSize: '14px',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          boxShadow: isOpen ? '0 0 0 3px rgba(37,99,235,0.1)' : '0 1px 2px rgba(0,0,0,0.05)',
+          gap: '8px'
+        }}
+      >
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {label && <span style={{ color: 'var(--gray-500)', marginRight: '4px', fontWeight: '400' }}>{label}</span>}
+          <span style={{ fontWeight: '500' }}>{selectedLabel}</span>
+        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', color: 'var(--gray-500)', flexShrink: 0 }}>
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+      
+      {isOpen && (
+        <div style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          ...menuStyle,
+          background: 'white',
+          borderRadius: '8px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+          border: '1px solid var(--gray-200)',
+          overflow: 'hidden',
+          zIndex: 9999
+        }}>
+          {options.map((opt) => (
+            <div
+              key={opt.value}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(opt.value);
+                setIsOpen(false);
+              }}
+              style={{
+                padding: '10px 14px',
+                fontSize: '14px',
+                color: value === opt.value ? 'var(--primary)' : 'var(--gray-700)',
+                fontWeight: value === opt.value ? '600' : '400',
+                background: value === opt.value ? '#f0f9ff' : 'transparent',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
+              onMouseEnter={(e) => {
+                if (value !== opt.value) {
+                  e.currentTarget.style.background = '#f8fafc';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (value !== opt.value) {
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              {opt.label}
+              {value === opt.value && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function ManageAccounts() {
   const [accounts, setAccounts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Tabs: 'active' | 'archived'
-  const [activeTab, setActiveTab] = useState('active');
+  const [activeTab, setActiveTab] = useState("active");
 
   // Search & Filter
-  const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('ALL');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   // Sorting & Pagination
-  const [sortField, setSortField] = useState('created_at');
-  const [sortDirection, setSortDirection] = useState('desc');
+  const [sortField, setSortField] = useState("created_at");
+  const [sortDirection, setSortDirection] = useState("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -43,25 +154,25 @@ export default function ManageAccounts() {
 
   // Form inputs
   const [formData, setFormData] = useState({
-    employee_id: '',
-    first_name: '',
-    last_name: '',
-    email: '',
-    username: '',
-    password: '',
-    confirm_password: '',
-    role: 'Staff',
-    status: 'Active',
+    employee_id: "",
+    first_name: "",
+    last_name: "",
+    email: "",
+    username: "",
+    password: "",
+    confirm_password: "",
+    role: "Staff",
+    status: "Active",
   });
 
   const [passwordData, setPasswordData] = useState({
-    newPassword: '',
-    confirmPassword: '',
+    newPassword: "",
+    confirmPassword: "",
   });
 
   const [formErrors, setFormErrors] = useState({});
 
-  const showToast = (message, type = 'success') => {
+  const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
@@ -73,17 +184,17 @@ export default function ManageAccounts() {
   // Close action dropdown menu when clicking outside or scrolling
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (e.target.closest('.btn-action-icon')) return;
+      if (e.target.closest(".btn-action-icon")) return;
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setOpenMenuId(null);
       }
     };
     const handleScroll = () => setOpenMenuId(null);
-    document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true);
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScroll, true);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScroll, true);
     };
   }, []);
 
@@ -91,24 +202,27 @@ export default function ManageAccounts() {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       setAccounts(data || []);
     } catch (err) {
-      console.warn('Supabase fetch failed or table incomplete. Using local/fallback handling:', err.message);
-      const localData = JSON.parse(localStorage.getItem('popdevUsers')) || [
+      console.warn(
+        "Supabase fetch failed or table incomplete. Using local/fallback handling:",
+        err.message,
+      );
+      const localData = JSON.parse(localStorage.getItem("popdevUsers")) || [
         {
-          id: 'admin-001',
-          employee_id: 'EMP-001',
-          first_name: 'System',
-          last_name: 'Admin',
-          username: 'admin_bustos',
-          email: 'admin@bustos.gov.ph',
-          role: 'Admin',
-          status: 'Active',
+          id: "admin-001",
+          employee_id: "EMP-001",
+          first_name: "System",
+          last_name: "Admin",
+          username: "admin_bustos",
+          email: "admin@bustos.gov.ph",
+          role: "Admin",
+          status: "Active",
           archived: false,
           created_at: new Date().toISOString(),
         },
@@ -121,7 +235,7 @@ export default function ManageAccounts() {
 
   const updateAccountsState = (newAccounts) => {
     setAccounts(newAccounts);
-    localStorage.setItem('popdevUsers', JSON.stringify(newAccounts));
+    localStorage.setItem("popdevUsers", JSON.stringify(newAccounts));
   };
 
   // --- Statistics Calculation ---
@@ -131,11 +245,17 @@ export default function ManageAccounts() {
 
     return {
       totalUsers: nonArchived.length,
-      activeUsers: nonArchived.filter((a) => (a.status || 'Active') === 'Active').length,
-      inactiveUsers: nonArchived.filter((a) => a.status === 'Inactive').length,
+      activeUsers: nonArchived.filter(
+        (a) => (a.status || "Active") === "Active",
+      ).length,
+      inactiveUsers: nonArchived.filter((a) => a.status === "Inactive").length,
       archivedUsers: archived.length,
-      admins: nonArchived.filter((a) => a.role === 'Admin' || a.role === 'Administrator').length,
-      staff: nonArchived.filter((a) => a.role === 'Staff' || a.role === 'Encoder').length,
+      admins: nonArchived.filter(
+        (a) => a.role === "Admin" || a.role === "Administrator",
+      ).length,
+      staff: nonArchived.filter(
+        (a) => a.role === "Staff" || a.role === "Encoder",
+      ).length,
     };
   }, [accounts]);
 
@@ -144,27 +264,28 @@ export default function ManageAccounts() {
     return accounts.filter((acc) => {
       const isArchived = Boolean(acc.archived);
 
-      if (activeTab === 'active' && isArchived) return false;
-      if (activeTab === 'archived' && !isArchived) return false;
+      if (activeTab === "active" && isArchived) return false;
+      if (activeTab === "archived" && !isArchived) return false;
 
       // Role Filter
-      if (roleFilter !== 'ALL') {
-        const accRole = acc.role === 'Administrator' ? 'Admin' : acc.role;
+      if (roleFilter !== "ALL") {
+        const accRole = acc.role === "Administrator" ? "Admin" : acc.role;
         if (accRole !== roleFilter) return false;
       }
 
       // Status Filter
-      if (statusFilter !== 'ALL') {
-        if ((acc.status || 'Active') !== statusFilter) return false;
+      if (statusFilter !== "ALL") {
+        if ((acc.status || "Active") !== statusFilter) return false;
       }
 
       // Search Term
-      if (searchTerm.trim() !== '') {
+      if (searchTerm.trim() !== "") {
         const term = searchTerm.toLowerCase();
-        const fullName = `${acc.first_name || ''} ${acc.last_name || ''}`.toLowerCase();
-        const empId = (acc.employee_id || '').toLowerCase();
-        const username = (acc.username || '').toLowerCase();
-        const email = (acc.email || '').toLowerCase();
+        const fullName =
+          `${acc.first_name || ""} ${acc.last_name || ""}`.toLowerCase();
+        const empId = (acc.employee_id || "").toLowerCase();
+        const username = (acc.username || "").toLowerCase();
+        const email = (acc.email || "").toLowerCase();
 
         return (
           fullName.includes(term) ||
@@ -180,19 +301,19 @@ export default function ManageAccounts() {
 
   const sortedAccounts = useMemo(() => {
     return [...filteredAccounts].sort((a, b) => {
-      let aVal = a[sortField] || '';
-      let bVal = b[sortField] || '';
+      let aVal = a[sortField] || "";
+      let bVal = b[sortField] || "";
 
-      if (sortField === 'name') {
-        aVal = `${a.first_name || ''} ${a.last_name || ''}`.toLowerCase();
-        bVal = `${b.first_name || ''} ${b.last_name || ''}`.toLowerCase();
-      } else if (typeof aVal === 'string') {
+      if (sortField === "name") {
+        aVal = `${a.first_name || ""} ${a.last_name || ""}`.toLowerCase();
+        bVal = `${b.first_name || ""} ${b.last_name || ""}`.toLowerCase();
+      } else if (typeof aVal === "string") {
         aVal = aVal.toLowerCase();
         bVal = bVal.toLowerCase();
       }
 
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
       return 0;
     });
   }, [filteredAccounts, sortField, sortDirection]);
@@ -212,10 +333,10 @@ export default function ManageAccounts() {
 
   const handleSort = (field) => {
     if (sortField === field) {
-      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
       setSortField(field);
-      setSortDirection('asc');
+      setSortDirection("asc");
     }
   };
 
@@ -231,27 +352,29 @@ export default function ManageAccounts() {
 
   const handleSelectOne = (id) => {
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     );
   };
 
   // --- CRUD & Actions ---
   const validateForm = (isEdit = false) => {
     const errors = {};
-    if (!formData.first_name.trim()) errors.first_name = 'First name is required';
-    if (!formData.last_name.trim()) errors.last_name = 'Last name is required';
-    if (!formData.username.trim()) errors.username = 'Username is required';
+    if (!formData.first_name.trim())
+      errors.first_name = "First name is required";
+    if (!formData.last_name.trim()) errors.last_name = "Last name is required";
+    if (!formData.username.trim()) errors.username = "Username is required";
 
     if (!isEdit) {
-      if (!formData.password) errors.password = 'Password is required';
-      else if (formData.password.length < 6) errors.password = 'Minimum 6 characters';
+      if (!formData.password) errors.password = "Password is required";
+      else if (formData.password.length < 6)
+        errors.password = "Minimum 6 characters";
       if (formData.password !== formData.confirm_password) {
-        errors.confirm_password = 'Passwords do not match';
+        errors.confirm_password = "Passwords do not match";
       }
     }
 
     if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
-      errors.email = 'Invalid email address';
+      errors.email = "Invalid email address";
     }
 
     const otherAccounts = isEdit
@@ -261,28 +384,31 @@ export default function ManageAccounts() {
     if (
       formData.username &&
       otherAccounts.some(
-        (a) => (a.username || '').toLowerCase() === formData.username.toLowerCase()
+        (a) =>
+          (a.username || "").toLowerCase() === formData.username.toLowerCase(),
       )
     ) {
-      errors.username = 'Username already exists';
+      errors.username = "Username already exists";
     }
 
     if (
       formData.employee_id &&
       otherAccounts.some(
-        (a) => (a.employee_id || '').toLowerCase() === formData.employee_id.toLowerCase()
+        (a) =>
+          (a.employee_id || "").toLowerCase() ===
+          formData.employee_id.toLowerCase(),
       )
     ) {
-      errors.employee_id = 'Employee ID already in use';
+      errors.employee_id = "Employee ID already in use";
     }
 
     if (
       formData.email &&
       otherAccounts.some(
-        (a) => (a.email || '').toLowerCase() === formData.email.toLowerCase()
+        (a) => (a.email || "").toLowerCase() === formData.email.toLowerCase(),
       )
     ) {
-      errors.email = 'Email address already in use';
+      errors.email = "Email address already in use";
     }
 
     setFormErrors(errors);
@@ -301,12 +427,17 @@ export default function ManageAccounts() {
         import.meta.env.VITE_SUPABASE_URL,
         import.meta.env.VITE_SUPABASE_ANON_KEY,
         {
-          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-        }
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+          },
+        },
       );
 
       // Supabase auth requires email
-      const signupEmail = formData.email?.trim() || `${formData.username.trim()}@bustos.gov.ph`;
+      const signupEmail =
+        formData.email?.trim() || `${formData.username.trim()}@bustos.gov.ph`;
 
       const { data, error } = await authClient.auth.signUp({
         email: signupEmail,
@@ -318,19 +449,19 @@ export default function ManageAccounts() {
             last_name: formData.last_name.trim(),
             username: formData.username.trim(),
             role: formData.role,
-          }
-        }
+          },
+        },
       });
 
       if (error) throw error;
-      
+
       // Wait a moment for the database trigger to insert the profile
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       fetchAccounts();
-      showToast('Account registered securely!', 'success');
+      showToast("Account registered securely!", "success");
     } catch (err) {
-      console.warn('Account creation failed:', err.message);
-      showToast(`Error: ${err.message}`, 'error');
+      console.warn("Account creation failed:", err.message);
+      showToast(`Error: ${err.message}`, "error");
     } finally {
       setIsLoading(false);
       closeModal();
@@ -355,20 +486,20 @@ export default function ManageAccounts() {
 
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update(updatedFields)
-        .eq('id', modalState.data.id);
+        .eq("id", modalState.data.id);
 
       if (error) throw error;
       fetchAccounts();
-      showToast('Account details updated successfully!', 'success');
+      showToast("Account details updated successfully!", "success");
     } catch (err) {
-      console.warn('Supabase update fallback:', err.message);
+      console.warn("Supabase update fallback:", err.message);
       const updated = accounts.map((a) =>
-        a.id === modalState.data.id ? { ...a, ...updatedFields } : a
+        a.id === modalState.data.id ? { ...a, ...updatedFields } : a,
       );
       updateAccountsState(updated);
-      showToast('Account details updated successfully.', 'success');
+      showToast("Account details updated successfully.", "success");
     } finally {
       setIsLoading(false);
       closeModal();
@@ -382,15 +513,16 @@ export default function ManageAccounts() {
     try {
       // In a secure RLS setup, admins cannot arbitrarily update passwords without the service_role key.
       // We use Supabase Auth reset password feature instead.
-      const targetEmail = modalState.data.email || `${modalState.data.username}@bustos.gov.ph`;
-      
+      const targetEmail =
+        modalState.data.email || `${modalState.data.username}@bustos.gov.ph`;
+
       const { error } = await supabase.auth.resetPasswordForEmail(targetEmail);
       if (error) throw error;
 
-      showToast('Password reset email sent securely!', 'success');
+      showToast("Password reset email sent securely!", "success");
     } catch (err) {
-      console.warn('Password reset error:', err.message);
-      showToast(`Error: ${err.message}`, 'error');
+      console.warn("Password reset error:", err.message);
+      showToast(`Error: ${err.message}`, "error");
     } finally {
       setIsLoading(false);
       closeModal();
@@ -398,22 +530,24 @@ export default function ManageAccounts() {
   };
 
   const handleToggleStatus = async (account) => {
-    const newStatus = account.status === 'Active' ? 'Inactive' : 'Active';
+    const newStatus = account.status === "Active" ? "Inactive" : "Active";
     setIsLoading(true);
 
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', account.id);
+        .eq("id", account.id);
 
       if (error) throw error;
       fetchAccounts();
-      showToast(`Account status updated to ${newStatus}.`, 'info');
+      showToast(`Account status updated to ${newStatus}.`, "info");
     } catch (err) {
-      const updated = accounts.map((a) => (a.id === account.id ? { ...a, status: newStatus } : a));
+      const updated = accounts.map((a) =>
+        a.id === account.id ? { ...a, status: newStatus } : a,
+      );
       updateAccountsState(updated);
-      showToast(`Account status updated to ${newStatus}.`, 'info');
+      showToast(`Account status updated to ${newStatus}.`, "info");
     } finally {
       setIsLoading(false);
       setOpenMenuId(null);
@@ -424,17 +558,19 @@ export default function ManageAccounts() {
     setIsLoading(true);
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({ archived: true, updated_at: new Date().toISOString() })
-        .eq('id', account.id);
+        .eq("id", account.id);
 
       if (error) throw error;
       fetchAccounts();
-      showToast('Account moved to Archive.', 'info');
+      showToast("Account moved to Archive.", "info");
     } catch (err) {
-      const updated = accounts.map((a) => (a.id === account.id ? { ...a, archived: true } : a));
+      const updated = accounts.map((a) =>
+        a.id === account.id ? { ...a, archived: true } : a,
+      );
       updateAccountsState(updated);
-      showToast('Account moved to Archive.', 'info');
+      showToast("Account moved to Archive.", "info");
     } finally {
       setIsLoading(false);
       closeModal();
@@ -446,17 +582,19 @@ export default function ManageAccounts() {
     setIsLoading(true);
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({ archived: false, updated_at: new Date().toISOString() })
-        .eq('id', account.id);
+        .eq("id", account.id);
 
       if (error) throw error;
       fetchAccounts();
-      showToast('Account restored to Active list.', 'success');
+      showToast("Account restored to Active list.", "success");
     } catch (err) {
-      const updated = accounts.map((a) => (a.id === account.id ? { ...a, archived: false } : a));
+      const updated = accounts.map((a) =>
+        a.id === account.id ? { ...a, archived: false } : a,
+      );
       updateAccountsState(updated);
-      showToast('Account restored to Active list.', 'success');
+      showToast("Account restored to Active list.", "success");
     } finally {
       setIsLoading(false);
       closeModal();
@@ -467,14 +605,17 @@ export default function ManageAccounts() {
   const handlePermanentDelete = async (account) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.from('profiles').delete().eq('id', account.id);
+      const { error } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", account.id);
       if (error) throw error;
       fetchAccounts();
-      showToast('Account permanently deleted.', 'error');
+      showToast("Account permanently deleted.", "error");
     } catch (err) {
       const updated = accounts.filter((a) => a.id !== account.id);
       updateAccountsState(updated);
-      showToast('Account permanently deleted.', 'error');
+      showToast("Account permanently deleted.", "error");
     } finally {
       setIsLoading(false);
       closeModal();
@@ -488,33 +629,54 @@ export default function ManageAccounts() {
     setIsLoading(true);
 
     try {
-      if (action === 'activate') {
-        await supabase.from('profiles').update({ status: 'Active' }).in('id', selectedIds);
-        showToast(`${selectedIds.length} account(s) activated.`, 'success');
-      } else if (action === 'deactivate') {
-        await supabase.from('profiles').update({ status: 'Inactive' }).in('id', selectedIds);
-        showToast(`${selectedIds.length} account(s) deactivated.`, 'info');
-      } else if (action === 'archive') {
-        await supabase.from('profiles').update({ archived: true }).in('id', selectedIds);
-        showToast(`${selectedIds.length} account(s) archived.`, 'info');
-      } else if (action === 'delete') {
-        await supabase.from('profiles').delete().in('id', selectedIds);
-        showToast(`${selectedIds.length} account(s) permanently deleted.`, 'error');
+      if (action === "activate") {
+        await supabase
+          .from("profiles")
+          .update({ status: "Active" })
+          .in("id", selectedIds);
+        showToast(`${selectedIds.length} account(s) activated.`, "success");
+      } else if (action === "deactivate") {
+        await supabase
+          .from("profiles")
+          .update({ status: "Inactive" })
+          .in("id", selectedIds);
+        showToast(`${selectedIds.length} account(s) deactivated.`, "info");
+      } else if (action === "archive") {
+        await supabase
+          .from("profiles")
+          .update({ archived: true })
+          .in("id", selectedIds);
+        showToast(`${selectedIds.length} account(s) archived.`, "info");
+      } else if (action === "delete") {
+        await supabase.from("profiles").delete().in("id", selectedIds);
+        showToast(
+          `${selectedIds.length} account(s) permanently deleted.`,
+          "error",
+        );
       }
       fetchAccounts();
     } catch (err) {
       let updated = [...accounts];
-      if (action === 'activate') {
-        updated = updated.map((a) => (selectedIds.includes(a.id) ? { ...a, status: 'Active' } : a));
-      } else if (action === 'deactivate') {
-        updated = updated.map((a) => (selectedIds.includes(a.id) ? { ...a, status: 'Inactive' } : a));
-      } else if (action === 'archive') {
-        updated = updated.map((a) => (selectedIds.includes(a.id) ? { ...a, archived: true } : a));
-      } else if (action === 'delete') {
+      if (action === "activate") {
+        updated = updated.map((a) =>
+          selectedIds.includes(a.id) ? { ...a, status: "Active" } : a,
+        );
+      } else if (action === "deactivate") {
+        updated = updated.map((a) =>
+          selectedIds.includes(a.id) ? { ...a, status: "Inactive" } : a,
+        );
+      } else if (action === "archive") {
+        updated = updated.map((a) =>
+          selectedIds.includes(a.id) ? { ...a, archived: true } : a,
+        );
+      } else if (action === "delete") {
         updated = updated.filter((a) => !selectedIds.includes(a.id));
       }
       updateAccountsState(updated);
-      showToast(`Bulk action applied for ${selectedIds.length} account(s).`, 'info');
+      showToast(
+        `Bulk action applied for ${selectedIds.length} account(s).`,
+        "info",
+      );
     } finally {
       setIsLoading(false);
       setSelectedIds([]);
@@ -526,50 +688,51 @@ export default function ManageAccounts() {
   // Modal Openers
   const openCreateModal = () => {
     setFormData({
-      employee_id: '',
-      first_name: '',
-      last_name: '',
-      email: '',
-      username: '',
-      password: '',
-      confirm_password: '',
-      role: 'Staff',
-      status: 'Active',
+      employee_id: "",
+      first_name: "",
+      last_name: "",
+      email: "",
+      username: "",
+      password: "",
+      confirm_password: "",
+      role: "Staff",
+      status: "Active",
     });
     setFormErrors({});
-    setModalState({ type: 'create', data: null });
+    setModalState({ type: "create", data: null });
   };
 
   const openEditModal = (account) => {
     setFormData({
-      employee_id: account.employee_id || '',
-      first_name: account.first_name || '',
-      last_name: account.last_name || '',
-      email: account.email || '',
-      username: account.username || '',
-      role: account.role === 'Administrator' ? 'Admin' : account.role || 'Staff',
-      status: account.status || 'Active',
+      employee_id: account.employee_id || "",
+      first_name: account.first_name || "",
+      last_name: account.last_name || "",
+      email: account.email || "",
+      username: account.username || "",
+      role:
+        account.role === "Administrator" ? "Admin" : account.role || "Staff",
+      status: account.status || "Active",
     });
     setFormErrors({});
-    setModalState({ type: 'edit', data: account });
+    setModalState({ type: "edit", data: account });
     setOpenMenuId(null);
   };
 
   const openChangePasswordModal = (account) => {
-    setPasswordData({ newPassword: '', confirmPassword: '' });
+    setPasswordData({ newPassword: "", confirmPassword: "" });
     setFormErrors({});
-    setModalState({ type: 'changePassword', data: account });
+    setModalState({ type: "changePassword", data: account });
     setOpenMenuId(null);
   };
 
   const openViewModal = (account) => {
-    setModalState({ type: 'view', data: account });
+    setModalState({ type: "view", data: account });
     setOpenMenuId(null);
   };
 
   const openConfirmModal = (actionType, targetData, message) => {
     setModalState({
-      type: 'confirm',
+      type: "confirm",
       data: { actionType, targetData, message },
     });
     setOpenMenuId(null);
@@ -581,9 +744,9 @@ export default function ManageAccounts() {
   };
 
   const getInitials = (firstName, lastName) => {
-    const f = firstName ? firstName[0] : '';
-    const l = lastName ? lastName[0] : '';
-    return (f + l).toUpperCase() || 'U';
+    const f = firstName ? firstName[0] : "";
+    const l = lastName ? lastName[0] : "";
+    return (f + l).toUpperCase() || "U";
   };
 
   return (
@@ -607,67 +770,65 @@ export default function ManageAccounts() {
         </header>
 
         {/* Stat Cards */}
-        <div className="acc-stats-grid animate-fade-up">
+        {/* <div className="acc-stats-grid animate-fade-up">
           <div className="acc-stat-card">
             <div className="acc-stat-info">
               <span>Total Active Users</span>
-              <h2>{isLoading ? '...' : stats.totalUsers}</h2>
+              <h2>{isLoading ? "..." : stats.totalUsers}</h2>
             </div>
           </div>
 
           <div className="acc-stat-card">
             <div className="acc-stat-info">
               <span>Active Accounts</span>
-              <h2>{isLoading ? '...' : stats.activeUsers}</h2>
+              <h2>{isLoading ? "..." : stats.activeUsers}</h2>
             </div>
           </div>
 
           <div className="acc-stat-card">
             <div className="acc-stat-info">
               <span>Inactive Accounts</span>
-              <h2>{isLoading ? '...' : stats.inactiveUsers}</h2>
+              <h2>{isLoading ? "..." : stats.inactiveUsers}</h2>
             </div>
           </div>
 
-          {/* <div className="acc-stat-card">
-            <div className="acc-stat-info">
-              <span>Archived Users</span>
-              <h2>{isLoading ? '...' : stats.archivedUsers}</h2>
-            </div>
-          </div> */}
+          
 
           <div className="acc-stat-card">
             <div className="acc-stat-info">
               <span>Administrators</span>
-              <h2>{isLoading ? '...' : stats.admins}</h2>
+              <h2>{isLoading ? "..." : stats.admins}</h2>
             </div>
           </div>
 
           <div className="acc-stat-card">
             <div className="acc-stat-info">
               <span>Staff Personnel</span>
-              <h2>{isLoading ? '...' : stats.staff}</h2>
+              <h2>{isLoading ? "..." : stats.staff}</h2>
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Main Card Container */}
-        <div className="form-card-container animate-fade-up" style={{ marginTop: '20px' }}>
+        <div
+          className="form-card-container animate-fade-up"
+          style={{ marginTop: "20px" }}
+        >
           {/* Header & Tabs */}
           <div className="acc-card-top">
             <div className="acc-tabs">
               <button
-                className={`acc-tab-btn ${activeTab === 'active' ? 'active' : ''}`}
-                onClick={() => setActiveTab('active')}
+                className={`acc-tab-btn ${activeTab === "active" ? "active" : ""}`}
+                onClick={() => setActiveTab("active")}
               >
                 Active Accounts ({stats.totalUsers})
               </button>
-              {/* <button
+              <button
                 className={`acc-tab-btn ${activeTab === 'archived' ? 'active' : ''}`}
                 onClick={() => setActiveTab('archived')}
               >
                 Archived Accounts ({stats.archivedUsers})
-              </button> */}
+              </button>
             </div>
 
             <button className="btn-add-account" onClick={openCreateModal}>
@@ -681,7 +842,14 @@ export default function ManageAccounts() {
               <div className="acc-filter-bar">
                 <div className="acc-search-wrapper">
                   <span className="search-icon-svg">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
                       <circle cx="11" cy="11" r="8"></circle>
                       <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
@@ -694,7 +862,10 @@ export default function ManageAccounts() {
                     className="acc-search-input"
                   />
                   {searchTerm && (
-                    <button className="clear-search" onClick={() => setSearchTerm('')}>
+                    <button
+                      className="clear-search"
+                      onClick={() => setSearchTerm("")}
+                    >
                       ×
                     </button>
                   )}
@@ -702,29 +873,33 @@ export default function ManageAccounts() {
 
                 <div className="acc-filter-controls">
                   <div className="acc-filter-group">
-                    <label>Role:</label>
-                    <select
+                    <label style={{ display: 'none' }}>Role:</label>
+                    <CustomDropdown
+                      label="Role:"
                       value={roleFilter}
-                      onChange={(e) => setRoleFilter(e.target.value)}
-                      className="modern-select filter-select"
-                    >
-                      <option value="ALL">All Roles</option>
-                      <option value="Admin">Admin</option>
-                      <option value="Staff">Staff</option>
-                    </select>
+                      onChange={setRoleFilter}
+                      options={[
+                        { label: "All Roles", value: "ALL" },
+                        { label: "Admin", value: "Admin" },
+                        { label: "Staff", value: "Staff" }
+                      ]}
+                      minWidth="160px"
+                    />
                   </div>
 
                   <div className="acc-filter-group">
-                    <label>Status:</label>
-                    <select
+                    <label style={{ display: 'none' }}>Status:</label>
+                    <CustomDropdown
+                      label="Status:"
                       value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                      className="modern-select filter-select"
-                    >
-                      <option value="ALL">All Statuses</option>
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
+                      onChange={setStatusFilter}
+                      options={[
+                        { label: "All Statuses", value: "ALL" },
+                        { label: "Active", value: "Active" },
+                        { label: "Inactive", value: "Inactive" }
+                      ]}
+                      minWidth="160px"
+                    />
                   </div>
                 </div>
               </div>
@@ -736,15 +911,15 @@ export default function ManageAccounts() {
                     <strong>{selectedIds.length}</strong> accounts selected
                   </span>
                   <div className="bulk-btns">
-                    {activeTab === 'active' && (
+                    {activeTab === "active" && (
                       <>
                         <button
                           className="btn-bulk btn-bulk-activate"
                           onClick={() =>
                             openConfirmModal(
-                              'bulk-activate',
+                              "bulk-activate",
                               null,
-                              `Are you sure you want to activate ${selectedIds.length} selected account(s)?`
+                              `Are you sure you want to activate ${selectedIds.length} selected account(s)?`,
                             )
                           }
                         >
@@ -754,9 +929,9 @@ export default function ManageAccounts() {
                           className="btn-bulk btn-bulk-deactivate"
                           onClick={() =>
                             openConfirmModal(
-                              'bulk-deactivate',
+                              "bulk-deactivate",
                               null,
-                              `Are you sure you want to deactivate ${selectedIds.length} selected account(s)?`
+                              `Are you sure you want to deactivate ${selectedIds.length} selected account(s)?`,
                             )
                           }
                         >
@@ -766,9 +941,9 @@ export default function ManageAccounts() {
                           className="btn-bulk btn-bulk-archive"
                           onClick={() =>
                             openConfirmModal(
-                              'bulk-archive',
+                              "bulk-archive",
                               null,
-                              `Are you sure you want to archive ${selectedIds.length} selected account(s)?`
+                              `Are you sure you want to archive ${selectedIds.length} selected account(s)?`,
                             )
                           }
                         >
@@ -780,9 +955,9 @@ export default function ManageAccounts() {
                       className="btn-bulk btn-bulk-delete"
                       onClick={() =>
                         openConfirmModal(
-                          'bulk-delete',
+                          "bulk-delete",
                           null,
-                          `PERMANENT ACTION: Are you sure you want to permanently delete ${selectedIds.length} selected account(s)?`
+                          `PERMANENT ACTION: Are you sure you want to permanently delete ${selectedIds.length} selected account(s)?`,
                         )
                       }
                     >
@@ -797,54 +972,101 @@ export default function ManageAccounts() {
                 <table className="modern-table acc-table">
                   <thead>
                     <tr>
-                      <th style={{ width: '40px', textAlign: 'center' }}>
+                      <th style={{ width: "40px", textAlign: "center" }}>
                         <input
                           type="checkbox"
                           checked={
                             paginatedAccounts.length > 0 &&
-                            paginatedAccounts.every((a) => selectedIds.includes(a.id))
+                            paginatedAccounts.every((a) =>
+                              selectedIds.includes(a.id),
+                            )
                           }
                           onChange={handleSelectAll}
                         />
                       </th>
-                      <th onClick={() => handleSort('employee_id')} className="sortable-th">
-                        Employee ID {sortField === 'employee_id' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      <th
+                        onClick={() => handleSort("employee_id")}
+                        className="sortable-th"
+                      >
+                        Employee ID{" "}
+                        {sortField === "employee_id" &&
+                          (sortDirection === "asc" ? "▲" : "▼")}
                       </th>
-                      <th onClick={() => handleSort('name')} className="sortable-th">
-                        User Name {sortField === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      <th
+                        onClick={() => handleSort("name")}
+                        className="sortable-th"
+                      >
+                        User Name{" "}
+                        {sortField === "name" &&
+                          (sortDirection === "asc" ? "▲" : "▼")}
                       </th>
-                      <th onClick={() => handleSort('username')} className="sortable-th">
-                        Username {sortField === 'username' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      <th
+                        onClick={() => handleSort("username")}
+                        className="sortable-th"
+                      >
+                        Username{" "}
+                        {sortField === "username" &&
+                          (sortDirection === "asc" ? "▲" : "▼")}
                       </th>
-                      <th onClick={() => handleSort('email')} className="sortable-th">
-                        Email Address {sortField === 'email' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      <th
+                        onClick={() => handleSort("email")}
+                        className="sortable-th"
+                      >
+                        Email Address{" "}
+                        {sortField === "email" &&
+                          (sortDirection === "asc" ? "▲" : "▼")}
                       </th>
-                      <th onClick={() => handleSort('role')} className="sortable-th">
-                        Role {sortField === 'role' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      <th
+                        onClick={() => handleSort("role")}
+                        className="sortable-th"
+                      >
+                        Role{" "}
+                        {sortField === "role" &&
+                          (sortDirection === "asc" ? "▲" : "▼")}
                       </th>
-                      <th onClick={() => handleSort('status')} className="sortable-th">
-                        Status {sortField === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      <th
+                        onClick={() => handleSort("status")}
+                        className="sortable-th"
+                      >
+                        Status{" "}
+                        {sortField === "status" &&
+                          (sortDirection === "asc" ? "▲" : "▼")}
                       </th>
-                      <th style={{ textAlign: 'center', width: '80px' }}>Actions</th>
+                      <th style={{ textAlign: "center", width: "80px" }}>
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {isLoading ? (
                       <tr>
-                        <td colSpan="8" style={{ textAlign: 'center', padding: '40px' }}>
-                          <div className="loading-spinner">Loading account records...</div>
+                        <td
+                          colSpan="8"
+                          style={{ textAlign: "center", padding: "40px" }}
+                        >
+                          <div className="loading-spinner">
+                            Loading account records...
+                          </div>
                         </td>
                       </tr>
                     ) : paginatedAccounts.length > 0 ? (
                       paginatedAccounts.map((acc) => {
-                        const isProtected = acc.username === 'admin_bustos';
-                        const roleDisplay = acc.role === 'Administrator' ? 'Admin' : acc.role || 'Staff';
-                        const statusDisplay = acc.status || 'Active';
+                        const isProtected = acc.username === "admin_bustos";
+                        const roleDisplay =
+                          acc.role === "Administrator"
+                            ? "Admin"
+                            : acc.role || "Staff";
+                        const statusDisplay = acc.status || "Active";
                         const isMenuOpen = openMenuId === acc.id;
 
                         return (
-                          <tr key={acc.id} className={selectedIds.includes(acc.id) ? 'row-selected' : ''}>
-                            <td style={{ textAlign: 'center' }}>
+                          <tr
+                            key={acc.id}
+                            className={
+                              selectedIds.includes(acc.id) ? "row-selected" : ""
+                            }
+                          >
+                            <td style={{ textAlign: "center" }}>
                               <input
                                 type="checkbox"
                                 checked={selectedIds.includes(acc.id)}
@@ -852,10 +1074,14 @@ export default function ManageAccounts() {
                               />
                             </td>
                             {/* Standardized font for Employee ID */}
-                            <td className="cell-empid-standard">{acc.employee_id || '—'}</td>
+                            <td className="cell-empid-standard">
+                              {acc.employee_id || "—"}
+                            </td>
                             <td>
                               <div className="user-profile-cell">
-                                <div className={`avatar-circle role-bg-${roleDisplay.toLowerCase()}`}>
+                                <div
+                                  className={`avatar-circle role-bg-${roleDisplay.toLowerCase()}`}
+                                >
                                   {getInitials(acc.first_name, acc.last_name)}
                                 </div>
                                 <div>
@@ -863,138 +1089,78 @@ export default function ManageAccounts() {
                                     {acc.first_name} {acc.last_name}
                                   </div>
                                   <div className="user-created-sub">
-                                    Added {acc.created_at ? new Date(acc.created_at).toLocaleDateString() : 'N/A'}
+                                    Added{" "}
+                                    {acc.created_at
+                                      ? new Date(
+                                          acc.created_at,
+                                        ).toLocaleDateString()
+                                      : "N/A"}
                                   </div>
                                 </div>
                               </div>
                             </td>
                             {/* Standardized font for Username */}
-                            <td className="cell-username-standard">@{acc.username}</td>
-                            <td>{acc.email || '—'}</td>
+                            <td className="cell-username-standard">
+                              @{acc.username}
+                            </td>
+                            <td>{acc.email || "—"}</td>
                             <td>
-                              <span className={`role-badge role-${roleDisplay.toLowerCase()}`}>
+                              <span
+                                className={`role-badge role-${roleDisplay.toLowerCase()}`}
+                              >
                                 {roleDisplay}
                               </span>
                             </td>
                             <td>
-                              <span className={`status-badge status-${statusDisplay.toLowerCase()}`}>
+                              <span
+                                className={`status-badge status-${statusDisplay.toLowerCase()}`}
+                              >
                                 {statusDisplay}
                               </span>
                             </td>
-                            <td style={{ textAlign: 'center', position: 'relative' }}>
-                              {/* Clean Dropdown Menu Action Button */}
-                              <div className="action-menu-container">
-                                <button
-                                  className={`btn-action-icon ${isMenuOpen ? 'active' : ''}`}
-                                  title="Account Actions"
-                                  onClick={(e) => {
-                                    if (isMenuOpen) {
-                                      setOpenMenuId(null);
-                                    } else {
-                                      const rect = e.currentTarget.getBoundingClientRect();
-                                      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                                      setOpenMenuId(acc.id);
-                                    }
-                                  }}
+                            <td
+                              style={{
+                                textAlign: "center",
+                                position: "relative",
+                              }}
+                            >
+                              {/* Edit Action Button */}
+                              <button
+                                className="btn-action-icon"
+                                title="Edit Account"
+                                onClick={() => openEditModal(acc)}
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', background: '#f8fbff', color: 'var(--primary)', border: '1px solid #dbeafe', cursor: 'pointer' }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.color = 'white'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = '#f8fbff'; e.currentTarget.style.color = 'var(--primary)'; }}
+                              >
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
                                 >
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <circle cx="12" cy="5" r="2" />
-                                    <circle cx="12" cy="12" r="2" />
-                                    <circle cx="12" cy="19" r="2" />
-                                  </svg>
-                                </button>
-
-                                {isMenuOpen && createPortal(
-                                  <div 
-                                    className="action-dropdown-menu animate-fade-up"
-                                    ref={menuRef}
-                                    style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 99999 }}
-                                  >
-                                    <button
-                                      className="dropdown-item"
-                                      onClick={() => openViewModal(acc)}
-                                    >
-                                      View Details
-                                    </button>
-
-                                    {activeTab === 'active' ? (
-                                      <>
-                                        <button
-                                          className="dropdown-item"
-                                          onClick={() => openEditModal(acc)}
-                                        >
-                                          Edit Account
-                                        </button>
-
-                                        <button
-                                          className="dropdown-item"
-                                          onClick={() => openChangePasswordModal(acc)}
-                                        >
-                                          Change Password
-                                        </button>
-
-                                        {!isProtected && (
-                                          <>
-                                            <button
-                                              className="dropdown-item"
-                                              onClick={() => handleToggleStatus(acc)}
-                                            >
-                                              {statusDisplay === 'Active' ? 'Deactivate Account' : 'Activate Account'}
-                                            </button>
-
-                                            <button
-                                              className="dropdown-item dropdown-item-warning"
-                                              onClick={() =>
-                                                openConfirmModal(
-                                                  'archive',
-                                                  acc,
-                                                  `Archive account for "${acc.first_name} ${acc.last_name}"?`
-                                                )
-                                              }
-                                            >
-                                              Archive Account
-                                            </button>
-                                          </>
-                                        )}
-                                      </>
-                                    ) : (
-                                      <>
-                                        <button
-                                          className="dropdown-item dropdown-item-success"
-                                          onClick={() => handleRestoreAccount(acc)}
-                                        >
-                                          Restore Account
-                                        </button>
-
-                                        {!isProtected && (
-                                          <button
-                                            className="dropdown-item dropdown-item-danger"
-                                            onClick={() =>
-                                              openConfirmModal(
-                                                'delete',
-                                                acc,
-                                                `PERMANENT DELETION: Are you sure you want to permanently delete account "@${acc.username}"?`
-                                              )
-                                            }
-                                          >
-                                            Delete Permanently
-                                          </button>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>,
-                                  document.body
-                                )}
-                              </div>
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </button>
                             </td>
                           </tr>
                         );
                       })
                     ) : (
                       <tr>
-                        <td colSpan="8" style={{ textAlign: 'center', padding: '40px' }}>
+                        <td
+                          colSpan="8"
+                          style={{ textAlign: "center", padding: "40px" }}
+                        >
                           <div className="empty-state">
-                            <p>No user accounts found matching current criteria.</p>
+                            <p>
+                              No user accounts found matching current criteria.
+                            </p>
                           </div>
                         </td>
                       </tr>
@@ -1006,26 +1172,32 @@ export default function ManageAccounts() {
               {/* Pagination Controls */}
               <div className="acc-pagination-bar">
                 <div className="pagination-info">
-                  Showing{' '}
+                  Showing{" "}
                   {sortedAccounts.length > 0
                     ? (currentPage - 1) * itemsPerPage + 1
-                    : 0}{' '}
-                  to {Math.min(currentPage * itemsPerPage, sortedAccounts.length)} of{' '}
-                  {sortedAccounts.length} accounts
+                    : 0}{" "}
+                  to{" "}
+                  {Math.min(currentPage * itemsPerPage, sortedAccounts.length)}{" "}
+                  of {sortedAccounts.length} accounts
                 </div>
 
                 <div className="pagination-controls">
-                  <label style={{ fontSize: '12px', color: 'var(--gray-600)' }}>Rows per page:</label>
-                  <select
+                  <label style={{ fontSize: "12px", color: "var(--gray-600)", display: "none" }}>
+                    Rows per page:
+                  </label>
+                  <CustomDropdown
+                    label="Rows:"
+                    direction="up"
                     value={itemsPerPage}
-                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                    className="modern-select rows-select"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
+                    onChange={(val) => setItemsPerPage(Number(val))}
+                    options={[
+                      { label: "5", value: 5 },
+                      { label: "10", value: 10 },
+                      { label: "20", value: 20 },
+                      { label: "50", value: 50 }
+                    ]}
+                    minWidth="120px"
+                  />
 
                   <button
                     className="page-btn"
@@ -1052,38 +1224,35 @@ export default function ManageAccounts() {
       </main>
 
       {/* --- MODAL: CREATE ACCOUNT --- */}
-      {modalState.type === 'create' && (
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+      {modalState.type === "create" && (
+        <div
+          className="modal-overlay"
+          onClick={(e) => e.target === e.currentTarget && closeModal()}
+        >
           <div className="acc-modal-content animate-fade-up">
             <div className="modal-header-blue">
               <h2>Create New User Account</h2>
-              <span className="close-modal" onClick={closeModal}>
+              <span className="acc-close-modal" onClick={closeModal}>
                 ×
               </span>
             </div>
             <form onSubmit={handleCreateAccount} className="modal-body-form">
-              <div className="grid-3-cols">
-                <div className="field-group">
-                  <label>Employee ID</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. EMP-2026-089"
-                    value={formData.employee_id}
-                    onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
-                  />
-                  {formErrors.employee_id && <span className="err-msg">{formErrors.employee_id}</span>}
-                </div>
-
+              <div className="grid-2-cols">
                 <div className="field-group">
                   <label>First Name *</label>
                   <input
                     type="text"
                     placeholder="First Name"
                     value={formData.first_name}
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, first_name: e.target.value })
+                    }
+                    className={formErrors.first_name ? 'input-error' : ''}
                     required
                   />
-                  {formErrors.first_name && <span className="err-msg">{formErrors.first_name}</span>}
+                  {formErrors.first_name && (
+                    <span className="err-msg">{formErrors.first_name}</span>
+                  )}
                 </div>
 
                 <div className="field-group">
@@ -1092,61 +1261,99 @@ export default function ManageAccounts() {
                     type="text"
                     placeholder="Last Name"
                     value={formData.last_name}
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, last_name: e.target.value })
+                    }
+                    className={formErrors.last_name ? 'input-error' : ''}
                     required
                   />
-                  {formErrors.last_name && <span className="err-msg">{formErrors.last_name}</span>}
+                  {formErrors.last_name && (
+                    <span className="err-msg">{formErrors.last_name}</span>
+                  )}
                 </div>
               </div>
 
-              <div className="grid-3-cols" style={{ marginTop: '12px' }}>
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
+                <div className="field-group">
+                  <label>Employee ID</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. EMP-2026-089"
+                    value={formData.employee_id}
+                    onChange={(e) =>
+                      setFormData({ ...formData, employee_id: e.target.value })
+                    }
+                    className={formErrors.employee_id ? 'input-error' : ''}
+                  />
+                  {formErrors.employee_id && (
+                    <span className="err-msg">{formErrors.employee_id}</span>
+                  )}
+                </div>
+
                 <div className="field-group">
                   <label>Email Address</label>
                   <input
                     type="email"
                     placeholder="email@bustos.gov.ph"
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    className={formErrors.email ? 'input-error' : ''}
                   />
-                  {formErrors.email && <span className="err-msg">{formErrors.email}</span>}
+                  {formErrors.email && (
+                    <span className="err-msg">{formErrors.email}</span>
+                  )}
                 </div>
+              </div>
 
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
                   <label>Username *</label>
                   <input
                     type="text"
                     placeholder="Username"
                     value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, username: e.target.value })
+                    }
+                    className={formErrors.username ? 'input-error' : ''}
                     required
                   />
-                  {formErrors.username && <span className="err-msg">{formErrors.username}</span>}
+                  {formErrors.username && (
+                    <span className="err-msg">{formErrors.username}</span>
+                  )}
                 </div>
 
                 <div className="field-group">
                   <label>Role *</label>
-                  <select
-                    className="modern-select"
+                  <CustomDropdown
                     value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  >
-                    <option value="Staff">Staff</option>
-                    <option value="Admin">Admin</option>
-                  </select>
+                    onChange={(val) => setFormData({ ...formData, role: val })}
+                    options={[
+                      { label: "Staff", value: "Staff" },
+                      { label: "Admin", value: "Admin" }
+                    ]}
+                  />
                 </div>
               </div>
 
-              <div className="grid-3-cols" style={{ marginTop: '12px' }}>
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
                   <label>Password *</label>
                   <input
                     type="password"
                     placeholder="••••••••"
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, password: e.target.value })
+                    }
+                    className={formErrors.password ? 'input-error' : ''}
                     required
                   />
-                  {formErrors.password && <span className="err-msg">{formErrors.password}</span>}
+                  {formErrors.password && (
+                    <span className="err-msg">{formErrors.password}</span>
+                  )}
                 </div>
 
                 <div className="field-group">
@@ -1155,33 +1362,52 @@ export default function ManageAccounts() {
                     type="password"
                     placeholder="••••••••"
                     value={formData.confirm_password}
-                    onChange={(e) => setFormData({ ...formData, confirm_password: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        confirm_password: e.target.value,
+                      })
+                    }
+                    className={formErrors.confirm_password ? 'input-error' : ''}
                     required
                   />
                   {formErrors.confirm_password && (
-                    <span className="err-msg">{formErrors.confirm_password}</span>
+                    <span className="err-msg">
+                      {formErrors.confirm_password}
+                    </span>
                   )}
-                </div>
-
-                <div className="field-group">
-                  <label>Status</label>
-                  <select
-                    className="modern-select"
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
                 </div>
               </div>
 
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
+                <div className="field-group">
+                  <label>Status</label>
+                  <CustomDropdown
+                    value={formData.status}
+                    onChange={(val) => setFormData({ ...formData, status: val })}
+                    options={[
+                      { label: "Active", value: "Active" },
+                      { label: "Inactive", value: "Inactive" }
+                    ]}
+                  />
+                </div>
+                <div></div>
+              </div>
+
               <div className="modal-footer-btns">
-                <button type="button" className="btn-cancel" onClick={closeModal}>
+                <button
+                  type="button"
+                  className="btn-cancel"
+                  onClick={closeModal}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn-submit" disabled={isLoading}>
-                  {isLoading ? 'Creating...' : 'Register Account'}
+                <button
+                  type="submit"
+                  className="btn-submit"
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Creating..." : "Register Account"}
                 </button>
               </div>
             </form>
@@ -1190,36 +1416,44 @@ export default function ManageAccounts() {
       )}
 
       {/* --- MODAL: EDIT ACCOUNT --- */}
-      {modalState.type === 'edit' && (
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+      {modalState.type === "edit" && (
+        <div
+          className="modal-overlay"
+          onClick={(e) => e.target === e.currentTarget && closeModal()}
+        >
           <div className="acc-modal-content animate-fade-up">
             <div className="modal-header-blue">
               <h2>Edit User Account</h2>
-              <span className="close-modal" onClick={closeModal}>
+              <span className="acc-close-modal" onClick={closeModal}>
                 ×
               </span>
             </div>
+            <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div className={`avatar-circle role-bg-${(modalState.data?.role === 'Administrator' ? 'admin' : (modalState.data?.role || 'staff')).toLowerCase()}`} style={{ width: '60px', height: '60px', fontSize: '24px' }}>
+                {getInitials(modalState.data?.first_name, modalState.data?.last_name)}
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--primary-dark)' }}>{modalState.data?.first_name} {modalState.data?.last_name}</h3>
+                <div style={{ color: 'var(--gray-500)', fontSize: '14px', marginTop: '4px' }}>@{modalState.data?.username} • {modalState.data?.email || "No email"}</div>
+              </div>
+            </div>
             <form onSubmit={handleEditAccount} className="modal-body-form">
-              <div className="grid-3-cols">
-                <div className="field-group">
-                  <label>Employee ID</label>
-                  <input
-                    type="text"
-                    value={formData.employee_id}
-                    onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
-                  />
-                  {formErrors.employee_id && <span className="err-msg">{formErrors.employee_id}</span>}
-                </div>
-
+              <div className="grid-2-cols">
                 <div className="field-group">
                   <label>First Name *</label>
                   <input
                     type="text"
                     value={formData.first_name}
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, first_name: e.target.value })
+                    }
+                    className={formErrors.first_name ? 'input-error' : ''}
+                    disabled={formData.status === 'Inactive'}
                     required
                   />
-                  {formErrors.first_name && <span className="err-msg">{formErrors.first_name}</span>}
+                  {formErrors.first_name && (
+                    <span className="err-msg">{formErrors.first_name}</span>
+                  )}
                 </div>
 
                 <div className="field-group">
@@ -1227,69 +1461,164 @@ export default function ManageAccounts() {
                   <input
                     type="text"
                     value={formData.last_name}
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, last_name: e.target.value })
+                    }
+                    className={formErrors.last_name ? 'input-error' : ''}
+                    disabled={formData.status === 'Inactive'}
                     required
                   />
-                  {formErrors.last_name && <span className="err-msg">{formErrors.last_name}</span>}
+                  {formErrors.last_name && (
+                    <span className="err-msg">{formErrors.last_name}</span>
+                  )}
                 </div>
               </div>
 
-              <div className="grid-2-cols" style={{ marginTop: '12px' }}>
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
+                <div className="field-group">
+                  <label>Employee ID</label>
+                  <input
+                    type="text"
+                    value={formData.employee_id}
+                    onChange={(e) =>
+                      setFormData({ ...formData, employee_id: e.target.value })
+                    }
+                    className={formErrors.employee_id ? 'input-error' : ''}
+                    disabled={formData.status === 'Inactive'}
+                  />
+                  {formErrors.employee_id && (
+                    <span className="err-msg">{formErrors.employee_id}</span>
+                  )}
+                </div>
+
                 <div className="field-group">
                   <label>Email Address</label>
                   <input
                     type="email"
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    className={formErrors.email ? 'input-error' : ''}
+                    disabled={formData.status === 'Inactive'}
                   />
-                  {formErrors.email && <span className="err-msg">{formErrors.email}</span>}
+                  {formErrors.email && (
+                    <span className="err-msg">{formErrors.email}</span>
+                  )}
                 </div>
+              </div>
 
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
                   <label>Username *</label>
                   <input
                     type="text"
                     value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, username: e.target.value })
+                    }
+                    className={formErrors.username ? 'input-error' : ''}
+                    disabled={formData.status === 'Inactive'}
                     required
                   />
-                  {formErrors.username && <span className="err-msg">{formErrors.username}</span>}
+                  {formErrors.username && (
+                    <span className="err-msg">{formErrors.username}</span>
+                  )}
+                </div>
+
+                <div className="field-group">
+                  <label>Role</label>
+                  <CustomDropdown
+                    value={formData.role}
+                    onChange={(val) => setFormData({ ...formData, role: val })}
+                    options={[
+                      { label: "Staff", value: "Staff" },
+                      { label: "Admin", value: "Admin" }
+                    ]}
+                    disabled={formData.status === 'Inactive'}
+                  />
                 </div>
               </div>
 
-              <div className="grid-2-cols" style={{ marginTop: '12px' }}>
-                <div className="field-group">
-                  <label>Role</label>
-                  <select
-                    className="modern-select"
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  >
-                    <option value="Staff">Staff</option>
-                    <option value="Admin">Admin</option>
-                  </select>
-                </div>
-
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
                   <label>Status</label>
-                  <select
-                    className="modern-select"
+                  <CustomDropdown
                     value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+                    onChange={(val) => setFormData({ ...formData, status: val })}
+                    options={[
+                      { label: "Active", value: "Active" },
+                      { label: "Inactive", value: "Inactive" }
+                    ]}
+                  />
                 </div>
+                <div></div>
               </div>
 
               <div className="modal-footer-btns">
-                <button type="button" className="btn-cancel" onClick={closeModal}>
+                <button
+                  type="button"
+                  className="btn-cancel"
+                  onClick={closeModal}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn-submit" disabled={isLoading}>
-                  {isLoading ? 'Saving...' : 'Save Changes'}
+                <button
+                  type="submit"
+                  className="btn-submit"
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Saving..." : "Save Changes"}
                 </button>
+              </div>
+
+              <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #edf2f7' }}>
+                <h4 style={{ fontSize: '12px', color: 'var(--gray-500)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account Actions</h4>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    type="button"
+                    onClick={() => openChangePasswordModal(modalState.data)}
+                    style={{ flex: 1, padding: '10px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#334155', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                  >
+                    Change Password
+                  </button>
+                  {modalState.data?.username !== 'admin_bustos' && (
+                    <>
+                      <button 
+                        type="button"
+                        onClick={() => setFormData({ ...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active' })}
+                        style={{ flex: 1, padding: '10px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#334155', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                      >
+                        {formData.status === 'Active' ? 'Deactivate' : 'Activate'}
+                      </button>
+                      {modalState.data?.archived ? (
+                        <button 
+                          type="button"
+                          onClick={() => openConfirmModal('restore', modalState.data, `Restore account for "${modalState.data?.first_name} ${modalState.data?.last_name}"?`)}
+                          style={{ flex: 1, padding: '10px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#dcfce7'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#f0fdf4'}
+                        >
+                          Restore
+                        </button>
+                      ) : (
+                        <button 
+                          type="button"
+                          onClick={() => openConfirmModal('archive', modalState.data, `Archive account for "${modalState.data?.first_name} ${modalState.data?.last_name}"?`)}
+                          style={{ flex: 1, padding: '10px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#ef4444', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+                        >
+                          Archive
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </form>
           </div>
@@ -1297,27 +1626,46 @@ export default function ManageAccounts() {
       )}
 
       {/* --- MODAL: CHANGE PASSWORD / RESET EMAIL --- */}
-      {modalState.type === 'changePassword' && (
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+      {modalState.type === "changePassword" && (
+        <div
+          className="modal-overlay"
+          onClick={(e) => e.target === e.currentTarget && closeModal()}
+        >
           <div className="acc-modal-content sm-modal animate-fade-up">
             <div className="modal-header-blue">
               <h2>Reset Account Password</h2>
-              <span className="close-modal" onClick={closeModal}>
+              <span className="acc-close-modal" onClick={closeModal}>
                 ×
               </span>
             </div>
             <form onSubmit={handleChangePassword} className="modal-body-form">
-              <p style={{ fontSize: '13.5px', color: 'var(--gray-600)', marginBottom: '16px', lineHeight: '1.5' }}>
-                For security reasons, administrators cannot directly set a user's password. 
-                Are you sure you want to send a secure password reset link to <strong>@{modalState.data?.username}</strong>?
+              <p
+                style={{
+                  fontSize: "13.5px",
+                  color: "var(--gray-600)",
+                  marginBottom: "16px",
+                  lineHeight: "1.5",
+                }}
+              >
+                For security reasons, administrators cannot directly set a
+                user's password. Are you sure you want to send a secure password
+                reset link to <strong>@{modalState.data?.username}</strong>?
               </p>
 
               <div className="modal-footer-btns">
-                <button type="button" className="btn-cancel" onClick={closeModal}>
+                <button
+                  type="button"
+                  className="btn-cancel"
+                  onClick={closeModal}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn-submit" disabled={isLoading}>
-                  {isLoading ? 'Sending...' : 'Send Reset Link'}
+                <button
+                  type="submit"
+                  className="btn-submit"
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Sending..." : "Send Reset Link"}
                 </button>
               </div>
             </form>
@@ -1326,19 +1674,25 @@ export default function ManageAccounts() {
       )}
 
       {/* --- MODAL: VIEW ACCOUNT DETAILS --- */}
-      {modalState.type === 'view' && modalState.data && (
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+      {modalState.type === "view" && modalState.data && (
+        <div
+          className="modal-overlay"
+          onClick={(e) => e.target === e.currentTarget && closeModal()}
+        >
           <div className="acc-modal-content sm-modal animate-fade-up">
             <div className="modal-header-blue">
               <h2>Account Profile Overview</h2>
-              <span className="close-modal" onClick={closeModal}>
+              <span className="acc-close-modal" onClick={closeModal}>
                 ×
               </span>
             </div>
             <div className="modal-body-details">
               <div className="view-header-profile">
                 <div className="avatar-circle-large">
-                  {getInitials(modalState.data.first_name, modalState.data.last_name)}
+                  {getInitials(
+                    modalState.data.first_name,
+                    modalState.data.last_name,
+                  )}
                 </div>
                 <div>
                   <h3>
@@ -1351,23 +1705,27 @@ export default function ManageAccounts() {
               <div className="view-details-grid">
                 <div className="view-detail-item">
                   <span className="detail-label">Employee ID</span>
-                  <span className="detail-value">{modalState.data.employee_id || 'Not Set'}</span>
+                  <span className="detail-value">
+                    {modalState.data.employee_id || "Not Set"}
+                  </span>
                 </div>
                 <div className="view-detail-item">
                   <span className="detail-label">Email Address</span>
-                  <span className="detail-value">{modalState.data.email || 'Not Set'}</span>
+                  <span className="detail-value">
+                    {modalState.data.email || "Not Set"}
+                  </span>
                 </div>
                 <div className="view-detail-item">
                   <span className="detail-label">System Role</span>
                   <span className="detail-value">
                     <span
                       className={`role-badge role-${(
-                        modalState.data.role || 'Staff'
+                        modalState.data.role || "Staff"
                       ).toLowerCase()}`}
                     >
-                      {modalState.data.role === 'Administrator'
-                        ? 'Admin'
-                        : modalState.data.role || 'Staff'}
+                      {modalState.data.role === "Administrator"
+                        ? "Admin"
+                        : modalState.data.role || "Staff"}
                     </span>
                   </span>
                 </div>
@@ -1376,17 +1734,17 @@ export default function ManageAccounts() {
                   <span className="detail-value">
                     <span
                       className={`status-badge status-${(
-                        modalState.data.status || 'Active'
+                        modalState.data.status || "Active"
                       ).toLowerCase()}`}
                     >
-                      {modalState.data.status || 'Active'}
+                      {modalState.data.status || "Active"}
                     </span>
                   </span>
                 </div>
                 <div className="view-detail-item">
                   <span className="detail-label">Archived State</span>
                   <span className="detail-value">
-                    {modalState.data.archived ? 'Archived' : 'Active'}
+                    {modalState.data.archived ? "Archived" : "Active"}
                   </span>
                 </div>
                 <div className="view-detail-item">
@@ -1394,13 +1752,17 @@ export default function ManageAccounts() {
                   <span className="detail-value">
                     {modalState.data.created_at
                       ? new Date(modalState.data.created_at).toLocaleString()
-                      : 'N/A'}
+                      : "N/A"}
                   </span>
                 </div>
               </div>
 
-              <div className="modal-footer-btns" style={{ marginTop: '24px' }}>
-                <button className="btn-cancel" style={{ width: '100%' }} onClick={closeModal}>
+              <div className="modal-footer-btns" style={{ marginTop: "24px" }}>
+                <button
+                  className="btn-cancel"
+                  style={{ width: "100%" }}
+                  onClick={closeModal}
+                >
                   Close
                 </button>
               </div>
@@ -1410,26 +1772,41 @@ export default function ManageAccounts() {
       )}
 
       {/* --- MODAL: CONFIRMATION DIALOG --- */}
-      {modalState.type === 'confirm' && modalState.data && (
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+      {modalState.type === "confirm" && modalState.data && (
+        <div
+          className="modal-overlay"
+          onClick={(e) => e.target === e.currentTarget && closeModal()}
+        >
           <div className="admin-modal animate-fade-up">
             <h2>Confirm Action</h2>
             <p>{modalState.data.message}</p>
             <div className="modal-btns">
-              <button className="btn-back" style={{ flex: 1 }} onClick={closeModal}>
+              <button
+                className="btn-back"
+                style={{ flex: 1 }}
+                onClick={closeModal}
+              >
                 Cancel
               </button>
               <button
                 className="btn-next"
-                style={{ flex: 1, background: 'var(--primary)' }}
+                style={{ flex: 1, background: "var(--primary)" }}
                 onClick={() => {
                   const { actionType, targetData } = modalState.data;
-                  if (actionType === 'archive') handleArchiveAccount(targetData);
-                  else if (actionType === 'delete') handlePermanentDelete(targetData);
-                  else if (actionType === 'bulk-activate') handleExecuteBulkAction('activate');
-                  else if (actionType === 'bulk-deactivate') handleExecuteBulkAction('deactivate');
-                  else if (actionType === 'bulk-archive') handleExecuteBulkAction('archive');
-                  else if (actionType === 'bulk-delete') handleExecuteBulkAction('delete');
+                  if (actionType === "archive")
+                    handleArchiveAccount(targetData);
+                  else if (actionType === "restore")
+                    handleRestoreAccount(targetData);
+                  else if (actionType === "delete")
+                    handlePermanentDelete(targetData);
+                  else if (actionType === "bulk-activate")
+                    handleExecuteBulkAction("activate");
+                  else if (actionType === "bulk-deactivate")
+                    handleExecuteBulkAction("deactivate");
+                  else if (actionType === "bulk-archive")
+                    handleExecuteBulkAction("archive");
+                  else if (actionType === "bulk-delete")
+                    handleExecuteBulkAction("delete");
                 }}
               >
                 Confirm
