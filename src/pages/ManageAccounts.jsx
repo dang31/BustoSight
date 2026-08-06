@@ -6,6 +6,117 @@ import { supabase } from "../lib/supabase";
 import "../css/ManageAccounts.css";
 import "../css/AddResident.css";
 
+const CustomDropdown = ({ value, onChange, options, minWidth = '140px', label = '', direction = 'down', disabled = false }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedLabel = options.find(o => o.value === value)?.label || value;
+
+  const menuStyle = direction === 'up' ? {
+    bottom: '100%',
+    marginBottom: '6px'
+  } : {
+    top: '100%',
+    marginTop: '6px'
+  };
+
+  return (
+    <div style={{ position: 'relative', minWidth, width: '100%', opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? 'none' : 'auto' }} ref={dropdownRef}>
+      <div
+        onClick={(e) => { if (!disabled) { e.stopPropagation(); setIsOpen(!isOpen); } }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8.5px 12px',
+          background: 'white',
+          border: isOpen ? '1px solid var(--primary)' : '1px solid var(--gray-300)',
+          borderRadius: '8px',
+          color: 'var(--gray-800)',
+          fontSize: '14px',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          boxShadow: isOpen ? '0 0 0 3px rgba(37,99,235,0.1)' : '0 1px 2px rgba(0,0,0,0.05)',
+          gap: '8px'
+        }}
+      >
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {label && <span style={{ color: 'var(--gray-500)', marginRight: '4px', fontWeight: '400' }}>{label}</span>}
+          <span style={{ fontWeight: '500' }}>{selectedLabel}</span>
+        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', color: 'var(--gray-500)', flexShrink: 0 }}>
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+      
+      {isOpen && (
+        <div style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          ...menuStyle,
+          background: 'white',
+          borderRadius: '8px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+          border: '1px solid var(--gray-200)',
+          overflow: 'hidden',
+          zIndex: 9999
+        }}>
+          {options.map((opt) => (
+            <div
+              key={opt.value}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(opt.value);
+                setIsOpen(false);
+              }}
+              style={{
+                padding: '10px 14px',
+                fontSize: '14px',
+                color: value === opt.value ? 'var(--primary)' : 'var(--gray-700)',
+                fontWeight: value === opt.value ? '600' : '400',
+                background: value === opt.value ? '#f0f9ff' : 'transparent',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
+              onMouseEnter={(e) => {
+                if (value !== opt.value) {
+                  e.currentTarget.style.background = '#f8fafc';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (value !== opt.value) {
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              {opt.label}
+              {value === opt.value && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function ManageAccounts() {
   const [accounts, setAccounts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -659,7 +770,7 @@ export default function ManageAccounts() {
         </header>
 
         {/* Stat Cards */}
-        <div className="acc-stats-grid animate-fade-up">
+        {/* <div className="acc-stats-grid animate-fade-up">
           <div className="acc-stat-card">
             <div className="acc-stat-info">
               <span>Total Active Users</span>
@@ -681,12 +792,7 @@ export default function ManageAccounts() {
             </div>
           </div>
 
-          {/* <div className="acc-stat-card">
-            <div className="acc-stat-info">
-              <span>Archived Users</span>
-              <h2>{isLoading ? '...' : stats.archivedUsers}</h2>
-            </div>
-          </div> */}
+          
 
           <div className="acc-stat-card">
             <div className="acc-stat-info">
@@ -701,7 +807,7 @@ export default function ManageAccounts() {
               <h2>{isLoading ? "..." : stats.staff}</h2>
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Main Card Container */}
         <div
@@ -717,12 +823,12 @@ export default function ManageAccounts() {
               >
                 Active Accounts ({stats.totalUsers})
               </button>
-              {/* <button
+              <button
                 className={`acc-tab-btn ${activeTab === 'archived' ? 'active' : ''}`}
                 onClick={() => setActiveTab('archived')}
               >
                 Archived Accounts ({stats.archivedUsers})
-              </button> */}
+              </button>
             </div>
 
             <button className="btn-add-account" onClick={openCreateModal}>
@@ -767,29 +873,33 @@ export default function ManageAccounts() {
 
                 <div className="acc-filter-controls">
                   <div className="acc-filter-group">
-                    <label>Role:</label>
-                    <select
+                    <label style={{ display: 'none' }}>Role:</label>
+                    <CustomDropdown
+                      label="Role:"
                       value={roleFilter}
-                      onChange={(e) => setRoleFilter(e.target.value)}
-                      className="modern-select filter-select"
-                    >
-                      <option value="ALL">All Roles</option>
-                      <option value="Admin">Admin</option>
-                      <option value="Staff">Staff</option>
-                    </select>
+                      onChange={setRoleFilter}
+                      options={[
+                        { label: "All Roles", value: "ALL" },
+                        { label: "Admin", value: "Admin" },
+                        { label: "Staff", value: "Staff" }
+                      ]}
+                      minWidth="160px"
+                    />
                   </div>
 
                   <div className="acc-filter-group">
-                    <label>Status:</label>
-                    <select
+                    <label style={{ display: 'none' }}>Status:</label>
+                    <CustomDropdown
+                      label="Status:"
                       value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                      className="modern-select filter-select"
-                    >
-                      <option value="ALL">All Statuses</option>
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
+                      onChange={setStatusFilter}
+                      options={[
+                        { label: "All Statuses", value: "ALL" },
+                        { label: "Active", value: "Active" },
+                        { label: "Inactive", value: "Inactive" }
+                      ]}
+                      minWidth="160px"
+                    />
                   </div>
                 </div>
               </div>
@@ -1014,133 +1124,29 @@ export default function ManageAccounts() {
                                 position: "relative",
                               }}
                             >
-                              {/* Clean Dropdown Menu Action Button */}
-                              <div className="action-menu-container">
-                                <button
-                                  className={`btn-action-icon ${isMenuOpen ? "active" : ""}`}
-                                  title="Account Actions"
-                                  onClick={(e) => {
-                                    if (isMenuOpen) {
-                                      setOpenMenuId(null);
-                                    } else {
-                                      const rect =
-                                        e.currentTarget.getBoundingClientRect();
-                                      setMenuPos({
-                                        top: rect.bottom + 4,
-                                        right: window.innerWidth - rect.right,
-                                      });
-                                      setOpenMenuId(acc.id);
-                                    }
-                                  }}
+                              {/* Edit Action Button */}
+                              <button
+                                className="btn-action-icon"
+                                title="Edit Account"
+                                onClick={() => openEditModal(acc)}
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', background: '#f8fbff', color: 'var(--primary)', border: '1px solid #dbeafe', cursor: 'pointer' }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.color = 'white'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = '#f8fbff'; e.currentTarget.style.color = 'var(--primary)'; }}
+                              >
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
                                 >
-                                  <svg
-                                    width="16"
-                                    height="16"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                  >
-                                    <circle cx="12" cy="5" r="2" />
-                                    <circle cx="12" cy="12" r="2" />
-                                    <circle cx="12" cy="19" r="2" />
-                                  </svg>
-                                </button>
-
-                                {isMenuOpen &&
-                                  createPortal(
-                                    <div
-                                      className="action-dropdown-menu animate-fade-up"
-                                      ref={menuRef}
-                                      style={{
-                                        position: "fixed",
-                                        top: menuPos.top,
-                                        right: menuPos.right,
-                                        zIndex: 99999,
-                                      }}
-                                    >
-                                      <button
-                                        className="dropdown-item"
-                                        onClick={() => openViewModal(acc)}
-                                      >
-                                        View Details
-                                      </button>
-
-                                      {activeTab === "active" ? (
-                                        <>
-                                          <button
-                                            className="dropdown-item"
-                                            onClick={() => openEditModal(acc)}
-                                          >
-                                            Edit Account
-                                          </button>
-
-                                          <button
-                                            className="dropdown-item"
-                                            onClick={() =>
-                                              openChangePasswordModal(acc)
-                                            }
-                                          >
-                                            Change Password
-                                          </button>
-
-                                          {!isProtected && (
-                                            <>
-                                              <button
-                                                className="dropdown-item"
-                                                onClick={() =>
-                                                  handleToggleStatus(acc)
-                                                }
-                                              >
-                                                {statusDisplay === "Active"
-                                                  ? "Deactivate Account"
-                                                  : "Activate Account"}
-                                              </button>
-
-                                              <button
-                                                className="dropdown-item dropdown-item-warning"
-                                                onClick={() =>
-                                                  openConfirmModal(
-                                                    "archive",
-                                                    acc,
-                                                    `Archive account for "${acc.first_name} ${acc.last_name}"?`,
-                                                  )
-                                                }
-                                              >
-                                                Archive Account
-                                              </button>
-                                            </>
-                                          )}
-                                        </>
-                                      ) : (
-                                        <>
-                                          <button
-                                            className="dropdown-item dropdown-item-success"
-                                            onClick={() =>
-                                              handleRestoreAccount(acc)
-                                            }
-                                          >
-                                            Restore Account
-                                          </button>
-
-                                          {!isProtected && (
-                                            <button
-                                              className="dropdown-item dropdown-item-danger"
-                                              onClick={() =>
-                                                openConfirmModal(
-                                                  "delete",
-                                                  acc,
-                                                  `PERMANENT DELETION: Are you sure you want to permanently delete account "@${acc.username}"?`,
-                                                )
-                                              }
-                                            >
-                                              Delete Permanently
-                                            </button>
-                                          )}
-                                        </>
-                                      )}
-                                    </div>,
-                                    document.body,
-                                  )}
-                              </div>
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </button>
                             </td>
                           </tr>
                         );
@@ -1176,19 +1182,22 @@ export default function ManageAccounts() {
                 </div>
 
                 <div className="pagination-controls">
-                  <label style={{ fontSize: "12px", color: "var(--gray-600)" }}>
+                  <label style={{ fontSize: "12px", color: "var(--gray-600)", display: "none" }}>
                     Rows per page:
                   </label>
-                  <select
+                  <CustomDropdown
+                    label="Rows:"
+                    direction="up"
                     value={itemsPerPage}
-                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                    className="modern-select rows-select"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
+                    onChange={(val) => setItemsPerPage(Number(val))}
+                    options={[
+                      { label: "5", value: 5 },
+                      { label: "10", value: 10 },
+                      { label: "20", value: 20 },
+                      { label: "50", value: 50 }
+                    ]}
+                    minWidth="120px"
+                  />
 
                   <button
                     className="page-btn"
@@ -1223,27 +1232,12 @@ export default function ManageAccounts() {
           <div className="acc-modal-content animate-fade-up">
             <div className="modal-header-blue">
               <h2>Create New User Account</h2>
-              <span className="close-modal" onClick={closeModal}>
+              <span className="acc-close-modal" onClick={closeModal}>
                 ×
               </span>
             </div>
             <form onSubmit={handleCreateAccount} className="modal-body-form">
-              <div className="grid-3-cols">
-                <div className="field-group">
-                  <label>Employee ID</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. EMP-2026-089"
-                    value={formData.employee_id}
-                    onChange={(e) =>
-                      setFormData({ ...formData, employee_id: e.target.value })
-                    }
-                  />
-                  {formErrors.employee_id && (
-                    <span className="err-msg">{formErrors.employee_id}</span>
-                  )}
-                </div>
-
+              <div className="grid-2-cols">
                 <div className="field-group">
                   <label>First Name *</label>
                   <input
@@ -1253,6 +1247,7 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, first_name: e.target.value })
                     }
+                    className={formErrors.first_name ? 'input-error' : ''}
                     required
                   />
                   {formErrors.first_name && (
@@ -1269,6 +1264,7 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, last_name: e.target.value })
                     }
+                    className={formErrors.last_name ? 'input-error' : ''}
                     required
                   />
                   {formErrors.last_name && (
@@ -1277,7 +1273,23 @@ export default function ManageAccounts() {
                 </div>
               </div>
 
-              <div className="grid-3-cols" style={{ marginTop: "12px" }}>
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
+                <div className="field-group">
+                  <label>Employee ID</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. EMP-2026-089"
+                    value={formData.employee_id}
+                    onChange={(e) =>
+                      setFormData({ ...formData, employee_id: e.target.value })
+                    }
+                    className={formErrors.employee_id ? 'input-error' : ''}
+                  />
+                  {formErrors.employee_id && (
+                    <span className="err-msg">{formErrors.employee_id}</span>
+                  )}
+                </div>
+
                 <div className="field-group">
                   <label>Email Address</label>
                   <input
@@ -1287,12 +1299,15 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
+                    className={formErrors.email ? 'input-error' : ''}
                   />
                   {formErrors.email && (
                     <span className="err-msg">{formErrors.email}</span>
                   )}
                 </div>
+              </div>
 
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
                   <label>Username *</label>
                   <input
@@ -1302,6 +1317,7 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, username: e.target.value })
                     }
+                    className={formErrors.username ? 'input-error' : ''}
                     required
                   />
                   {formErrors.username && (
@@ -1311,20 +1327,18 @@ export default function ManageAccounts() {
 
                 <div className="field-group">
                   <label>Role *</label>
-                  <select
-                    className="modern-select"
+                  <CustomDropdown
                     value={formData.role}
-                    onChange={(e) =>
-                      setFormData({ ...formData, role: e.target.value })
-                    }
-                  >
-                    <option value="Staff">Staff</option>
-                    <option value="Admin">Admin</option>
-                  </select>
+                    onChange={(val) => setFormData({ ...formData, role: val })}
+                    options={[
+                      { label: "Staff", value: "Staff" },
+                      { label: "Admin", value: "Admin" }
+                    ]}
+                  />
                 </div>
               </div>
 
-              <div className="grid-3-cols" style={{ marginTop: "12px" }}>
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
                   <label>Password *</label>
                   <input
@@ -1334,6 +1348,7 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
                     }
+                    className={formErrors.password ? 'input-error' : ''}
                     required
                   />
                   {formErrors.password && (
@@ -1353,6 +1368,7 @@ export default function ManageAccounts() {
                         confirm_password: e.target.value,
                       })
                     }
+                    className={formErrors.confirm_password ? 'input-error' : ''}
                     required
                   />
                   {formErrors.confirm_password && (
@@ -1361,20 +1377,21 @@ export default function ManageAccounts() {
                     </span>
                   )}
                 </div>
+              </div>
 
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
                   <label>Status</label>
-                  <select
-                    className="modern-select"
+                  <CustomDropdown
                     value={formData.status}
-                    onChange={(e) =>
-                      setFormData({ ...formData, status: e.target.value })
-                    }
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+                    onChange={(val) => setFormData({ ...formData, status: val })}
+                    options={[
+                      { label: "Active", value: "Active" },
+                      { label: "Inactive", value: "Inactive" }
+                    ]}
+                  />
                 </div>
+                <div></div>
               </div>
 
               <div className="modal-footer-btns">
@@ -1407,26 +1424,21 @@ export default function ManageAccounts() {
           <div className="acc-modal-content animate-fade-up">
             <div className="modal-header-blue">
               <h2>Edit User Account</h2>
-              <span className="close-modal" onClick={closeModal}>
+              <span className="acc-close-modal" onClick={closeModal}>
                 ×
               </span>
             </div>
+            <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div className={`avatar-circle role-bg-${(modalState.data?.role === 'Administrator' ? 'admin' : (modalState.data?.role || 'staff')).toLowerCase()}`} style={{ width: '60px', height: '60px', fontSize: '24px' }}>
+                {getInitials(modalState.data?.first_name, modalState.data?.last_name)}
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--primary-dark)' }}>{modalState.data?.first_name} {modalState.data?.last_name}</h3>
+                <div style={{ color: 'var(--gray-500)', fontSize: '14px', marginTop: '4px' }}>@{modalState.data?.username} • {modalState.data?.email || "No email"}</div>
+              </div>
+            </div>
             <form onSubmit={handleEditAccount} className="modal-body-form">
-              <div className="grid-3-cols">
-                <div className="field-group">
-                  <label>Employee ID</label>
-                  <input
-                    type="text"
-                    value={formData.employee_id}
-                    onChange={(e) =>
-                      setFormData({ ...formData, employee_id: e.target.value })
-                    }
-                  />
-                  {formErrors.employee_id && (
-                    <span className="err-msg">{formErrors.employee_id}</span>
-                  )}
-                </div>
-
+              <div className="grid-2-cols">
                 <div className="field-group">
                   <label>First Name *</label>
                   <input
@@ -1435,6 +1447,8 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, first_name: e.target.value })
                     }
+                    className={formErrors.first_name ? 'input-error' : ''}
+                    disabled={formData.status === 'Inactive'}
                     required
                   />
                   {formErrors.first_name && (
@@ -1450,6 +1464,8 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, last_name: e.target.value })
                     }
+                    className={formErrors.last_name ? 'input-error' : ''}
+                    disabled={formData.status === 'Inactive'}
                     required
                   />
                   {formErrors.last_name && (
@@ -1460,6 +1476,22 @@ export default function ManageAccounts() {
 
               <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
+                  <label>Employee ID</label>
+                  <input
+                    type="text"
+                    value={formData.employee_id}
+                    onChange={(e) =>
+                      setFormData({ ...formData, employee_id: e.target.value })
+                    }
+                    className={formErrors.employee_id ? 'input-error' : ''}
+                    disabled={formData.status === 'Inactive'}
+                  />
+                  {formErrors.employee_id && (
+                    <span className="err-msg">{formErrors.employee_id}</span>
+                  )}
+                </div>
+
+                <div className="field-group">
                   <label>Email Address</label>
                   <input
                     type="email"
@@ -1467,12 +1499,16 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
+                    className={formErrors.email ? 'input-error' : ''}
+                    disabled={formData.status === 'Inactive'}
                   />
                   {formErrors.email && (
                     <span className="err-msg">{formErrors.email}</span>
                   )}
                 </div>
+              </div>
 
+              <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
                   <label>Username *</label>
                   <input
@@ -1481,42 +1517,42 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, username: e.target.value })
                     }
+                    className={formErrors.username ? 'input-error' : ''}
+                    disabled={formData.status === 'Inactive'}
                     required
                   />
                   {formErrors.username && (
                     <span className="err-msg">{formErrors.username}</span>
                   )}
                 </div>
+
+                <div className="field-group">
+                  <label>Role</label>
+                  <CustomDropdown
+                    value={formData.role}
+                    onChange={(val) => setFormData({ ...formData, role: val })}
+                    options={[
+                      { label: "Staff", value: "Staff" },
+                      { label: "Admin", value: "Admin" }
+                    ]}
+                    disabled={formData.status === 'Inactive'}
+                  />
+                </div>
               </div>
 
               <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
-                  <label>Role</label>
-                  <select
-                    className="modern-select"
-                    value={formData.role}
-                    onChange={(e) =>
-                      setFormData({ ...formData, role: e.target.value })
-                    }
-                  >
-                    <option value="Staff">Staff</option>
-                    <option value="Admin">Admin</option>
-                  </select>
-                </div>
-
-                <div className="field-group">
                   <label>Status</label>
-                  <select
-                    className="modern-select"
+                  <CustomDropdown
                     value={formData.status}
-                    onChange={(e) =>
-                      setFormData({ ...formData, status: e.target.value })
-                    }
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+                    onChange={(val) => setFormData({ ...formData, status: val })}
+                    options={[
+                      { label: "Active", value: "Active" },
+                      { label: "Inactive", value: "Inactive" }
+                    ]}
+                  />
                 </div>
+                <div></div>
               </div>
 
               <div className="modal-footer-btns">
@@ -1535,6 +1571,55 @@ export default function ManageAccounts() {
                   {isLoading ? "Saving..." : "Save Changes"}
                 </button>
               </div>
+
+              <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #edf2f7' }}>
+                <h4 style={{ fontSize: '12px', color: 'var(--gray-500)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account Actions</h4>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    type="button"
+                    onClick={() => openChangePasswordModal(modalState.data)}
+                    style={{ flex: 1, padding: '10px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#334155', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                  >
+                    Change Password
+                  </button>
+                  {modalState.data?.username !== 'admin_bustos' && (
+                    <>
+                      <button 
+                        type="button"
+                        onClick={() => setFormData({ ...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active' })}
+                        style={{ flex: 1, padding: '10px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#334155', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                      >
+                        {formData.status === 'Active' ? 'Deactivate' : 'Activate'}
+                      </button>
+                      {modalState.data?.archived ? (
+                        <button 
+                          type="button"
+                          onClick={() => openConfirmModal('restore', modalState.data, `Restore account for "${modalState.data?.first_name} ${modalState.data?.last_name}"?`)}
+                          style={{ flex: 1, padding: '10px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#dcfce7'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#f0fdf4'}
+                        >
+                          Restore
+                        </button>
+                      ) : (
+                        <button 
+                          type="button"
+                          onClick={() => openConfirmModal('archive', modalState.data, `Archive account for "${modalState.data?.first_name} ${modalState.data?.last_name}"?`)}
+                          style={{ flex: 1, padding: '10px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#ef4444', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+                        >
+                          Archive
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             </form>
           </div>
         </div>
@@ -1549,7 +1634,7 @@ export default function ManageAccounts() {
           <div className="acc-modal-content sm-modal animate-fade-up">
             <div className="modal-header-blue">
               <h2>Reset Account Password</h2>
-              <span className="close-modal" onClick={closeModal}>
+              <span className="acc-close-modal" onClick={closeModal}>
                 ×
               </span>
             </div>
@@ -1597,7 +1682,7 @@ export default function ManageAccounts() {
           <div className="acc-modal-content sm-modal animate-fade-up">
             <div className="modal-header-blue">
               <h2>Account Profile Overview</h2>
-              <span className="close-modal" onClick={closeModal}>
+              <span className="acc-close-modal" onClick={closeModal}>
                 ×
               </span>
             </div>
@@ -1710,6 +1795,8 @@ export default function ManageAccounts() {
                   const { actionType, targetData } = modalState.data;
                   if (actionType === "archive")
                     handleArchiveAccount(targetData);
+                  else if (actionType === "restore")
+                    handleRestoreAccount(targetData);
                   else if (actionType === "delete")
                     handlePermanentDelete(targetData);
                   else if (actionType === "bulk-activate")
