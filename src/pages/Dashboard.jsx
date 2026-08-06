@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -150,6 +150,18 @@ export default function Dashboard() {
   const [brgySearch, setBrgySearch] = useState("");
   const [brgySort, setBrgySort] = useState({ key: "name", direction: "asc" });
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Derived stats
   const [stats, setStats] = useState({
@@ -1050,39 +1062,77 @@ export default function Dashboard() {
       <Sidebar />
 
       <main className="content">
-        <header className="main-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <header className="main-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 50 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
             <h1>BustoSight: Population Dashboard</h1>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "6px",
-                border: "1px solid #ccc",
-                fontSize: "14px",
-                backgroundColor: "#fff",
-                color: "#333",
-                cursor: "pointer",
-              }}
-            >
-              <option value="all">All Time</option>
-              {Array.from(new Set([new Date().getFullYear(), ...yearlyPopData.map(d => d.year)]))
-                .sort((a, b) => b - a)
-                .map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-            </select>
+            {isLoading && (
+              <span
+                style={{ fontSize: "13px", color: "#718096", marginLeft: "12px" }}
+              >
+                Loading live data…
+              </span>
+            )}
           </div>
-          {isLoading && (
-            <span
-              style={{ fontSize: "13px", color: "#718096", marginLeft: "12px" }}
-            >
-              Loading live data…
-            </span>
-          )}
+          
+          <div 
+            className="year-selector" 
+            ref={dropdownRef}
+            style={{ position: 'relative', background: 'rgba(93,135,255,0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(93,135,255,0.2)', cursor: 'pointer', minWidth: '130px' }}
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          >
+            <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary-dark)', display: 'block', marginBottom: '2px', cursor: 'pointer', fontWeight: '700' }}>Data Year</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: 'var(--primary)', fontSize: '15px', fontWeight: 'bold' }}>{selectedYear === "all" ? "All Time" : selectedYear}</span>
+              <i className={`fas fa-chevron-${isDropdownOpen ? 'up' : 'down'}`} style={{ color: 'var(--primary)', opacity: 0.7, fontSize: '12px', marginLeft: '10px' }}></i>
+            </div>
+
+            {isDropdownOpen && (
+              <div style={{ 
+                position: 'absolute', 
+                top: '100%', 
+                left: 0, 
+                right: 0, 
+                marginTop: '8px', 
+                background: 'white', 
+                borderRadius: '8px', 
+                boxShadow: '0 10px 25px rgba(0,0,0,0.15)', 
+                overflow: 'hidden', 
+                zIndex: 1000,
+                border: '1px solid var(--gray-200)'
+              }}>
+                {["all", ...Array.from(new Set([new Date().getFullYear(), ...yearlyPopData.map(d => d.year)])).sort((a, b) => b - a)].map(y => {
+                  const displayValue = y === "all" ? "All Time" : String(y);
+                  return (
+                    <div 
+                      key={y}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedYear(String(y));
+                        setIsDropdownOpen(false);
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#f0f7ff'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                      style={{ 
+                        padding: '10px 15px', 
+                        fontSize: '14px', 
+                        fontWeight: selectedYear === String(y) ? '700' : '500', 
+                        color: selectedYear === String(y) ? 'var(--primary)' : 'var(--gray-700)', 
+                        background: 'white',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      {displayValue}
+                      {selectedYear === String(y) && <i className="fas fa-check" style={{ fontSize: '12px' }}></i>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </header>
 
         {/* Tab Navigation */}

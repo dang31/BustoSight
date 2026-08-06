@@ -1,8 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
 import { supabase } from '../lib/supabase';
 import { barangayNames } from '../data/brgyData';
 import '../css/Reports.css';
+
+const START_YEAR = 2020;
+const CURRENT_YEAR = new Date().getFullYear();
+const DATA_YEAR_OPTIONS = Array.from(
+  { length: CURRENT_YEAR - START_YEAR + 1 },
+  (_, i) => CURRENT_YEAR - i
+);
 
 const REPORT_SECTIONS = [
   { id: 'age-gender', label: 'Age and Gender Distribution' },
@@ -16,7 +23,20 @@ export default function Reports() {
   const [selectedSections, setSelectedSections] = useState([]);
   const [residents, setResidents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
   const currentDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -34,6 +54,7 @@ export default function Reports() {
             .from('residents')
             .select('barangay, sex, age, is_pwd, is_senior, is_solo_parent, is_4ps, is_voter, h_no, is_household_head, has_senior_id, has_pwd_id, has_solo_parent_id')
             .eq('is_archived', false)
+            .eq('data_year', selectedYear)
             .range(from, to);
 
           if (error) throw error;
@@ -67,7 +88,7 @@ export default function Reports() {
       }
     }
     loadData();
-  }, []);
+  }, [selectedYear]);
 
   const toggleSection = (id) => {
     setSelectedSections(prev => 
@@ -306,9 +327,68 @@ export default function Reports() {
         </header>
 
         <div className="report-card animate-fade-up">
-          <div className="report-card-header">
-            <h2>Generate Reports</h2>
-            <p>Select the components to include in the printed report:</p>
+          <div className="report-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
+            <div>
+              <h2>Generate Reports</h2>
+              <p>Select the components to include in the printed report:</p>
+            </div>
+            
+            <div 
+              className="year-selector" 
+              ref={dropdownRef}
+              style={{ position: 'relative', background: 'rgba(255,255,255,0.1)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', minWidth: '120px' }}
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            >
+              <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', opacity: 0.9, display: 'block', marginBottom: '2px', cursor: 'pointer' }}>Data Year</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'white', fontSize: '15px', fontWeight: 'bold' }}>{selectedYear}</span>
+                <i className={`fas fa-chevron-${isDropdownOpen ? 'up' : 'down'}`} style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px', marginLeft: '10px' }}></i>
+              </div>
+
+              {isDropdownOpen && (
+                <div style={{ 
+                  position: 'absolute', 
+                  top: '100%', 
+                  left: 0, 
+                  right: 0, 
+                  marginTop: '8px', 
+                  background: 'white', 
+                  borderRadius: '8px', 
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.15)', 
+                  overflow: 'hidden', 
+                  zIndex: 50,
+                  border: '1px solid var(--gray-200)'
+                }}>
+                  {DATA_YEAR_OPTIONS.map(y => (
+                    <div 
+                      key={y}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedYear(y);
+                        setIsDropdownOpen(false);
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#f0f7ff'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                      style={{ 
+                        padding: '10px 15px', 
+                        fontSize: '14px', 
+                        fontWeight: selectedYear === y ? '700' : '500', 
+                        color: selectedYear === y ? 'var(--primary)' : 'var(--gray-700)', 
+                        background: 'white',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      {y}
+                      {selectedYear === y && <i className="fas fa-check" style={{ fontSize: '12px' }}></i>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {isLoading ? (
@@ -364,7 +444,7 @@ export default function Reports() {
           <p style={{ margin: '2px 0', fontSize: '11px', textTransform: 'uppercase', color: '#4a5568', letterSpacing: '0.5px' }}>Republic of the Philippines</p>
           <p style={{ margin: '2px 0', fontSize: '11px', textTransform: 'uppercase', color: '#4a5568', letterSpacing: '0.5px' }}>Province of Bulacan</p>
           <h2 style={{ margin: '5px 0', fontSize: '18px', fontWeight: '800', color: '#1a365d' }}>Municipality of Bustos</h2>
-          <p style={{ margin: '8px 0 3px 0', fontSize: '13px', fontWeight: '800', letterSpacing: '1px', color: '#2b6cb0' }}><strong>OFFICIAL CENSUS AND POPULATION REPORT</strong></p>
+          <p style={{ margin: '8px 0 3px 0', fontSize: '13px', fontWeight: '800', letterSpacing: '1px', color: '#2b6cb0' }}><strong>OFFICIAL CENSUS AND POPULATION REPORT ({selectedYear})</strong></p>
           <p style={{ margin: '2px 0', fontSize: '10px', color: '#718096' }}>Date Generated: <span>{currentDate}</span></p>
         </div>
 
