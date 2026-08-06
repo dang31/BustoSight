@@ -349,14 +349,20 @@ export default function BarangayList() {
     alert("Mock data generated successfully!");
   };
 
-  const openHousehold = async (hhNo) => {
+  const openHousehold = async (hhNo, dataYear) => {
     if (!hhNo) return;
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("residents")
         .select("*")
-        .eq("house_no", hhNo)
+        .eq("h_no", hhNo)
         .eq("is_archived", false);
+
+      if (dataYear) {
+        query = query.eq("data_year", dataYear);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -647,7 +653,7 @@ export default function BarangayList() {
                       return (
                         <tr
                           key={res.id || i}
-                          onClick={() => openHousehold(res.h_no)}
+                          onClick={() => openHousehold(res.h_no, res.dataYear)}
                         >
                           <td className="text-center">{res.h_no}</td>
                           <td className="text-left font-semibold">
@@ -760,7 +766,7 @@ export default function BarangayList() {
                             <div className="actions-cell">
                               <button
                                 className="action-btn view-btn"
-                                onClick={() => openHousehold(res.h_no)}
+                                onClick={() => openHousehold(res.h_no, res.dataYear)}
                                 title="View Household"
                               >
                                 <i className="fa-solid fa-eye"></i>
