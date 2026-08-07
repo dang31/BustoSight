@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 import { supabase } from "../lib/supabase";
+import ResetStaffPasswordModal from "../components/Admin/ResetStaffPasswordModal";
 import "../css/ManageAccounts.css";
 import "../css/AddResident.css";
 
@@ -722,6 +723,11 @@ export default function ManageAccounts() {
     setPasswordData({ newPassword: "", confirmPassword: "" });
     setFormErrors({});
     setModalState({ type: "changePassword", data: account });
+    setOpenMenuId(null);
+  };
+
+  const openForceResetPasswordModal = (account) => {
+    setModalState({ type: "forceResetPassword", data: account });
     setOpenMenuId(null);
   };
 
@@ -1575,7 +1581,7 @@ export default function ManageAccounts() {
               <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #edf2f7' }}>
                 <h4 style={{ fontSize: '12px', color: 'var(--gray-500)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account Actions</h4>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <button 
+                  {/* <button 
                     type="button"
                     onClick={() => openChangePasswordModal(modalState.data)}
                     style={{ flex: 1, padding: '10px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#334155', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
@@ -1583,7 +1589,18 @@ export default function ManageAccounts() {
                     onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
                   >
                     Change Password
-                  </button>
+                  </button> */}
+                  {modalState.data?.role === 'Staff' && (
+                    <button 
+                      type="button"
+                      onClick={() => openForceResetPasswordModal(modalState.data)}
+                      style={{ flex: 1, padding: '10px', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '6px', color: '#e11d48', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#ffe4e6'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fff1f2'}
+                    >
+                      Change Password
+                    </button>
+                  )}
                   {modalState.data?.username !== 'admin_bustos' && (
                     <>
                       <button 
@@ -1814,6 +1831,15 @@ export default function ManageAccounts() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* --- MODAL: FORCE RESET STAFF PASSWORD --- */}
+      {modalState.type === "forceResetPassword" && modalState.data && (
+        <ResetStaffPasswordModal
+          targetUser={modalState.data}
+          onClose={closeModal}
+          onSuccess={(msg) => showToast(msg, 'success')}
+        />
       )}
     </div>
   );
