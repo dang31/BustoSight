@@ -126,6 +126,11 @@ export default function BarangayList() {
   const filteredRecords = allRecords;
 
   const handleArchive = async (res) => {
+    if (userRole === "Staff") {
+      alert("Access Denied: Staff users are not permitted to archive residents.");
+      return;
+    }
+
     if (
       !window.confirm(
         `Are you sure you want to archive resident ${res.first} ${res.last}?`,
@@ -955,12 +960,14 @@ export default function BarangayList() {
                       <td>{m.oc || "N/A"}</td>
                       <td>{m.isVoter || "N/A"}</td>
                       <td>
-                        <button
-                          className="btn-archive-row"
-                          onClick={() => handleArchive(m)}
-                        >
-                          Archive
-                        </button>
+                        {userRole !== "Staff" && (
+                          <button
+                            className="btn-archive-row"
+                            onClick={() => handleArchive(m)}
+                          >
+                            Archive
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

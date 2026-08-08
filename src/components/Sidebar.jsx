@@ -21,7 +21,11 @@ export default function Sidebar() {
   const userRole = userProfile?.role || 'Staff';
 
   const filteredNavItems = NAV_ITEMS.filter((item) => {
-    if (userRole !== 'Admin' && userRole !== 'Administrator') {
+    if (userRole === 'Staff') {
+      if (item.path === '/manage-accounts') {
+        return false;
+      }
+    } else if (userRole !== 'Admin' && userRole !== 'Administrator') {
       if (item.path === '/upload' || item.path === '/manage-accounts' || item.path === '/add-resident') {
         return false;
       }
