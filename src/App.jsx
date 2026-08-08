@@ -31,7 +31,7 @@ function App() {
         <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
         <Route path="/manage-accounts" element={<ProtectedRoute allowedRoles={['Admin', 'Administrator']}><ManageAccounts /></ProtectedRoute>} />
         <Route path="/archive" element={<ProtectedRoute><ArchiveResidents /></ProtectedRoute>} />
-        <Route path="/upload" element={<ProtectedRoute allowedRoles={['Admin', 'Administrator']}><UploadData /></ProtectedRoute>} />
+        <Route path="/upload" element={<ProtectedRoute allowedRoles={['Admin', 'Administrator', 'Staff']}><UploadData /></ProtectedRoute>} />
       </Routes>
     </Router>
   ); 
