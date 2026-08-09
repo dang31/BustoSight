@@ -177,7 +177,7 @@
   }
   #printable-area th,
   #printable-area td {
-    border: 1px solid #ccc;
+    border: 1px solid #cbd5e1;
     padding: 8px 10px;
     font-size: 12px;
   }
@@ -189,11 +189,22 @@
     break-inside: avoid;
   }
   #printable-area thead th {
-    background: #2c5282 !important;
-    color: white !important;
+    background: #dbeafe !important;
+    color: #1e3a8a !important;
+    font-weight: 700;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     position: static;
+  }
+  #printable-area tbody tr:nth-child(even) {
+    background-color: #f8fafc;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  #printable-area tbody tr:last-child {
+    background-color: #eff6ff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   #printable-area h3 {
     font-size: 14px;
