@@ -169,7 +169,7 @@ export default function ArchiveResidents() {
                         <td className="text-left font-semibold">{fullName}</td>
                         <td className="text-left col-mobile-hide">{res.brgy || 'Unknown'}</td>
                         <td className="text-center">
-                          <span className={`sex-badge ${(res.s || '').toLowerCase() === 'm' || (res.s || '').toLowerCase() === 'male' ? 'male' : 'female'}`}>
+                          <span className={`sex-badge ${(res.s || '').toLowerCase().includes('lgbt') ? 'lgbt' : (res.s || '').toLowerCase() === 'm' || (res.s || '').toLowerCase() === 'male' ? 'male' : 'female'}`}>
                             {res.s || '—'}
                           </span>
                         </td>

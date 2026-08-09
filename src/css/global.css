@@ -155,6 +155,72 @@ img {
   transform: scale(1.05);
 }
 
+/* UPPER RIGHT FLOATING USER PROFILE BADGE */
+.top-right-user-profile {
+  position: fixed;
+  top: 18px;
+  right: 28px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 7px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(93, 135, 255, 0.25);
+  border-radius: 50px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+  transition: all 0.25s ease;
+}
+
+.top-right-user-profile:hover {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 6px 22px rgba(93, 135, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.top-right-user-profile .user-avatar-initials {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5d87ff 0%, #3b82f6 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 3px 8px rgba(93, 135, 255, 0.35);
+  flex-shrink: 0;
+}
+
+.top-right-user-profile .user-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.top-right-user-profile .user-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--gray-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  line-height: 1.2;
+}
+
+.top-right-user-profile .user-role-badge {
+  font-size: 9.5px;
+  color: var(--primary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .nav-menu .label {
   font-size: 10px;
   padding: 0 24px;
@@ -249,12 +315,16 @@ img {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   color: var(--primary);
-  padding: 18px 24px;
+  padding: 14px 24px;
   border-radius: var(--radius-lg);
-  text-align: center;
   margin-bottom: 22px;
   box-shadow: var(--card-shadow);
   border: 1px solid rgba(44, 82, 130, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  flex-wrap: wrap;
 }
 
 .main-header h1 {
@@ -262,6 +332,61 @@ img {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 1.5px;
+  margin: 0;
+}
+
+/* HEADER USER PROFILE BADGE */
+.header-user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px 5px 6px;
+  background: rgba(93, 135, 255, 0.08);
+  border: 1px solid rgba(93, 135, 255, 0.2);
+  border-radius: 40px;
+  transition: all 0.2s ease;
+}
+
+.header-user-profile:hover {
+  background: rgba(93, 135, 255, 0.14);
+}
+
+.header-user-profile .user-avatar-initials {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5d87ff 0%, #3b82f6 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 3px 8px rgba(93, 135, 255, 0.35);
+  flex-shrink: 0;
+}
+
+.header-user-profile .user-details {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.header-user-profile .user-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--gray-800);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.header-user-profile .user-role-badge {
+  font-size: 9.5px;
+  color: var(--primary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* ---- RESPONSIVE UTILITIES ---- */

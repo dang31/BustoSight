@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import Sidebar from '../components/Sidebar';
+import UserProfileBadge from '../components/UserProfileBadge';
 import { supabase } from '../lib/supabase';
 import '../css/UploadData.css';
 
@@ -477,6 +478,11 @@ export default function UploadData() {
       <Sidebar />
 
       <main className="content">
+        <header className="main-header">
+          <h1>Excel Demographic Data Upload</h1>
+          <UserProfileBadge />
+        </header>
+
         <div className="upload-card-container">
           <div className="upload-blue-header animate-fade-up">
             <h1>Excel Demographic Data Upload</h1>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
+import UserProfileBadge from '../components/UserProfileBadge';
 import { supabase } from '../lib/supabase';
 import { barangayNames } from '../data/brgyData';
 import '../css/Reports.css';
@@ -324,6 +325,7 @@ export default function Reports() {
       <main className="content">
         <header className="main-header">
           <h1>Bustos Population Reports</h1>
+          <UserProfileBadge />
         </header>
 
         <div className="report-card animate-fade-up">

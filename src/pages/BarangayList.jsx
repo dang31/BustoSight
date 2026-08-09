@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import UserProfileBadge from "../components/UserProfileBadge";
 import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/BarangayList.css";
@@ -519,6 +520,7 @@ export default function BarangayList() {
       <main className="content">
         <header className="main-header">
           <h1>Barangay {activeBrgy}</h1>
+          <UserProfileBadge />
         </header>
 
         <div className="main-layout">
@@ -610,7 +612,7 @@ export default function BarangayList() {
                     <th className="text-left col-tablet-hide">BIRTH PLACE</th>
                     <th className="text-center col-mobile-hide">BIRTH DATE</th>
                     <th className="text-center">AGE</th>
-                    <th className="text-center">SEX</th>
+                    <th className="text-center">GENDER</th>
                     <th className="text-center">CIVIL STATUS</th>
                     <th className="text-left col-tablet-hide">CITIZENSHIP</th>
                     <th className="text-left col-mobile-hide">OCCUPATION</th>
@@ -689,7 +691,7 @@ export default function BarangayList() {
                           </td>
                           <td className="text-center">
                             <span
-                              className={`sex-badge ${(res.s || "").toLowerCase() === "m" || (res.s || "").toLowerCase() === "male" ? "male" : "female"}`}
+                              className={`sex-badge ${(res.s || "").toLowerCase().includes("lgbt") ? "lgbt" : (res.s || "").toLowerCase() === "m" || (res.s || "").toLowerCase() === "male" ? "male" : "female"}`}
                             >
                               {res.s || "—"}
                             </span>
@@ -876,7 +878,7 @@ export default function BarangayList() {
                   <tr>
                     <th>FULL NAME</th>
                     <th>RELATION</th>
-                    <th>SEX</th>
+                    <th>GENDER</th>
                     <th>BIRTHDAY</th>
                     <th>OCCUPATION</th>
                     <th>VOTER?</th>

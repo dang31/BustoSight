@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
+import UserProfileBadge from "../components/UserProfileBadge";
 import { supabase } from "../lib/supabase";
 import ResetStaffPasswordModal from "../components/Admin/ResetStaffPasswordModal";
 import "../css/ManageAccounts.css";
@@ -773,6 +774,7 @@ export default function ManageAccounts() {
         {/* Header */}
         <header className="main-header">
           <h1>Account Lifecycle & Access Control Management</h1>
+          <UserProfileBadge />
         </header>
 
         {/* Stat Cards */}
