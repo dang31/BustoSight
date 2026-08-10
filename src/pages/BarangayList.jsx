@@ -16,7 +16,29 @@ export default function BarangayList() {
   const [allRecords, setAllRecords] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-  const [selectedYear, setSelectedYear] = useState("all");
+  const [selectedYear, setSelectedYear] = useState(
+    new Date().getFullYear().toString(),
+  );
+
+  useEffect(() => {
+    async function fetchLatestYear() {
+      try {
+        const { data } = await supabase
+          .from("residents")
+          .select("data_year")
+          .not("data_year", "is", null)
+          .order("data_year", { ascending: false })
+          .limit(1);
+
+        if (data && data.length > 0 && data[0].data_year) {
+          setSelectedYear(data[0].data_year.toString());
+        }
+      } catch (err) {
+        console.error("Error fetching latest year:", err);
+      }
+    }
+    fetchLatestYear();
+  }, []);
   const [selectedHousehold, setSelectedHousehold] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
