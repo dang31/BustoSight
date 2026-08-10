@@ -6,6 +6,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
   const [hasAccess, setHasAccess] = useState(true);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   useEffect(() => {
     async function checkUser() {
@@ -16,25 +17,32 @@ export default function ProtectedRoute({ children, allowedRoles }) {
       setSession(session);
 
       if (session) {
-        const storedUser = localStorage.getItem('popdev_user');
-        if (storedUser) {
-          try {
-            const userProfile = JSON.parse(storedUser);
-            if (userProfile.archived || userProfile.status !== 'Active') {
-              await supabase.auth.signOut();
-              localStorage.removeItem('popdev_user');
-              setSession(null);
-              setLoading(false);
-              return;
-            }
-            if (allowedRoles && !allowedRoles.includes(userProfile.role)) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('must_change_password, role')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile?.must_change_password) {
+          setMustChangePassword(true);
+        }
+
+        if (allowedRoles) {
+          const storedUser = localStorage.getItem('popdev_user');
+          if (profile && !allowedRoles.includes(profile.role)) {
+            setHasAccess(false);
+          } else if (storedUser) {
+            try {
+              const userProfile = JSON.parse(storedUser);
+              if (!allowedRoles.includes(userProfile.role)) {
+                setHasAccess(false);
+              }
+            } catch (e) {
               setHasAccess(false);
             }
-          } catch (e) {
+          } else {
             setHasAccess(false);
           }
-        } else {
-          setHasAccess(false);
         }
       }
       setLoading(false);
@@ -55,6 +63,10 @@ export default function ProtectedRoute({ children, allowedRoles }) {
 
   if (!session) {
     return <Navigate to="/login" state={{ message: 'Please log in first to access this page.' }} replace />;
+  }
+
+  if (mustChangePassword) {
+    return <Navigate to="/force-password-change" replace />;
   }
 
   if (!hasAccess) {

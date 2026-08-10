@@ -8,6 +8,7 @@ import Reports from './pages/Reports';
 import ManageAccounts from './pages/ManageAccounts';
 import ArchiveResidents from './pages/ArchiveResidents';
 import UploadData from './pages/UploadData';
+import ForcePasswordChange from './pages/ForcePasswordChange';
 import ProtectedRoute from './ProtectedRoutes/ProtectedRoute';
 import './css/global.css';
 
@@ -18,6 +19,7 @@ function App() {
         {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/force-password-change" element={<ForcePasswordChange />} />
 
         {/* Protected routes */}
         <Route path="/dashboard" element={
@@ -29,7 +31,7 @@ function App() {
         <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
         <Route path="/manage-accounts" element={<ProtectedRoute allowedRoles={['Admin', 'Administrator']}><ManageAccounts /></ProtectedRoute>} />
         <Route path="/archive" element={<ProtectedRoute><ArchiveResidents /></ProtectedRoute>} />
-        <Route path="/upload" element={<ProtectedRoute allowedRoles={['Admin', 'Administrator']}><UploadData /></ProtectedRoute>} />
+        <Route path="/upload" element={<ProtectedRoute allowedRoles={['Admin', 'Administrator', 'Staff']}><UploadData /></ProtectedRoute>} />
       </Routes>
     </Router>
   ); 
