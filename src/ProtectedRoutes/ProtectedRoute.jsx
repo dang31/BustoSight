@@ -15,12 +15,19 @@ export default function ProtectedRoute({ children, allowedRoles }) {
 
       setSession(session);
 
-      if (session && allowedRoles) {
+      if (session) {
         const storedUser = localStorage.getItem('popdev_user');
         if (storedUser) {
           try {
             const userProfile = JSON.parse(storedUser);
-            if (!allowedRoles.includes(userProfile.role)) {
+            if (userProfile.archived || userProfile.status !== 'Active') {
+              await supabase.auth.signOut();
+              localStorage.removeItem('popdev_user');
+              setSession(null);
+              setLoading(false);
+              return;
+            }
+            if (allowedRoles && !allowedRoles.includes(userProfile.role)) {
               setHasAccess(false);
             }
           } catch (e) {

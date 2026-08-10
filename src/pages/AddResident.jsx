@@ -591,9 +591,9 @@ export default function AddResident() {
       <div className="overlay" />
       <Sidebar />
 
-      <main className="content">
+      <main className="content add-resident-content">
         <header className="main-header">
-          <h1>{currentStep === 4 ? "Review Registration Details" : "Add Resident Form"}</h1>
+          <h1>Resident Registration Portal</h1>
           <UserProfileBadge />
         </header>
 
@@ -619,11 +619,17 @@ export default function AddResident() {
               justifyContent: "space-between",
             }}
           >
-            <h1>
-              {currentStep === 4
-                ? "Review Registration Details"
-                : "Add Resident Form"}
-            </h1>
+            <div>
+              <h1 style={{ margin: 0, fontSize: "18px", textTransform: "none", letterSpacing: "0.3px" }}>
+                {currentStep === 1
+                  ? "Step 1: Household & Location Details"
+                  : currentStep === 2
+                    ? "Step 2: Household Head Profile"
+                    : currentStep === 3
+                      ? "Step 3: Family Members & Dependents"
+                      : "Step 4: Summary & Verification Review"}
+              </h1>
+            </div>
 
             <button
               type="button"

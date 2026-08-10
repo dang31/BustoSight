@@ -218,7 +218,7 @@ export default function Dashboard() {
       try {
         const targetYearArg = selectedYear === "all" ? null : Number(selectedYear);
         const { data, error } = await supabase.rpc('get_dashboard_stats', { target_year: targetYearArg });
-        
+
         if (error) {
           throw error;
         }
@@ -642,12 +642,12 @@ export default function Dashboard() {
 
   const renderBarangayAnalysis = () => {
     const headers = [
-      { label: "Barangay", key: "name", align: "left" },
-      { label: "Population", key: "count", align: "right" },
-      { label: "Households", key: "households", align: "right" },
-      { label: "Senior Citizens", key: "seniors", align: "right" },
-      { label: "PWD", key: "pwd", align: "right" },
-      { label: "Registered Voters", key: "voters", align: "right" },
+      { label: "Barangay", key: "name", align: "left", width: "22%" },
+      { label: "Population", key: "count", align: "right", width: "15%" },
+      { label: "Households", key: "households", align: "right", width: "15%" },
+      { label: "Senior Citizens", key: "seniors", align: "right", width: "16%" },
+      { label: "PWD", key: "pwd", align: "right", width: "14%" },
+      { label: "Registered Voters", key: "voters", align: "right", width: "18%" },
     ];
 
     return (
@@ -698,7 +698,7 @@ export default function Dashboard() {
                     <th
                       key={h.key}
                       onClick={() => handleSort(h.key)}
-                      style={{ textAlign: h.align }}
+                      style={{ textAlign: h.align, width: h.width }}
                       className={`sortable-header ${brgySort.key === h.key ? "active" : ""}`}
                     >
                       <span className="header-text">{h.label}</span>
@@ -1098,10 +1098,10 @@ export default function Dashboard() {
               </span>
             )}
           </div>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-            <div 
-              className="year-selector" 
+            <div
+              className="year-selector"
               ref={dropdownRef}
               style={{ position: 'relative', background: 'rgba(93,135,255,0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(93,135,255,0.2)', cursor: 'pointer', minWidth: '130px' }}
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -1113,23 +1113,23 @@ export default function Dashboard() {
               </div>
 
               {isDropdownOpen && (
-                <div style={{ 
-                  position: 'absolute', 
-                  top: '100%', 
-                  left: 0, 
-                  right: 0, 
-                  marginTop: '8px', 
-                  background: 'white', 
-                  borderRadius: '8px', 
-                  boxShadow: '0 10px 25px rgba(0,0,0,0.15)', 
-                  overflow: 'hidden', 
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  marginTop: '8px',
+                  background: 'white',
+                  borderRadius: '8px',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                  overflow: 'hidden',
                   zIndex: 1000,
                   border: '1px solid var(--gray-200)'
                 }}>
                   {["all", ...Array.from(new Set([new Date().getFullYear(), ...yearlyPopData.map(d => d.year)])).sort((a, b) => b - a)].map(y => {
                     const displayValue = y === "all" ? "All Time" : String(y);
                     return (
-                      <div 
+                      <div
                         key={y}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1138,11 +1138,11 @@ export default function Dashboard() {
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.background = '#f0f7ff'}
                         onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-                        style={{ 
-                          padding: '10px 15px', 
-                          fontSize: '14px', 
-                          fontWeight: selectedYear === String(y) ? '700' : '500', 
-                          color: selectedYear === String(y) ? 'var(--primary)' : 'var(--gray-700)', 
+                        style={{
+                          padding: '10px 15px',
+                          fontSize: '14px',
+                          fontWeight: selectedYear === String(y) ? '700' : '500',
+                          color: selectedYear === String(y) ? 'var(--primary)' : 'var(--gray-700)',
                           background: 'white',
                           cursor: 'pointer',
                           transition: 'background 0.2s',
