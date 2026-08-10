@@ -72,16 +72,47 @@
   letter-spacing: 1px;
 }
 
-.form-white-body {
-  padding: 30px;
-  max-height: calc(100vh - 260px);
+/* Fixed Header Layout for Add Resident Page */
+.add-resident-content {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden !important;
+  padding-bottom: 24px;
+}
+
+.add-resident-content .main-header {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+.add-resident-content .step-wrapper {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+.add-resident-content .form-card-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.add-resident-content .form-blue-header {
+  flex-shrink: 0;
+}
+
+.add-resident-content .form-white-body {
+  flex: 1;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  max-height: none;
+  padding: 24px 30px;
 }
 
 .form-white-body.step-4-static {
-  max-height: none;
-  overflow-y: visible;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .form-warning {

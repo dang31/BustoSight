@@ -561,18 +561,22 @@ export default function ManageAccounts() {
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ archived: true, updated_at: new Date().toISOString() })
+        .update({
+          archived: true,
+          status: "Inactive",
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", account.id);
 
       if (error) throw error;
       fetchAccounts();
-      showToast("Account moved to Archive.", "info");
+      showToast("Account archived and deactivated.", "info");
     } catch (err) {
       const updated = accounts.map((a) =>
-        a.id === account.id ? { ...a, archived: true } : a,
+        a.id === account.id ? { ...a, archived: true, status: "Inactive" } : a,
       );
       updateAccountsState(updated);
-      showToast("Account moved to Archive.", "info");
+      showToast("Account archived and deactivated.", "info");
     } finally {
       setIsLoading(false);
       closeModal();
@@ -585,18 +589,22 @@ export default function ManageAccounts() {
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ archived: false, updated_at: new Date().toISOString() })
+        .update({
+          archived: false,
+          status: "Active",
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", account.id);
 
       if (error) throw error;
       fetchAccounts();
-      showToast("Account restored to Active list.", "success");
+      showToast("Account restored and activated.", "success");
     } catch (err) {
       const updated = accounts.map((a) =>
-        a.id === account.id ? { ...a, archived: false } : a,
+        a.id === account.id ? { ...a, archived: false, status: "Active" } : a,
       );
       updateAccountsState(updated);
-      showToast("Account restored to Active list.", "success");
+      showToast("Account restored and activated.", "success");
     } finally {
       setIsLoading(false);
       closeModal();
@@ -629,7 +637,6 @@ export default function ManageAccounts() {
   const handleExecuteBulkAction = async (action) => {
     if (selectedIds.length === 0) return;
     setIsLoading(true);
-
     try {
       if (action === "activate") {
         await supabase
@@ -646,9 +653,12 @@ export default function ManageAccounts() {
       } else if (action === "archive") {
         await supabase
           .from("profiles")
-          .update({ archived: true })
+          .update({ archived: true, status: "Inactive" })
           .in("id", selectedIds);
-        showToast(`${selectedIds.length} account(s) archived.`, "info");
+        showToast(
+          `${selectedIds.length} account(s) archived and deactivated.`,
+          "info",
+        );
       } else if (action === "delete") {
         await supabase.from("profiles").delete().in("id", selectedIds);
         showToast(
@@ -669,7 +679,9 @@ export default function ManageAccounts() {
         );
       } else if (action === "archive") {
         updated = updated.map((a) =>
-          selectedIds.includes(a.id) ? { ...a, archived: true } : a,
+          selectedIds.includes(a.id)
+            ? { ...a, archived: true, status: "Inactive" }
+            : a,
         );
       } else if (action === "delete") {
         updated = updated.filter((a) => !selectedIds.includes(a.id));

@@ -9,16 +9,16 @@
 }
 
 .upload-blue-header {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 40%, #5d89c7 100%);
   color: white;
-  padding: 24px 30px;
+  padding: 22px 28px;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   box-shadow: var(--shadow-sm);
-  border-bottom: 3px solid var(--primary-light);
+  border-bottom: 3px solid #14b8a6;
 }
 
 .upload-blue-header h1 {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
@@ -54,7 +54,8 @@
   margin-bottom: 24px;
 }
 
-.drop-zone:hover, .drop-zone.dragging {
+.drop-zone:hover,
+.drop-zone.dragging {
   border-color: var(--primary-light);
   background: rgba(74, 141, 240, 0.05);
 }
@@ -117,7 +118,8 @@
 
 .excel-icon {
   font-size: 28px;
-  color: #1d6f42; /* Excel green */
+  color: #1d6f42;
+  /* Excel green */
 }
 
 .file-details h4 {
@@ -208,9 +210,17 @@
   justify-content: space-between;
 }
 
-.log-success { color: var(--green); }
-.log-error { color: var(--red); }
-.log-info { color: var(--accent); }
+.log-success {
+  color: var(--green);
+}
+
+.log-error {
+  color: var(--red);
+}
+
+.log-info {
+  color: var(--accent);
+}
 
 /* Import Summary Report */
 .summary-container {
@@ -314,7 +324,8 @@
   transform: translateY(-1px);
 }
 
-.btn-upload-submit:disabled, .btn-cancel:disabled {
+.btn-upload-submit:disabled,
+.btn-cancel:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -352,6 +363,13 @@
 
 /* Floating animation */
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
 }
