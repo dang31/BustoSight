@@ -34,10 +34,10 @@
   position: fixed;
   inset: 0;
   background: linear-gradient(
-    160deg,
-    rgba(10, 25, 60, 0.88) 0%,
-    rgba(26, 60, 120, 0.65) 60%,
-    rgba(0, 0, 0, 0.5) 100%
+    135deg,
+    rgba(145, 195, 245, 0.88) 0%,
+    rgba(90, 155, 225, 0.78) 50%,
+    rgba(35, 95, 175, 0.72) 100%
   );
   z-index: -1;
 }
@@ -80,7 +80,7 @@
   line-height: 1.1;
   letter-spacing: 1px;
   margin-bottom: 8px;
-  text-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .landing-content h2 {
@@ -137,7 +137,7 @@
 }
 
 .landing-learn-more {
-  color: rgba(255,255,255,0.85);
+  color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
   font-size: 0.95rem;
   border-bottom: 1px solid transparent;
@@ -148,7 +148,7 @@
 .landing-learn-more:hover {
   color: white;
   border-bottom-color: white;
-  text-shadow: 0 0 12px rgba(255,255,255,0.4);
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
 }
 
 /* Footer */
@@ -180,9 +180,11 @@
   .landing-logos {
     gap: 16px;
   }
+
   .landing-logo {
     height: 60px;
   }
+
   .btn-landing-login {
     padding: 14px 60px;
   }
