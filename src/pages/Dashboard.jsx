@@ -14,6 +14,7 @@ import {
 } from "chart.js";
 import { Bar, Line, Pie } from "react-chartjs-2";
 import Sidebar from "../components/Sidebar";
+import UserProfileBadge from "../components/UserProfileBadge";
 import { supabase } from "../lib/supabase";
 import "../css/Dashboard.css";
 
@@ -174,6 +175,7 @@ export default function Dashboard() {
     total4ps: 0,
     maleCount: 0,
     femaleCount: 0,
+    lgbtCount: 0,
     childrenCount: 0,
     workingAgeCount: 0,
     seniorCount: 0,
@@ -216,12 +218,33 @@ export default function Dashboard() {
       try {
         const targetYearArg = selectedYear === "all" ? null : Number(selectedYear);
         const { data, error } = await supabase.rpc('get_dashboard_stats', { target_year: targetYearArg });
-        
+
         if (error) {
           throw error;
         }
 
         if (data) {
+          let lgbtVal = data.global?.lgbtCount;
+          if (lgbtVal === undefined) {
+            try {
+              let lgbtQuery = supabase
+                .from("residents")
+                .select("id", { count: "exact", head: true })
+                .eq("is_archived", false)
+                .ilike("sex", "%LGBT%");
+
+              if (targetYearArg) {
+                lgbtQuery = lgbtQuery.eq("data_year", targetYearArg);
+              }
+
+              const { count: lgbtCountResult } = await lgbtQuery;
+              lgbtVal = lgbtCountResult || 0;
+            } catch (lgbtErr) {
+              console.error("Error fetching LGBT count fallback:", lgbtErr);
+              lgbtVal = 0;
+            }
+          }
+
           setStats({
             totalPopulation: data.global?.totalPopulation || 0,
             totalHouseholds: data.global?.totalHouseholds || 0,
@@ -232,6 +255,7 @@ export default function Dashboard() {
             total4ps: data.global?.total4ps || 0,
             maleCount: data.global?.maleCount || 0,
             femaleCount: data.global?.femaleCount || 0,
+            lgbtCount: lgbtVal,
             childrenCount: data.global?.childrenCount || 0,
             workingAgeCount: data.global?.workingAgeCount || 0,
             seniorCount: data.global?.seniorCount || 0,
@@ -361,11 +385,11 @@ export default function Dashboard() {
   };
 
   const pieChartData = {
-    labels: ["Male", "Female"],
+    labels: ["Male", "Female", "LGBTQ+"],
     datasets: [
       {
-        data: [stats.maleCount, stats.femaleCount],
-        backgroundColor: ["#5d87ff", "#ff85a2"],
+        data: [stats.maleCount, stats.femaleCount, stats.lgbtCount],
+        backgroundColor: ["#5d87ff", "#ff85a2", "#a855f7"],
         borderWidth: 0,
       },
     ],
@@ -522,6 +546,7 @@ export default function Dashboard() {
       body: [
         { label: "Male:", value: stats.maleCount.toLocaleString() },
         { label: "Female:", value: stats.femaleCount.toLocaleString() },
+        { label: "LGBTQ+:", value: stats.lgbtCount.toLocaleString() },
       ],
       footer:
         "Gender distribution of the current resident population from the uploaded demographic data.",
@@ -617,12 +642,12 @@ export default function Dashboard() {
 
   const renderBarangayAnalysis = () => {
     const headers = [
-      { label: "Barangay", key: "name", align: "left" },
-      { label: "Population", key: "count", align: "right" },
-      { label: "Households", key: "households", align: "right" },
-      { label: "Senior Citizens", key: "seniors", align: "right" },
-      { label: "PWD", key: "pwd", align: "right" },
-      { label: "Registered Voters", key: "voters", align: "right" },
+      { label: "Barangay", key: "name", align: "left", width: "22%" },
+      { label: "Population", key: "count", align: "right", width: "15%" },
+      { label: "Households", key: "households", align: "right", width: "15%" },
+      { label: "Senior Citizens", key: "seniors", align: "right", width: "16%" },
+      { label: "PWD", key: "pwd", align: "right", width: "14%" },
+      { label: "Registered Voters", key: "voters", align: "right", width: "18%" },
     ];
 
     return (
@@ -673,7 +698,7 @@ export default function Dashboard() {
                     <th
                       key={h.key}
                       onClick={() => handleSort(h.key)}
-                      style={{ textAlign: h.align }}
+                      style={{ textAlign: h.align, width: h.width }}
                       className={`sortable-header ${brgySort.key === h.key ? "active" : ""}`}
                     >
                       <span className="header-text">{h.label}</span>
@@ -1073,65 +1098,69 @@ export default function Dashboard() {
               </span>
             )}
           </div>
-          
-          <div 
-            className="year-selector" 
-            ref={dropdownRef}
-            style={{ position: 'relative', background: 'rgba(93,135,255,0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(93,135,255,0.2)', cursor: 'pointer', minWidth: '130px' }}
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          >
-            <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary-dark)', display: 'block', marginBottom: '2px', cursor: 'pointer', fontWeight: '700' }}>Data Year</label>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'var(--primary)', fontSize: '15px', fontWeight: 'bold' }}>{selectedYear === "all" ? "All Time" : selectedYear}</span>
-              <i className={`fas fa-chevron-${isDropdownOpen ? 'up' : 'down'}`} style={{ color: 'var(--primary)', opacity: 0.7, fontSize: '12px', marginLeft: '10px' }}></i>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+            <div
+              className="year-selector"
+              ref={dropdownRef}
+              style={{ position: 'relative', background: 'rgba(93,135,255,0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(93,135,255,0.2)', cursor: 'pointer', minWidth: '130px' }}
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            >
+              <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary-dark)', display: 'block', marginBottom: '2px', cursor: 'pointer', fontWeight: '700' }}>Data Year</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--primary)', fontSize: '15px', fontWeight: 'bold' }}>{selectedYear === "all" ? "All Time" : selectedYear}</span>
+                <i className={`fas fa-chevron-${isDropdownOpen ? 'up' : 'down'}`} style={{ color: 'var(--primary)', opacity: 0.7, fontSize: '12px', marginLeft: '10px' }}></i>
+              </div>
+
+              {isDropdownOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  marginTop: '8px',
+                  background: 'white',
+                  borderRadius: '8px',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                  overflow: 'hidden',
+                  zIndex: 1000,
+                  border: '1px solid var(--gray-200)'
+                }}>
+                  {["all", ...Array.from(new Set([new Date().getFullYear(), ...yearlyPopData.map(d => d.year)])).sort((a, b) => b - a)].map(y => {
+                    const displayValue = y === "all" ? "All Time" : String(y);
+                    return (
+                      <div
+                        key={y}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedYear(String(y));
+                          setIsDropdownOpen(false);
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#f0f7ff'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                        style={{
+                          padding: '10px 15px',
+                          fontSize: '14px',
+                          fontWeight: selectedYear === String(y) ? '700' : '500',
+                          color: selectedYear === String(y) ? 'var(--primary)' : 'var(--gray-700)',
+                          background: 'white',
+                          cursor: 'pointer',
+                          transition: 'background 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        {displayValue}
+                        {selectedYear === String(y) && <i className="fas fa-check" style={{ fontSize: '12px' }}></i>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {isDropdownOpen && (
-              <div style={{ 
-                position: 'absolute', 
-                top: '100%', 
-                left: 0, 
-                right: 0, 
-                marginTop: '8px', 
-                background: 'white', 
-                borderRadius: '8px', 
-                boxShadow: '0 10px 25px rgba(0,0,0,0.15)', 
-                overflow: 'hidden', 
-                zIndex: 1000,
-                border: '1px solid var(--gray-200)'
-              }}>
-                {["all", ...Array.from(new Set([new Date().getFullYear(), ...yearlyPopData.map(d => d.year)])).sort((a, b) => b - a)].map(y => {
-                  const displayValue = y === "all" ? "All Time" : String(y);
-                  return (
-                    <div 
-                      key={y}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedYear(String(y));
-                        setIsDropdownOpen(false);
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#f0f7ff'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-                      style={{ 
-                        padding: '10px 15px', 
-                        fontSize: '14px', 
-                        fontWeight: selectedYear === String(y) ? '700' : '500', 
-                        color: selectedYear === String(y) ? 'var(--primary)' : 'var(--gray-700)', 
-                        background: 'white',
-                        cursor: 'pointer',
-                        transition: 'background 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}
-                    >
-                      {displayValue}
-                      {selectedYear === String(y) && <i className="fas fa-check" style={{ fontSize: '12px' }}></i>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <UserProfileBadge />
           </div>
         </header>
 
@@ -1141,25 +1170,25 @@ export default function Dashboard() {
             className={`tab-btn ${activeTab === "overview" ? "active" : ""}`}
             onClick={() => setActiveTab("overview")}
           >
-            📊 Overview
+            Overview
           </button>
           <button
             className={`tab-btn ${activeTab === "barangay" ? "active" : ""}`}
             onClick={() => setActiveTab("barangay")}
           >
-            🏘️ Barangay Analysis
+            Barangay Analysis
           </button>
           <button
             className={`tab-btn ${activeTab === "demographics" ? "active" : ""}`}
             onClick={() => setActiveTab("demographics")}
           >
-            👥 Demographics
+            Demographics
           </button>
           <button
             className={`tab-btn ${activeTab === "forecast" ? "active" : ""}`}
             onClick={() => setActiveTab("forecast")}
           >
-            📈 Projections
+            Projections
           </button>
         </div>
 

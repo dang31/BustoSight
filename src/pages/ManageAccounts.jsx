@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
+import UserProfileBadge from "../components/UserProfileBadge";
 import { supabase } from "../lib/supabase";
 import ResetStaffPasswordModal from "../components/Admin/ResetStaffPasswordModal";
 import "../css/ManageAccounts.css";
@@ -119,6 +120,7 @@ const CustomDropdown = ({
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
       </div>
+
 
       {isOpen && (
         <div
@@ -632,18 +634,22 @@ export default function ManageAccounts() {
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ archived: true, updated_at: new Date().toISOString() })
+        .update({
+          archived: true,
+          status: "Inactive",
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", account.id);
 
       if (error) throw error;
       fetchAccounts();
-      showToast("Account moved to Archive.", "info");
+      showToast("Account archived and deactivated.", "info");
     } catch (err) {
       const updated = accounts.map((a) =>
-        a.id === account.id ? { ...a, archived: true } : a,
+        a.id === account.id ? { ...a, archived: true, status: "Inactive" } : a,
       );
       updateAccountsState(updated);
-      showToast("Account moved to Archive.", "info");
+      showToast("Account archived and deactivated.", "info");
     } finally {
       setIsLoading(false);
       closeModal();
@@ -656,18 +662,22 @@ export default function ManageAccounts() {
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ archived: false, updated_at: new Date().toISOString() })
+        .update({
+          archived: false,
+          status: "Active",
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", account.id);
 
       if (error) throw error;
       fetchAccounts();
-      showToast("Account restored to Active list.", "success");
+      showToast("Account restored and activated.", "success");
     } catch (err) {
       const updated = accounts.map((a) =>
-        a.id === account.id ? { ...a, archived: false } : a,
+        a.id === account.id ? { ...a, archived: false, status: "Active" } : a,
       );
       updateAccountsState(updated);
-      showToast("Account restored to Active list.", "success");
+      showToast("Account restored and activated.", "success");
     } finally {
       setIsLoading(false);
       closeModal();
@@ -700,7 +710,6 @@ export default function ManageAccounts() {
   const handleExecuteBulkAction = async (action) => {
     if (selectedIds.length === 0) return;
     setIsLoading(true);
-
     try {
       if (action === "activate") {
         await supabase
@@ -717,9 +726,12 @@ export default function ManageAccounts() {
       } else if (action === "archive") {
         await supabase
           .from("profiles")
-          .update({ archived: true })
+          .update({ archived: true, status: "Inactive" })
           .in("id", selectedIds);
-        showToast(`${selectedIds.length} account(s) archived.`, "info");
+        showToast(
+          `${selectedIds.length} account(s) archived and deactivated.`,
+          "info",
+        );
       } else if (action === "delete") {
         await supabase.from("profiles").delete().in("id", selectedIds);
         showToast(
@@ -740,7 +752,9 @@ export default function ManageAccounts() {
         );
       } else if (action === "archive") {
         updated = updated.map((a) =>
-          selectedIds.includes(a.id) ? { ...a, archived: true } : a,
+          selectedIds.includes(a.id)
+            ? { ...a, archived: true, status: "Inactive" }
+            : a,
         );
       } else if (action === "delete") {
         updated = updated.filter((a) => !selectedIds.includes(a.id));
@@ -845,6 +859,7 @@ export default function ManageAccounts() {
         {/* Header */}
         <header className="main-header">
           <h1>Account Lifecycle & Access Control Management</h1>
+          <UserProfileBadge />
         </header>
 
         {/* Stat Cards */}
@@ -1029,18 +1044,6 @@ export default function ManageAccounts() {
                         </button>
                       </>
                     )}
-                    <button
-                      className="btn-bulk btn-bulk-delete"
-                      onClick={() =>
-                        openConfirmModal(
-                          "bulk-delete",
-                          null,
-                          `PERMANENT ACTION: Are you sure you want to permanently delete ${selectedIds.length} selected account(s)?`,
-                        )
-                      }
-                    >
-                      Delete Selected
-                    </button>
                   </div>
                 </div>
               )}
@@ -1170,8 +1173,8 @@ export default function ManageAccounts() {
                                     Added{" "}
                                     {acc.created_at
                                       ? new Date(
-                                          acc.created_at,
-                                        ).toLocaleDateString()
+                                        acc.created_at,
+                                      ).toLocaleDateString()
                                       : "N/A"}
                                   </div>
                                 </div>
@@ -1737,7 +1740,7 @@ export default function ManageAccounts() {
                   >
                     Change Password
                   </button> */}
-                  {modalState.data?.role === "Staff" && (
+                  {modalState.data?.role === 'Staff' && (
                     <button
                       type="button"
                       onClick={() =>

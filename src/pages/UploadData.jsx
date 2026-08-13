@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import Sidebar from '../components/Sidebar';
+import UserProfileBadge from '../components/UserProfileBadge';
 import { supabase } from '../lib/supabase';
 import '../css/UploadData.css';
 
@@ -477,10 +478,17 @@ export default function UploadData() {
       <Sidebar />
 
       <main className="content">
+        <header className="main-header">
+          <h1>Demographic Data Import Portal</h1>
+          <UserProfileBadge />
+        </header>
+
         <div className="upload-card-container">
           <div className="upload-blue-header animate-fade-up">
-            <h1>Excel Demographic Data Upload</h1>
-            <p>Upload the voters demographic Excel file to populate the Supabase database. The sheet names in the workbook must match the barangay names.</p>
+            <h1 style={{ margin: 0, fontSize: "19px" }}>Excel Batch Upload Portal</h1>
+            <p style={{ margin: "4px 0 0", fontSize: "12.5px", opacity: 0.9 }}>
+              Upload demographic Excel workbooks (.xlsx / .xls) to populate database records. Workbook sheet names must correspond to official Bustos barangay names.
+            </p>
           </div>
 
           <div className="upload-white-body animate-fade-up">
@@ -635,8 +643,8 @@ export default function UploadData() {
                   {isUploading
                     ? 'Uploading...'
                     : !dataYear
-                    ? 'Select a Data Year to Continue'
-                    : `Upload ${totalRowsToUpload} Records (${dataYear})`}
+                      ? 'Select a Data Year to Continue'
+                      : `Upload ${totalRowsToUpload} Records (${dataYear})`}
                 </button>
               )}
             </div>

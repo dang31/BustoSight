@@ -16,7 +16,7 @@ export default function LoginPage() {
     if (location.state?.message) {
       setToast({ message: location.state.message, type: 'error' });
       setTimeout(() => setToast(null), 3500);
-      
+
       // Clear state so it doesn't reappear on refresh
       navigate(location.pathname, { replace: true });
     }
@@ -38,7 +38,7 @@ export default function LoginPage() {
           .select('email')
           .eq('username', username)
           .single();
-        
+
         if (profileData && profileData.email) {
           loginEmail = profileData.email;
         } else {
@@ -53,21 +53,34 @@ export default function LoginPage() {
       });
 
       if (authError || !authData.user) {
+        // Check local storage accounts fallback for testing
+        const localUsers = JSON.parse(localStorage.getItem('popdevUsers')) || [];
+        const localMatch = localUsers.find(
+          (u) =>
+            (u.username || '').toLowerCase() === username.toLowerCase() ||
+            (u.email || '').toLowerCase() === username.toLowerCase()
+        );
+
+        if (localMatch && (localMatch.archived || localMatch.status !== 'Active')) {
+          setErrorMsg('Your account is deactivated. Contact the admin to activate it.');
+          return;
+        }
+
         setErrorMsg(authError?.message || 'Invalid username or password.');
         return;
       }
 
-      // Fetch the user's profile to check their status and roles
+      // Fetch the user's profile to check their status and archiving
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authData.user.id)
         .single();
 
-      if (profileError || !profile || profile.status !== 'Active') {
-        // If account is inactive or missing, log them out
+      if (profileError || !profile || profile.archived || profile.status !== 'Active') {
+        // If account is archived, inactive, or missing, log them out immediately
         await supabase.auth.signOut();
-        setErrorMsg('Your account is inactive or disabled.');
+        setErrorMsg('Your account is deactivated. Contact the admin to activate it.');
         return;
       }
 

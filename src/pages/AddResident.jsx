@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import UserProfileBadge from "../components/UserProfileBadge";
 import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/AddResident.css";
@@ -144,6 +145,13 @@ export default function AddResident() {
   };
 
   const handleHeadClassification = (field, checked) => {
+    if (field === "is_senior" && checked) {
+      const age = parseInt(head.age, 10);
+      if (!age || age < 60) {
+        alert("Senior Citizen classification requires age 60 or above.");
+        return;
+      }
+    }
     setHead((prev) => {
       const next = { ...prev, [field]: checked };
       if (field === "is_pwd" && !checked) next.has_pwd_id = false;
@@ -155,6 +163,13 @@ export default function AddResident() {
   };
 
   const updateMemberClassification = (index, field, checked) => {
+    if (field === "is_senior" && checked) {
+      const age = parseInt(members[index].age, 10);
+      if (!age || age < 60) {
+        alert("Senior Citizen classification requires age 60 or above.");
+        return;
+      }
+    }
     const newMembers = [...members];
     newMembers[index][field] = checked;
     if (field === "is_pwd" && !checked) newMembers[index].has_pwd_id = false;
@@ -317,6 +332,7 @@ export default function AddResident() {
     setFormWarning("");
     setIsLoading(true);
     try {
+      const currentYear = new Date().getFullYear();
       const common = {
         data_year: parseInt(household.data_year, 10),
         h_no: household.hh_num,
@@ -328,6 +344,7 @@ export default function AddResident() {
           household.residence_type === "Other"
             ? household.residence_type_other
             : household.residence_type,
+        data_year: currentYear,
       };
 
       const residentsToSave = [
@@ -404,6 +421,53 @@ export default function AddResident() {
         })),
       ];
 
+      // Check for duplicate residents in Supabase & Local Storage before saving
+      const allLocalRecords = JSON.parse(localStorage.getItem("tanawanData")) || [];
+
+      for (const r of residentsToSave) {
+        // 1. Check Supabase database
+        let query = supabase
+          .from("residents")
+          .select("id, last_name, first_name, is_archived, data_year")
+          .ilike("last_name", r.last_name.trim())
+          .ilike("first_name", r.first_name.trim())
+          .eq("barangay", r.barangay)
+          .eq("data_year", r.data_year);
+
+        const { data: existing, error: checkErr } = await query;
+
+        if (!checkErr && existing && existing.length > 0) {
+          const isArchived = existing.some((ex) => ex.is_archived);
+          const fullName = `${r.first_name} ${r.last_name}`;
+          const msg = isArchived
+            ? `Cannot save: Resident ${fullName} already exists in ${r.barangay} as an archived record for year ${r.data_year}.`
+            : `Cannot save: Resident ${fullName} already exists in ${r.barangay} for year ${r.data_year}.`;
+
+          setFormWarning(msg);
+          alert(msg);
+          setIsLoading(false);
+          return;
+        }
+
+        // 2. Check Local Storage
+        const localDup = allLocalRecords.find((rec) => {
+          const sameFirst = (rec.first || "").toLowerCase().trim() === r.first_name.toLowerCase().trim();
+          const sameLast = (rec.last || "").toLowerCase().trim() === r.last_name.toLowerCase().trim();
+          const sameBrgy = (rec.brgy || "").toLowerCase().trim() === r.barangay.toLowerCase().trim();
+          const sameYear = rec.dataYear ? parseInt(rec.dataYear, 10) === r.data_year : true;
+          return sameFirst && sameLast && sameBrgy && sameYear;
+        });
+
+        if (localDup) {
+          const fullName = `${r.first_name} ${r.last_name}`;
+          const msg = `Cannot save: Resident ${fullName} already exists in local storage for year ${r.data_year}.`;
+          setFormWarning(msg);
+          alert(msg);
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const { error } = await supabase
         .from("residents")
         .insert(residentsToSave);
@@ -452,6 +516,7 @@ export default function AddResident() {
         teenagePregnancy: r.teenage_pregnancy_case,
         teenageMother: r.current_teenage_mother,
         is4ps: r.is_4ps,
+        dataYear: r.data_year,
       }));
 
       localStorage.setItem(
@@ -463,6 +528,9 @@ export default function AddResident() {
       navigate("/barangay");
     } catch (err) {
       console.error("Error saving to Supabase:", err);
+      if (err.message && err.message.includes("already exists")) {
+        setFormWarning(err.message);
+      }
       alert("Failed to save to Supabase: " + err.message);
     } finally {
       setIsLoading(false);
@@ -531,7 +599,12 @@ export default function AddResident() {
       <div className="overlay" />
       <Sidebar />
 
-      <main className="content">
+      <main className="content add-resident-content">
+        <header className="main-header">
+          <h1>Resident Registration Portal</h1>
+          <UserProfileBadge />
+        </header>
+
         <div className="step-wrapper">
           {[1, 2, 3, 4].map((s) => (
             <div key={s} style={{ display: "contents" }}>
@@ -554,11 +627,17 @@ export default function AddResident() {
               justifyContent: "space-between",
             }}
           >
-            <h1>
-              {currentStep === 4
-                ? "Review Registration Details"
-                : "Add Resident Form"}
-            </h1>
+            <div>
+              <h1 style={{ margin: 0, fontSize: "18px", textTransform: "none", letterSpacing: "0.3px" }}>
+                {currentStep === 1
+                  ? "Step 1: Household & Location Details"
+                  : currentStep === 2
+                    ? "Step 2: Household Head Profile"
+                    : currentStep === 3
+                      ? "Step 3: Family Members & Dependents"
+                      : "Step 4: Summary & Verification Review"}
+              </h1>
+            </div>
 
             <button
               type="button"
@@ -836,7 +915,7 @@ export default function AddResident() {
                       />
                     </div>
                     <div className="field-group">
-                      <label>Sex</label>
+                      <label>Gender</label>
                       <select
                         className="modern-select"
                         value={head.sex}
@@ -1037,6 +1116,11 @@ export default function AddResident() {
                             <span className="class-label">Senior Citizen</span>
                           </label>
                         </div>
+                        {parseInt(head.age, 10) > 0 && parseInt(head.age, 10) < 60 && (
+                          <span style={{ color: "#ef4444", fontSize: "11px", marginTop: "4px", display: "block" }}>
+                            ⚠ Only applicable for age 60 and above.
+                          </span>
+                        )}
                         {head.is_senior && (
                           <div className="id-options animate-fade-in">
                             <label className="radio-container">
@@ -1459,7 +1543,7 @@ export default function AddResident() {
                                   style={{ marginTop: "15px" }}
                                 >
                                   <div className="field-group">
-                                    <label>Sex</label>
+                                    <label>Gender</label>
                                     <select
                                       className="modern-select"
                                       value={m.sex}
@@ -1700,6 +1784,11 @@ export default function AddResident() {
                                           </span>
                                         </label>
                                       </div>
+                                      {parseInt(m.age, 10) > 0 && parseInt(m.age, 10) < 60 && (
+                                        <span style={{ color: "#ef4444", fontSize: "11px", marginTop: "4px", display: "block" }}>
+                                          ⚠ Only applicable for age 60 and above.
+                                        </span>
+                                      )}
                                       {m.is_senior && (
                                         <div className="id-options animate-fade-in">
                                           <label className="radio-container">
@@ -1950,11 +2039,11 @@ export default function AddResident() {
                         <b>Classification:</b>{" "}
                         {[
                           head.is_senior &&
-                            `Senior Citizen (${head.has_senior_id ? "Has ID" : "No ID"})`,
+                          `Senior Citizen (${head.has_senior_id ? "Has ID" : "No ID"})`,
                           head.is_pwd &&
-                            `PWD (${head.has_pwd_id ? "Has ID" : "No ID"})`,
+                          `PWD (${head.has_pwd_id ? "Has ID" : "No ID"})`,
                           head.is_solo_parent &&
-                            `Solo Parent (${head.has_solo_parent_id ? "Has ID" : "No ID"})`,
+                          `Solo Parent (${head.has_solo_parent_id ? "Has ID" : "No ID"})`,
                         ]
                           .filter(Boolean)
                           .join(", ") || "Regular"}
@@ -2002,11 +2091,11 @@ export default function AddResident() {
                               const classList =
                                 [
                                   m.is_senior &&
-                                    `Senior Citizen (${m.has_senior_id ? "S" : "No ID"})`,
+                                  `Senior Citizen (${m.has_senior_id ? "S" : "No ID"})`,
                                   m.is_pwd &&
-                                    `PWD (${m.has_pwd_id ? "P" : "No ID"})`,
+                                  `PWD (${m.has_pwd_id ? "P" : "No ID"})`,
                                   m.is_solo_parent &&
-                                    `Solo Parent (${m.has_solo_parent_id ? "SP" : "No ID"})`,
+                                  `Solo Parent (${m.has_solo_parent_id ? "SP" : "No ID"})`,
                                 ]
                                   .filter(Boolean)
                                   .join(", ") || "Regular";

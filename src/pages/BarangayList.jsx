@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import UserProfileBadge from "../components/UserProfileBadge";
 import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/BarangayList.css";
@@ -15,7 +16,29 @@ export default function BarangayList() {
   const [allRecords, setAllRecords] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-  const [selectedYear, setSelectedYear] = useState("all");
+  const [selectedYear, setSelectedYear] = useState(
+    new Date().getFullYear().toString(),
+  );
+
+  useEffect(() => {
+    async function fetchLatestYear() {
+      try {
+        const { data } = await supabase
+          .from("residents")
+          .select("data_year")
+          .not("data_year", "is", null)
+          .order("data_year", { ascending: false })
+          .limit(1);
+
+        if (data && data.length > 0 && data[0].data_year) {
+          setSelectedYear(data[0].data_year.toString());
+        }
+      } catch (err) {
+        console.error("Error fetching latest year:", err);
+      }
+    }
+    fetchLatestYear();
+  }, []);
   const [selectedHousehold, setSelectedHousehold] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -126,6 +149,11 @@ export default function BarangayList() {
   const filteredRecords = allRecords;
 
   const handleArchive = async (res) => {
+    if (userRole === "Staff") {
+      alert("Access Denied: Staff users are not permitted to archive residents.");
+      return;
+    }
+
     if (
       !window.confirm(
         `Are you sure you want to archive resident ${res.first} ${res.last}?`,
@@ -514,6 +542,7 @@ export default function BarangayList() {
       <main className="content">
         <header className="main-header">
           <h1>Barangay {activeBrgy}</h1>
+          <UserProfileBadge />
         </header>
 
         <div className="main-layout">
@@ -605,7 +634,7 @@ export default function BarangayList() {
                     <th className="text-left col-tablet-hide">BIRTH PLACE</th>
                     <th className="text-center col-mobile-hide">BIRTH DATE</th>
                     <th className="text-center">AGE</th>
-                    <th className="text-center">SEX</th>
+                    <th className="text-center">GENDER</th>
                     <th className="text-center">CIVIL STATUS</th>
                     <th className="text-left col-tablet-hide">CITIZENSHIP</th>
                     <th className="text-left col-mobile-hide">OCCUPATION</th>
@@ -684,7 +713,7 @@ export default function BarangayList() {
                           </td>
                           <td className="text-center">
                             <span
-                              className={`sex-badge ${(res.s || "").toLowerCase() === "m" || (res.s || "").toLowerCase() === "male" ? "male" : "female"}`}
+                              className={`sex-badge ${(res.s || "").toLowerCase().includes("lgbt") ? "lgbt" : (res.s || "").toLowerCase() === "m" || (res.s || "").toLowerCase() === "male" ? "male" : "female"}`}
                             >
                               {res.s || "—"}
                             </span>
@@ -871,7 +900,7 @@ export default function BarangayList() {
                   <tr>
                     <th>FULL NAME</th>
                     <th>RELATION</th>
-                    <th>SEX</th>
+                    <th>GENDER</th>
                     <th>BIRTHDAY</th>
                     <th>OCCUPATION</th>
                     <th>VOTER?</th>
@@ -955,12 +984,14 @@ export default function BarangayList() {
                       <td>{m.oc || "N/A"}</td>
                       <td>{m.isVoter || "N/A"}</td>
                       <td>
-                        <button
-                          className="btn-archive-row"
-                          onClick={() => handleArchive(m)}
-                        >
-                          Archive
-                        </button>
+                        {userRole !== "Staff" && (
+                          <button
+                            className="btn-archive-row"
+                            onClick={() => handleArchive(m)}
+                          >
+                            Archive
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
