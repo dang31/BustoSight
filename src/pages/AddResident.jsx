@@ -334,7 +334,7 @@ export default function AddResident() {
     try {
       const currentYear = new Date().getFullYear();
       const common = {
-        data_year: parseInt(household.data_year, 10),
+        data_year: household.data_year ? parseInt(household.data_year, 10) : currentYear,
         h_no: household.hh_num,
         house_no: household.house_no,
         street: household.street,
@@ -344,7 +344,6 @@ export default function AddResident() {
           household.residence_type === "Other"
             ? household.residence_type_other
             : household.residence_type,
-        data_year: currentYear,
       };
 
       const residentsToSave = [
