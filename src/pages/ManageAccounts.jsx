@@ -7,7 +7,15 @@ import ResetStaffPasswordModal from "../components/Admin/ResetStaffPasswordModal
 import "../css/ManageAccounts.css";
 import "../css/AddResident.css";
 
-const CustomDropdown = ({ value, onChange, options, minWidth = '140px', label = '', direction = 'down', disabled = false }) => {
+const CustomDropdown = ({
+  value,
+  onChange,
+  options,
+  minWidth = "140px",
+  label = "",
+  direction = "down",
+  disabled = false,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -21,58 +29,112 @@ const CustomDropdown = ({ value, onChange, options, minWidth = '140px', label = 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedLabel = options.find(o => o.value === value)?.label || value;
+  const selectedLabel = options.find((o) => o.value === value)?.label || value;
 
-  const menuStyle = direction === 'up' ? {
-    bottom: '100%',
-    marginBottom: '6px'
-  } : {
-    top: '100%',
-    marginTop: '6px'
-  };
+  const menuStyle =
+    direction === "up"
+      ? {
+          bottom: "100%",
+          marginBottom: "6px",
+        }
+      : {
+          top: "100%",
+          marginTop: "6px",
+        };
 
   return (
-    <div style={{ position: 'relative', minWidth, width: '100%', opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? 'none' : 'auto' }} ref={dropdownRef}>
+    <div
+      style={{
+        position: "relative",
+        minWidth,
+        width: "100%",
+        opacity: disabled ? 0.6 : 1,
+        pointerEvents: disabled ? "none" : "auto",
+      }}
+      ref={dropdownRef}
+    >
       <div
-        onClick={(e) => { if (!disabled) { e.stopPropagation(); setIsOpen(!isOpen); } }}
+        onClick={(e) => {
+          if (!disabled) {
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }
+        }}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '8.5px 12px',
-          background: 'white',
-          border: isOpen ? '1px solid var(--primary)' : '1px solid var(--gray-300)',
-          borderRadius: '8px',
-          color: 'var(--gray-800)',
-          fontSize: '14px',
-          cursor: 'pointer',
-          transition: 'all 0.2s ease',
-          boxShadow: isOpen ? '0 0 0 3px rgba(37,99,235,0.1)' : '0 1px 2px rgba(0,0,0,0.05)',
-          gap: '8px'
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "8.5px 12px",
+          background: "white",
+          border: isOpen
+            ? "1px solid var(--primary)"
+            : "1px solid var(--gray-300)",
+          borderRadius: "8px",
+          color: "var(--gray-800)",
+          fontSize: "14px",
+          cursor: "pointer",
+          transition: "all 0.2s ease",
+          boxShadow: isOpen
+            ? "0 0 0 3px rgba(37,99,235,0.1)"
+            : "0 1px 2px rgba(0,0,0,0.05)",
+          gap: "8px",
         }}
       >
-        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {label && <span style={{ color: 'var(--gray-500)', marginRight: '4px', fontWeight: '400' }}>{label}</span>}
-          <span style={{ fontWeight: '500' }}>{selectedLabel}</span>
+        <span
+          style={{
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {label && (
+            <span
+              style={{
+                color: "var(--gray-500)",
+                marginRight: "4px",
+                fontWeight: "400",
+              }}
+            >
+              {label}
+            </span>
+          )}
+          <span style={{ fontWeight: "500" }}>{selectedLabel}</span>
         </span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', color: 'var(--gray-500)', flexShrink: 0 }}>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            transform: isOpen ? "rotate(180deg)" : "none",
+            transition: "transform 0.2s",
+            color: "var(--gray-500)",
+            flexShrink: 0,
+          }}
+        >
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
       </div>
-      
+
       {isOpen && (
-        <div style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          ...menuStyle,
-          background: 'white',
-          borderRadius: '8px',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-          border: '1px solid var(--gray-200)',
-          overflow: 'hidden',
-          zIndex: 9999
-        }}>
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            ...menuStyle,
+            background: "white",
+            borderRadius: "8px",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+            border: "1px solid var(--gray-200)",
+            overflow: "hidden",
+            zIndex: 9999,
+          }}
+        >
           {options.map((opt) => (
             <div
               key={opt.value}
@@ -82,31 +144,41 @@ const CustomDropdown = ({ value, onChange, options, minWidth = '140px', label = 
                 setIsOpen(false);
               }}
               style={{
-                padding: '10px 14px',
-                fontSize: '14px',
-                color: value === opt.value ? 'var(--primary)' : 'var(--gray-700)',
-                fontWeight: value === opt.value ? '600' : '400',
-                background: value === opt.value ? '#f0f9ff' : 'transparent',
-                cursor: 'pointer',
-                transition: 'background 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
+                padding: "10px 14px",
+                fontSize: "14px",
+                color:
+                  value === opt.value ? "var(--primary)" : "var(--gray-700)",
+                fontWeight: value === opt.value ? "600" : "400",
+                background: value === opt.value ? "#f0f9ff" : "transparent",
+                cursor: "pointer",
+                transition: "background 0.2s",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
               }}
               onMouseEnter={(e) => {
                 if (value !== opt.value) {
-                  e.currentTarget.style.background = '#f8fafc';
+                  e.currentTarget.style.background = "#f8fafc";
                 }
               }}
               onMouseLeave={(e) => {
                 if (value !== opt.value) {
-                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.background = "transparent";
                 }
               }}
             >
               {opt.label}
               {value === opt.value && (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               )}
@@ -830,8 +902,8 @@ export default function ManageAccounts() {
                 Active Accounts ({stats.totalUsers})
               </button>
               <button
-                className={`acc-tab-btn ${activeTab === 'archived' ? 'active' : ''}`}
-                onClick={() => setActiveTab('archived')}
+                className={`acc-tab-btn ${activeTab === "archived" ? "active" : ""}`}
+                onClick={() => setActiveTab("archived")}
               >
                 Archived Accounts ({stats.archivedUsers})
               </button>
@@ -879,7 +951,7 @@ export default function ManageAccounts() {
 
                 <div className="acc-filter-controls">
                   <div className="acc-filter-group">
-                    <label style={{ display: 'none' }}>Role:</label>
+                    <label style={{ display: "none" }}>Role:</label>
                     <CustomDropdown
                       label="Role:"
                       value={roleFilter}
@@ -887,14 +959,14 @@ export default function ManageAccounts() {
                       options={[
                         { label: "All Roles", value: "ALL" },
                         { label: "Admin", value: "Admin" },
-                        { label: "Staff", value: "Staff" }
+                        { label: "Staff", value: "Staff" },
                       ]}
                       minWidth="160px"
                     />
                   </div>
 
                   <div className="acc-filter-group">
-                    <label style={{ display: 'none' }}>Status:</label>
+                    <label style={{ display: "none" }}>Status:</label>
                     <CustomDropdown
                       label="Status:"
                       value={statusFilter}
@@ -902,7 +974,7 @@ export default function ManageAccounts() {
                       options={[
                         { label: "All Statuses", value: "ALL" },
                         { label: "Active", value: "Active" },
-                        { label: "Inactive", value: "Inactive" }
+                        { label: "Inactive", value: "Inactive" },
                       ]}
                       minWidth="160px"
                     />
@@ -1135,9 +1207,28 @@ export default function ManageAccounts() {
                                 className="btn-action-icon"
                                 title="Edit Account"
                                 onClick={() => openEditModal(acc)}
-                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', background: '#f8fbff', color: 'var(--primary)', border: '1px solid #dbeafe', cursor: 'pointer' }}
-                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.color = 'white'; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = '#f8fbff'; e.currentTarget.style.color = 'var(--primary)'; }}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "32px",
+                                  height: "32px",
+                                  borderRadius: "50%",
+                                  background: "#f8fbff",
+                                  color: "var(--primary)",
+                                  border: "1px solid #dbeafe",
+                                  cursor: "pointer",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background =
+                                    "var(--primary)";
+                                  e.currentTarget.style.color = "white";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = "#f8fbff";
+                                  e.currentTarget.style.color =
+                                    "var(--primary)";
+                                }}
                               >
                                 <svg
                                   width="16"
@@ -1188,7 +1279,13 @@ export default function ManageAccounts() {
                 </div>
 
                 <div className="pagination-controls">
-                  <label style={{ fontSize: "12px", color: "var(--gray-600)", display: "none" }}>
+                  <label
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--gray-600)",
+                      display: "none",
+                    }}
+                  >
                     Rows per page:
                   </label>
                   <CustomDropdown
@@ -1200,7 +1297,7 @@ export default function ManageAccounts() {
                       { label: "5", value: 5 },
                       { label: "10", value: 10 },
                       { label: "20", value: 20 },
-                      { label: "50", value: 50 }
+                      { label: "50", value: 50 },
                     ]}
                     minWidth="120px"
                   />
@@ -1253,7 +1350,7 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, first_name: e.target.value })
                     }
-                    className={formErrors.first_name ? 'input-error' : ''}
+                    className={formErrors.first_name ? "input-error" : ""}
                     required
                   />
                   {formErrors.first_name && (
@@ -1270,7 +1367,7 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, last_name: e.target.value })
                     }
-                    className={formErrors.last_name ? 'input-error' : ''}
+                    className={formErrors.last_name ? "input-error" : ""}
                     required
                   />
                   {formErrors.last_name && (
@@ -1289,7 +1386,7 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, employee_id: e.target.value })
                     }
-                    className={formErrors.employee_id ? 'input-error' : ''}
+                    className={formErrors.employee_id ? "input-error" : ""}
                   />
                   {formErrors.employee_id && (
                     <span className="err-msg">{formErrors.employee_id}</span>
@@ -1305,7 +1402,7 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
-                    className={formErrors.email ? 'input-error' : ''}
+                    className={formErrors.email ? "input-error" : ""}
                   />
                   {formErrors.email && (
                     <span className="err-msg">{formErrors.email}</span>
@@ -1323,7 +1420,7 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, username: e.target.value })
                     }
-                    className={formErrors.username ? 'input-error' : ''}
+                    className={formErrors.username ? "input-error" : ""}
                     required
                   />
                   {formErrors.username && (
@@ -1338,7 +1435,7 @@ export default function ManageAccounts() {
                     onChange={(val) => setFormData({ ...formData, role: val })}
                     options={[
                       { label: "Staff", value: "Staff" },
-                      { label: "Admin", value: "Admin" }
+                      { label: "Admin", value: "Admin" },
                     ]}
                   />
                 </div>
@@ -1354,7 +1451,7 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
                     }
-                    className={formErrors.password ? 'input-error' : ''}
+                    className={formErrors.password ? "input-error" : ""}
                     required
                   />
                   {formErrors.password && (
@@ -1374,7 +1471,7 @@ export default function ManageAccounts() {
                         confirm_password: e.target.value,
                       })
                     }
-                    className={formErrors.confirm_password ? 'input-error' : ''}
+                    className={formErrors.confirm_password ? "input-error" : ""}
                     required
                   />
                   {formErrors.confirm_password && (
@@ -1390,10 +1487,12 @@ export default function ManageAccounts() {
                   <label>Status</label>
                   <CustomDropdown
                     value={formData.status}
-                    onChange={(val) => setFormData({ ...formData, status: val })}
+                    onChange={(val) =>
+                      setFormData({ ...formData, status: val })
+                    }
                     options={[
                       { label: "Active", value: "Active" },
-                      { label: "Inactive", value: "Inactive" }
+                      { label: "Inactive", value: "Inactive" },
                     ]}
                   />
                 </div>
@@ -1434,13 +1533,43 @@ export default function ManageAccounts() {
                 ×
               </span>
             </div>
-            <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div className={`avatar-circle role-bg-${(modalState.data?.role === 'Administrator' ? 'admin' : (modalState.data?.role || 'staff')).toLowerCase()}`} style={{ width: '60px', height: '60px', fontSize: '24px' }}>
-                {getInitials(modalState.data?.first_name, modalState.data?.last_name)}
+            <div
+              style={{
+                padding: "24px 24px 0",
+                display: "flex",
+                alignItems: "center",
+                gap: "16px",
+              }}
+            >
+              <div
+                className={`avatar-circle role-bg-${(modalState.data?.role === "Administrator" ? "admin" : modalState.data?.role || "staff").toLowerCase()}`}
+                style={{ width: "60px", height: "60px", fontSize: "24px" }}
+              >
+                {getInitials(
+                  modalState.data?.first_name,
+                  modalState.data?.last_name,
+                )}
               </div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--primary-dark)' }}>{modalState.data?.first_name} {modalState.data?.last_name}</h3>
-                <div style={{ color: 'var(--gray-500)', fontSize: '14px', marginTop: '4px' }}>@{modalState.data?.username} • {modalState.data?.email || "No email"}</div>
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: "18px",
+                    color: "var(--primary-dark)",
+                  }}
+                >
+                  {modalState.data?.first_name} {modalState.data?.last_name}
+                </h3>
+                <div
+                  style={{
+                    color: "var(--gray-500)",
+                    fontSize: "14px",
+                    marginTop: "4px",
+                  }}
+                >
+                  @{modalState.data?.username} •{" "}
+                  {modalState.data?.email || "No email"}
+                </div>
               </div>
             </div>
             <form onSubmit={handleEditAccount} className="modal-body-form">
@@ -1453,8 +1582,8 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, first_name: e.target.value })
                     }
-                    className={formErrors.first_name ? 'input-error' : ''}
-                    disabled={formData.status === 'Inactive'}
+                    className={formErrors.first_name ? "input-error" : ""}
+                    disabled={formData.status === "Inactive"}
                     required
                   />
                   {formErrors.first_name && (
@@ -1470,8 +1599,8 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, last_name: e.target.value })
                     }
-                    className={formErrors.last_name ? 'input-error' : ''}
-                    disabled={formData.status === 'Inactive'}
+                    className={formErrors.last_name ? "input-error" : ""}
+                    disabled={formData.status === "Inactive"}
                     required
                   />
                   {formErrors.last_name && (
@@ -1489,8 +1618,8 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, employee_id: e.target.value })
                     }
-                    className={formErrors.employee_id ? 'input-error' : ''}
-                    disabled={formData.status === 'Inactive'}
+                    className={formErrors.employee_id ? "input-error" : ""}
+                    disabled={formData.status === "Inactive"}
                   />
                   {formErrors.employee_id && (
                     <span className="err-msg">{formErrors.employee_id}</span>
@@ -1505,8 +1634,8 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
-                    className={formErrors.email ? 'input-error' : ''}
-                    disabled={formData.status === 'Inactive'}
+                    className={formErrors.email ? "input-error" : ""}
+                    disabled={formData.status === "Inactive"}
                   />
                   {formErrors.email && (
                     <span className="err-msg">{formErrors.email}</span>
@@ -1523,8 +1652,8 @@ export default function ManageAccounts() {
                     onChange={(e) =>
                       setFormData({ ...formData, username: e.target.value })
                     }
-                    className={formErrors.username ? 'input-error' : ''}
-                    disabled={formData.status === 'Inactive'}
+                    className={formErrors.username ? "input-error" : ""}
+                    disabled={formData.status === "Inactive"}
                     required
                   />
                   {formErrors.username && (
@@ -1539,9 +1668,9 @@ export default function ManageAccounts() {
                     onChange={(val) => setFormData({ ...formData, role: val })}
                     options={[
                       { label: "Staff", value: "Staff" },
-                      { label: "Admin", value: "Admin" }
+                      { label: "Admin", value: "Admin" },
                     ]}
-                    disabled={formData.status === 'Inactive'}
+                    disabled={formData.status === "Inactive"}
                   />
                 </div>
               </div>
@@ -1551,10 +1680,12 @@ export default function ManageAccounts() {
                   <label>Status</label>
                   <CustomDropdown
                     value={formData.status}
-                    onChange={(val) => setFormData({ ...formData, status: val })}
+                    onChange={(val) =>
+                      setFormData({ ...formData, status: val })
+                    }
                     options={[
                       { label: "Active", value: "Active" },
-                      { label: "Inactive", value: "Inactive" }
+                      { label: "Inactive", value: "Inactive" },
                     ]}
                   />
                 </div>
@@ -1578,9 +1709,25 @@ export default function ManageAccounts() {
                 </button>
               </div>
 
-              <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #edf2f7' }}>
-                <h4 style={{ fontSize: '12px', color: 'var(--gray-500)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account Actions</h4>
-                <div style={{ display: 'flex', gap: '10px' }}>
+              <div
+                style={{
+                  marginTop: "24px",
+                  paddingTop: "16px",
+                  borderTop: "1px solid #edf2f7",
+                }}
+              >
+                <h4
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--gray-500)",
+                    marginBottom: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  Account Actions
+                </h4>
+                <div style={{ display: "flex", gap: "10px" }}>
                   {/* <button 
                     type="button"
                     onClick={() => openChangePasswordModal(modalState.data)}
@@ -1590,45 +1737,125 @@ export default function ManageAccounts() {
                   >
                     Change Password
                   </button> */}
-                  {modalState.data?.role === 'Staff' && (
-                    <button 
+                  {modalState.data?.role === "Staff" && (
+                    <button
                       type="button"
-                      onClick={() => openForceResetPasswordModal(modalState.data)}
-                      style={{ flex: 1, padding: '10px', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '6px', color: '#e11d48', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#ffe4e6'}
-                      onMouseLeave={e => e.currentTarget.style.background = '#fff1f2'}
+                      onClick={() =>
+                        openForceResetPasswordModal(modalState.data)
+                      }
+                      style={{
+                        flex: 1,
+                        padding: "10px",
+                        background: "#fff1f2",
+                        border: "1px solid #fecdd3",
+                        borderRadius: "6px",
+                        color: "#e11d48",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        transition: "0.2s",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background = "#ffe4e6")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background = "#fff1f2")
+                      }
                     >
                       Change Password
                     </button>
                   )}
-                  {modalState.data?.username !== 'admin_bustos' && (
+                  {modalState.data?.username !== "admin_bustos" && (
                     <>
-                      <button 
+                      <button
                         type="button"
-                        onClick={() => setFormData({ ...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active' })}
-                        style={{ flex: 1, padding: '10px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#334155', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                        onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                        onClick={() =>
+                          setFormData({
+                            ...formData,
+                            status:
+                              formData.status === "Active"
+                                ? "Inactive"
+                                : "Active",
+                          })
+                        }
+                        style={{
+                          flex: 1,
+                          padding: "10px",
+                          background: "#f8fafc",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "6px",
+                          color: "#334155",
+                          fontWeight: "600",
+                          cursor: "pointer",
+                          transition: "0.2s",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background = "#f1f5f9")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = "#f8fafc")
+                        }
                       >
-                        {formData.status === 'Active' ? 'Deactivate' : 'Activate'}
+                        {formData.status === "Active"
+                          ? "Deactivate"
+                          : "Activate"}
                       </button>
                       {modalState.data?.archived ? (
-                        <button 
+                        <button
                           type="button"
-                          onClick={() => openConfirmModal('restore', modalState.data, `Restore account for "${modalState.data?.first_name} ${modalState.data?.last_name}"?`)}
-                          style={{ flex: 1, padding: '10px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#dcfce7'}
-                          onMouseLeave={e => e.currentTarget.style.background = '#f0fdf4'}
+                          onClick={() =>
+                            openConfirmModal(
+                              "restore",
+                              modalState.data,
+                              `Restore account for "${modalState.data?.first_name} ${modalState.data?.last_name}"?`,
+                            )
+                          }
+                          style={{
+                            flex: 1,
+                            padding: "10px",
+                            background: "#f0fdf4",
+                            border: "1px solid #86efac",
+                            borderRadius: "6px",
+                            color: "#16a34a",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            transition: "0.2s",
+                          }}
+                          onMouseEnter={(e) =>
+                            (e.currentTarget.style.background = "#dcfce7")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.background = "#f0fdf4")
+                          }
                         >
                           Restore
                         </button>
                       ) : (
-                        <button 
+                        <button
                           type="button"
-                          onClick={() => openConfirmModal('archive', modalState.data, `Archive account for "${modalState.data?.first_name} ${modalState.data?.last_name}"?`)}
-                          style={{ flex: 1, padding: '10px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#ef4444', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
-                          onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+                          onClick={() =>
+                            openConfirmModal(
+                              "archive",
+                              modalState.data,
+                              `Archive account for "${modalState.data?.first_name} ${modalState.data?.last_name}"?`,
+                            )
+                          }
+                          style={{
+                            flex: 1,
+                            padding: "10px",
+                            background: "#fef2f2",
+                            border: "1px solid #fca5a5",
+                            borderRadius: "6px",
+                            color: "#ef4444",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            transition: "0.2s",
+                          }}
+                          onMouseEnter={(e) =>
+                            (e.currentTarget.style.background = "#fee2e2")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.background = "#fef2f2")
+                          }
                         >
                           Archive
                         </button>
@@ -1838,7 +2065,7 @@ export default function ManageAccounts() {
         <ResetStaffPasswordModal
           targetUser={modalState.data}
           onClose={closeModal}
-          onSuccess={(msg) => showToast(msg, 'success')}
+          onSuccess={(msg) => showToast(msg, "success")}
         />
       )}
     </div>

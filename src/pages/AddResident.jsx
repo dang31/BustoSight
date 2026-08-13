@@ -52,6 +52,7 @@ export default function AddResident() {
 
   // Reusable default states so we can both initialize and reset the form
   const initialHousehold = {
+    data_year: new Date().getFullYear().toString(),
     hh_num: "",
     house_no: "",
     street: "",
@@ -317,6 +318,7 @@ export default function AddResident() {
     setIsLoading(true);
     try {
       const common = {
+        data_year: parseInt(household.data_year, 10),
         h_no: household.hh_num,
         house_no: household.house_no,
         street: household.street,
@@ -406,7 +408,13 @@ export default function AddResident() {
         .from("residents")
         .insert(residentsToSave);
 
-      if (error) throw error;
+      if (error) {
+        if (error.message && error.message.includes("already exists in the system")) {
+          setFormWarning(error.message);
+          return;
+        }
+        throw error;
+      }
 
       // Sync to localStorage
       const allRecords = JSON.parse(localStorage.getItem("tanawanData")) || [];
@@ -640,7 +648,23 @@ export default function AddResident() {
                       />
                     </div>
                   </div>
-                  <div className="grid-3-cols" style={{ marginTop: "20px" }}>
+                  <div className="grid-4-cols" style={{ marginTop: "20px" }}>
+                    <div className="field-group">
+                      <label>Data Year</label>
+                      <select
+                        className="modern-select"
+                        value={household.data_year}
+                        onChange={(e) =>
+                          setHousehold({ ...household, data_year: e.target.value })
+                        }
+                      >
+                        {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                          <option key={y} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="field-group">
                       <label>Barangay</label>
                       <select
