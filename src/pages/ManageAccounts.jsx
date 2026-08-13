@@ -60,7 +60,7 @@ const CustomDropdown = ({ value, onChange, options, minWidth = '140px', label = 
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
       </div>
-      
+
       {isOpen && (
         <div style={{
           position: 'absolute',
@@ -971,18 +971,6 @@ export default function ManageAccounts() {
                         </button>
                       </>
                     )}
-                    <button
-                      className="btn-bulk btn-bulk-delete"
-                      onClick={() =>
-                        openConfirmModal(
-                          "bulk-delete",
-                          null,
-                          `PERMANENT ACTION: Are you sure you want to permanently delete ${selectedIds.length} selected account(s)?`,
-                        )
-                      }
-                    >
-                      Delete Selected
-                    </button>
                   </div>
                 </div>
               )}
@@ -1112,8 +1100,8 @@ export default function ManageAccounts() {
                                     Added{" "}
                                     {acc.created_at
                                       ? new Date(
-                                          acc.created_at,
-                                        ).toLocaleDateString()
+                                        acc.created_at,
+                                      ).toLocaleDateString()
                                       : "N/A"}
                                   </div>
                                 </div>
@@ -1605,7 +1593,7 @@ export default function ManageAccounts() {
                     Change Password
                   </button> */}
                   {modalState.data?.role === 'Staff' && (
-                    <button 
+                    <button
                       type="button"
                       onClick={() => openForceResetPasswordModal(modalState.data)}
                       style={{ flex: 1, padding: '10px', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '6px', color: '#e11d48', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
@@ -1617,7 +1605,7 @@ export default function ManageAccounts() {
                   )}
                   {modalState.data?.username !== 'admin_bustos' && (
                     <>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => setFormData({ ...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active' })}
                         style={{ flex: 1, padding: '10px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#334155', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
@@ -1627,7 +1615,7 @@ export default function ManageAccounts() {
                         {formData.status === 'Active' ? 'Deactivate' : 'Activate'}
                       </button>
                       {modalState.data?.archived ? (
-                        <button 
+                        <button
                           type="button"
                           onClick={() => openConfirmModal('restore', modalState.data, `Restore account for "${modalState.data?.first_name} ${modalState.data?.last_name}"?`)}
                           style={{ flex: 1, padding: '10px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}
@@ -1637,7 +1625,7 @@ export default function ManageAccounts() {
                           Restore
                         </button>
                       ) : (
-                        <button 
+                        <button
                           type="button"
                           onClick={() => openConfirmModal('archive', modalState.data, `Archive account for "${modalState.data?.first_name} ${modalState.data?.last_name}"?`)}
                           style={{ flex: 1, padding: '10px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#ef4444', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}

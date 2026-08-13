@@ -20,11 +20,52 @@ const REPORT_SECTIONS = [
   { id: 'voters-report', label: 'Total Voters per Barangay' },
 ];
 
+function ReportHeader({ selectedYear, currentDate }) {
+  return (
+    <div className="report-header-wrapper" style={{ marginBottom: '20px' }}>
+      <div className="report-header-logos" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '30px', marginBottom: '15px' }}>
+        <img src="/BP LOGO.png" alt="Bagong Pilipinas Logo" style={{ height: '70px', width: '70px', objectFit: 'contain' }} />
+        <img src="/bustos-logo.png" alt="Bustos Logo" style={{ height: '70px', width: '70px', objectFit: 'contain' }} />
+        <img src="/POPDEV LOGO.png" alt="POPDEV Logo" style={{ height: '70px', width: '70px', objectFit: 'contain' }} />
+      </div>
+      
+      <div className="report-header-text" style={{ textAlign: 'center', marginBottom: '25px' }}>
+        <p style={{ margin: '2px 0', fontSize: '11px', textTransform: 'uppercase', color: '#4a5568', letterSpacing: '0.5px' }}>Republic of the Philippines</p>
+        <p style={{ margin: '2px 0', fontSize: '11px', textTransform: 'uppercase', color: '#4a5568', letterSpacing: '0.5px' }}>Province of Bulacan</p>
+        <h2 style={{ margin: '5px 0', fontSize: '18px', fontWeight: '800', color: '#1a365d' }}>Municipality of Bustos</h2>
+        <p style={{ margin: '8px 0 3px 0', fontSize: '13px', fontWeight: '800', letterSpacing: '1px', color: '#2b6cb0' }}><strong>OFFICIAL CENSUS AND POPULATION REPORT ({selectedYear})</strong></p>
+        <p style={{ margin: '2px 0', fontSize: '10px', color: '#718096' }}>Date Generated: <span>{currentDate}</span></p>
+      </div>
+    </div>
+  );
+}
+
+function ReportFooter() {
+  return (
+    <div className="report-footer-signatures" style={{ marginTop: '35px', pageBreakInside: 'avoid' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '40px', padding: '0 10px' }}>
+        <div style={{ minWidth: '220px' }}>
+          <p style={{ margin: '0 0 35px 0', fontSize: '11px', fontWeight: '600', color: '#2d3748' }}>Prepared by:</p>
+          <p style={{ margin: '0', fontSize: '12px', fontWeight: 'bold', color: '#1a202c' }}>_______________________________</p>
+          <p style={{ margin: '4px 0 0 0', fontSize: '11px', fontWeight: '700', color: '#1a365d', textTransform: 'uppercase' }}>POPDEV STAFF / ENUMERATOR</p>
+        </div>
+
+        <div style={{ minWidth: '220px' }}>
+          <p style={{ margin: '0 0 35px 0', fontSize: '11px', fontWeight: '600', color: '#2d3748' }}>Noted by:</p>
+          <p style={{ margin: '0', fontSize: '12px', fontWeight: 'bold', color: '#1a202c' }}>_______________________________</p>
+          <p style={{ margin: '4px 0 0 0', fontSize: '11px', fontWeight: '700', color: '#1a365d', textTransform: 'uppercase' }}>POPDEV OFFICER</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Reports() {
   const [selectedSections, setSelectedSections] = useState([]);
   const [residents, setResidents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
+  const [genderFilter, setGenderFilter] = useState('both');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   const currentDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -115,12 +156,24 @@ export default function Reports() {
 
   // Calculations
   const ageGenderDist = () => {
-    let under5M = 0, under5F = 0;
-    let youthM = 0, youthF = 0;
-    let adultM = 0, adultF = 0;
-    let seniorM = 0, seniorF = 0;
+    const barangayData = {};
+    barangayNames.forEach(name => {
+      barangayData[name] = {
+        b0_17: { male: 0, female: 0, total: 0 },
+        b18_24: { male: 0, female: 0, total: 0 },
+        b25_34: { male: 0, female: 0, total: 0 },
+        b35_44: { male: 0, female: 0, total: 0 },
+        b45_54: { male: 0, female: 0, total: 0 },
+        b55_64: { male: 0, female: 0, total: 0 },
+        b65plus: { male: 0, female: 0, total: 0 },
+        total: { male: 0, female: 0, total: 0 }
+      };
+    });
 
     residents.forEach(r => {
+      const brgy = r.barangay;
+      if (!barangayData[brgy]) return;
+
       const sex = (r.sex || '').toUpperCase();
       const isMale = sex === 'MALE' || sex === 'M';
       const isFemale = sex === 'FEMALE' || sex === 'F';
@@ -128,32 +181,56 @@ export default function Reports() {
       const age = parseInt(r.age, 10);
       if (isNaN(age) || age < 0) return;
 
-      if (age < 5) {
-        if (isMale) under5M++;
-        else if (isFemale) under5F++;
-      } else if (age <= 17) {
-        if (isMale) youthM++;
-        else if (isFemale) youthF++;
-      } else if (age <= 59) {
-        if (isMale) adultM++;
-        else if (isFemale) adultF++;
-      } else {
-        if (isMale) seniorM++;
-        else if (isFemale) seniorF++;
+      let key = '';
+      if (age <= 17) key = 'b0_17';
+      else if (age <= 24) key = 'b18_24';
+      else if (age <= 34) key = 'b25_34';
+      else if (age <= 44) key = 'b35_44';
+      else if (age <= 54) key = 'b45_54';
+      else if (age <= 64) key = 'b55_64';
+      else key = 'b65plus';
+
+      if (isMale) {
+        barangayData[brgy][key].male++;
+        barangayData[brgy][key].total++;
+        barangayData[brgy].total.male++;
+        barangayData[brgy].total.total++;
+      } else if (isFemale) {
+        barangayData[brgy][key].female++;
+        barangayData[brgy][key].total++;
+        barangayData[brgy].total.female++;
+        barangayData[brgy].total.total++;
       }
     });
 
-    return {
-      under5: { male: under5M, female: under5F, total: under5M + under5F },
-      youth: { male: youthM, female: youthF, total: youthM + youthF },
-      adult: { male: adultM, female: adultF, total: adultM + adultF },
-      senior: { male: seniorM, female: seniorF, total: seniorM + seniorF },
-      grand: {
-        male: under5M + youthM + adultM + seniorM,
-        female: under5F + youthF + adultF + seniorF,
-        total: under5M + youthM + adultM + seniorM + under5F + youthF + adultF + seniorF
-      }
+    const grandTotal = {
+      b0_17: { male: 0, female: 0, total: 0 },
+      b18_24: { male: 0, female: 0, total: 0 },
+      b25_34: { male: 0, female: 0, total: 0 },
+      b35_44: { male: 0, female: 0, total: 0 },
+      b45_54: { male: 0, female: 0, total: 0 },
+      b55_64: { male: 0, female: 0, total: 0 },
+      b65plus: { male: 0, female: 0, total: 0 },
+      total: { male: 0, female: 0, total: 0 }
     };
+
+    const keys = ['b0_17', 'b18_24', 'b25_34', 'b35_44', 'b45_54', 'b55_64', 'b65plus', 'total'];
+
+    barangayNames.forEach(name => {
+      const d = barangayData[name];
+      keys.forEach(k => {
+        grandTotal[k].male += d[k].male;
+        grandTotal[k].female += d[k].female;
+        grandTotal[k].total += d[k].total;
+      });
+    });
+
+    const rows = barangayNames.map(name => ({
+      name,
+      ...barangayData[name]
+    }));
+
+    return { rows, grandTotal };
   };
 
   const householdPop = () => {
@@ -412,14 +489,51 @@ export default function Reports() {
 
                 <div className="sub-items">
                   {REPORT_SECTIONS.map(section => (
-                    <label key={section.id} className="checkbox-group">
-                      <input 
-                        type="checkbox" 
-                        checked={selectedSections.includes(section.id)}
-                        onChange={() => toggleSection(section.id)}
-                      />
-                      <span className="report-item-label">{section.label}</span>
-                    </label>
+                    <div key={section.id} style={{ display: 'flex', flexDirection: 'column' }}>
+                      <label className="checkbox-group">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedSections.includes(section.id)}
+                          onChange={() => toggleSection(section.id)}
+                        />
+                        <span className="report-item-label">{section.label}</span>
+                      </label>
+
+                      {section.id === 'age-gender' && selectedSections.includes('age-gender') && (
+                        <div style={{ marginLeft: '32px', marginTop: '4px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray-600)' }}>Select Gender:</span>
+                          <div style={{ display: 'inline-flex', gap: '4px', background: '#e2e8f0', padding: '3px', borderRadius: '6px' }}>
+                            {[
+                              { id: 'both', label: 'Both' },
+                              { id: 'male', label: 'Male' },
+                              { id: 'female', label: 'Female' }
+                            ].map(opt => (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setGenderFilter(opt.id);
+                                }}
+                                style={{
+                                  padding: '3px 10px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  border: 'none',
+                                  background: genderFilter === opt.id ? 'var(--primary)' : 'transparent',
+                                  color: genderFilter === opt.id ? 'white' : '#4a5568',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -436,41 +550,163 @@ export default function Reports() {
 
       {/* Printable Area */}
       <div id="printable-area">
-        <div className="report-header-logos" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '30px', marginBottom: '15px' }}>
-          <img src="/BP LOGO.png" alt="Bagong Pilipinas Logo" style={{ height: '70px', width: '70px', objectFit: 'contain' }} />
-          <img src="/bustos-logo.png" alt="Bustos Logo" style={{ height: '70px', width: '70px', objectFit: 'contain' }} />
-          <img src="/POPDEV LOGO.png" alt="POPDEV Logo" style={{ height: '70px', width: '70px', objectFit: 'contain' }} />
-        </div>
-        
-        <div className="report-header-text" style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <p style={{ margin: '2px 0', fontSize: '11px', textTransform: 'uppercase', color: '#4a5568', letterSpacing: '0.5px' }}>Republic of the Philippines</p>
-          <p style={{ margin: '2px 0', fontSize: '11px', textTransform: 'uppercase', color: '#4a5568', letterSpacing: '0.5px' }}>Province of Bulacan</p>
-          <h2 style={{ margin: '5px 0', fontSize: '18px', fontWeight: '800', color: '#1a365d' }}>Municipality of Bustos</h2>
-          <p style={{ margin: '8px 0 3px 0', fontSize: '13px', fontWeight: '800', letterSpacing: '1px', color: '#2b6cb0' }}><strong>OFFICIAL CENSUS AND POPULATION REPORT ({selectedYear})</strong></p>
-          <p style={{ margin: '2px 0', fontSize: '10px', color: '#718096' }}>Date Generated: <span>{currentDate}</span></p>
-        </div>
-
         {selectedSections.includes('age-gender') && (
           <div id="age-gender" className="report-section show-print">
-            <h3>I. Age and Gender Distribution</h3>
-            <table>
+            <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
+            <h3>I. Age and Gender Distribution per Barangay{genderFilter !== 'both' ? ` (${genderFilter === 'male' ? 'Male Only' : 'Female Only'})` : ''}</h3>
+            <table style={{ fontSize: '11px' }}>
               <thead>
-                <tr><th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'left' }}>AGE GROUP</th><th colSpan="2">SEX</th><th rowSpan="2" style={{ verticalAlign: 'middle' }}>TOTAL</th></tr>
-                <tr><th>MALE</th><th>FEMALE</th></tr>
+                {genderFilter === 'both' ? (
+                  <>
+                    <tr>
+                      <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'center', width: '30px' }}>#</th>
+                      <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'left' }}>BARANGAY</th>
+                      <th colSpan="3">(0-17)</th>
+                      <th colSpan="3">(18-24)</th>
+                      <th colSpan="3">(25-34)</th>
+                      <th colSpan="3">(35-44)</th>
+                      <th colSpan="3">(45-54)</th>
+                      <th colSpan="3">(55-64)</th>
+                      <th colSpan="3">(65 and above)</th>
+                      <th colSpan="3">TOTAL</th>
+                    </tr>
+                    <tr>
+                      <th style={{ padding: '3px 2px' }}>M</th><th style={{ padding: '3px 2px' }}>F</th><th style={{ padding: '3px 2px' }}>T</th>
+                      <th style={{ padding: '3px 2px' }}>M</th><th style={{ padding: '3px 2px' }}>F</th><th style={{ padding: '3px 2px' }}>T</th>
+                      <th style={{ padding: '3px 2px' }}>M</th><th style={{ padding: '3px 2px' }}>F</th><th style={{ padding: '3px 2px' }}>T</th>
+                      <th style={{ padding: '3px 2px' }}>M</th><th style={{ padding: '3px 2px' }}>F</th><th style={{ padding: '3px 2px' }}>T</th>
+                      <th style={{ padding: '3px 2px' }}>M</th><th style={{ padding: '3px 2px' }}>F</th><th style={{ padding: '3px 2px' }}>T</th>
+                      <th style={{ padding: '3px 2px' }}>M</th><th style={{ padding: '3px 2px' }}>F</th><th style={{ padding: '3px 2px' }}>T</th>
+                      <th style={{ padding: '3px 2px' }}>M</th><th style={{ padding: '3px 2px' }}>F</th><th style={{ padding: '3px 2px' }}>T</th>
+                      <th style={{ padding: '3px 2px' }}>M</th><th style={{ padding: '3px 2px' }}>F</th><th style={{ padding: '3px 2px' }}>T</th>
+                    </tr>
+                  </>
+                ) : (
+                  <tr>
+                    <th style={{ textAlign: 'center', width: '30px' }}>#</th>
+                    <th style={{ textAlign: 'left' }}>BARANGAY</th>
+                    <th>(0-17)</th>
+                    <th>(18-24)</th>
+                    <th>(25-34)</th>
+                    <th>(35-44)</th>
+                    <th>(45-54)</th>
+                    <th>(55-64)</th>
+                    <th>(65 and above)</th>
+                    <th>TOTAL ({genderFilter.toUpperCase()})</th>
+                  </tr>
+                )}
               </thead>
               <tbody>
-                <tr><td>Under 5</td><td>{ageData.under5.male}</td><td>{ageData.under5.female}</td><td>{ageData.under5.total}</td></tr>
-                <tr><td>5-17 (Youth)</td><td>{ageData.youth.male}</td><td>{ageData.youth.female}</td><td>{ageData.youth.total}</td></tr>
-                <tr><td>18-59 (Adult)</td><td>{ageData.adult.male}</td><td>{ageData.adult.female}</td><td>{ageData.adult.total}</td></tr>
-                <tr><td>60+ (Senior)</td><td>{ageData.senior.male}</td><td>{ageData.senior.female}</td><td>{ageData.senior.total}</td></tr>
-                <tr><td><strong>GRAND TOTAL</strong></td><td><strong>{ageData.grand.male}</strong></td><td><strong>{ageData.grand.female}</strong></td><td><strong>{ageData.grand.total}</strong></td></tr>
+                {ageData.rows.map((row, idx) => (
+                  <tr key={row.name}>
+                    <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                    <td>{row.name}</td>
+                    {genderFilter === 'both' ? (
+                      <>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b0_17.male}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b0_17.female}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b0_17.total}</td>
+
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b18_24.male}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b18_24.female}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b18_24.total}</td>
+
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b25_34.male}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b25_34.female}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b25_34.total}</td>
+
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b35_44.male}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b35_44.female}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b35_44.total}</td>
+
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b45_54.male}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b45_54.female}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b45_54.total}</td>
+
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b55_64.male}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b55_64.female}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b55_64.total}</td>
+
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b65plus.male}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b65plus.female}</td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}>{row.b65plus.total}</td>
+
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{row.total.male}</strong></td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{row.total.female}</strong></td>
+                        <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{row.total.total}</strong></td>
+                      </>
+                    ) : (
+                      <>
+                        <td style={{ textAlign: 'center' }}>{row.b0_17[genderFilter]}</td>
+                        <td style={{ textAlign: 'center' }}>{row.b18_24[genderFilter]}</td>
+                        <td style={{ textAlign: 'center' }}>{row.b25_34[genderFilter]}</td>
+                        <td style={{ textAlign: 'center' }}>{row.b35_44[genderFilter]}</td>
+                        <td style={{ textAlign: 'center' }}>{row.b45_54[genderFilter]}</td>
+                        <td style={{ textAlign: 'center' }}>{row.b55_64[genderFilter]}</td>
+                        <td style={{ textAlign: 'center' }}>{row.b65plus[genderFilter]}</td>
+                        <td style={{ textAlign: 'center' }}><strong>{row.total[genderFilter]}</strong></td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan="2" style={{ textAlign: 'left' }}><strong>GRAND TOTAL</strong></td>
+                  {genderFilter === 'both' ? (
+                    <>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b0_17.male}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b0_17.female}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b0_17.total}</strong></td>
+
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b18_24.male}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b18_24.female}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b18_24.total}</strong></td>
+
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b25_34.male}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b25_34.female}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b25_34.total}</strong></td>
+
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b35_44.male}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b35_44.female}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b35_44.total}</strong></td>
+
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b45_54.male}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b45_54.female}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b45_54.total}</strong></td>
+
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b55_64.male}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b55_64.female}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b55_64.total}</strong></td>
+
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b65plus.male}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b65plus.female}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.b65plus.total}</strong></td>
+
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.total.male}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.total.female}</strong></td>
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}><strong>{ageData.grandTotal.total.total}</strong></td>
+                    </>
+                  ) : (
+                    <>
+                      <td style={{ textAlign: 'center' }}><strong>{ageData.grandTotal.b0_17[genderFilter]}</strong></td>
+                      <td style={{ textAlign: 'center' }}><strong>{ageData.grandTotal.b18_24[genderFilter]}</strong></td>
+                      <td style={{ textAlign: 'center' }}><strong>{ageData.grandTotal.b25_34[genderFilter]}</strong></td>
+                      <td style={{ textAlign: 'center' }}><strong>{ageData.grandTotal.b35_44[genderFilter]}</strong></td>
+                      <td style={{ textAlign: 'center' }}><strong>{ageData.grandTotal.b45_54[genderFilter]}</strong></td>
+                      <td style={{ textAlign: 'center' }}><strong>{ageData.grandTotal.b55_64[genderFilter]}</strong></td>
+                      <td style={{ textAlign: 'center' }}><strong>{ageData.grandTotal.b65plus[genderFilter]}</strong></td>
+                      <td style={{ textAlign: 'center' }}><strong>{ageData.grandTotal.total[genderFilter]}</strong></td>
+                    </>
+                  )}
+                </tr>
               </tbody>
             </table>
+            <ReportFooter />
           </div>
         )}
 
         {selectedSections.includes('household') && (
           <div id="household" className="report-section show-print">
+            <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
             <h3>II. Total Household Population (14 Barangays)</h3>
             <table>
               <thead>
@@ -492,11 +728,13 @@ export default function Reports() {
                 </tr>
               </tbody>
             </table>
+            <ReportFooter />
           </div>
         )}
 
         {selectedSections.includes('brgy-stats') && (
           <div id="brgy-stats" className="report-section show-print">
+            <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
             <h3>III. Barangay Statistics Summary</h3>
             <table>
               <thead>
@@ -519,11 +757,13 @@ export default function Reports() {
                 </tr>
               </tbody>
             </table>
+            <ReportFooter />
           </div>
         )}
 
         {selectedSections.includes('senior-pwd') && (
           <div id="senior-pwd" className="report-section show-print">
+            <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
             <h3>IV. Senior Citizen &amp; PWD Detailed Report</h3>
             <table>
               <thead>
@@ -564,11 +804,13 @@ export default function Reports() {
                 </tr>
               </tbody>
             </table>
+            <ReportFooter />
           </div>
         )}
 
         {selectedSections.includes('voters-report') && (
           <div id="voters-report" className="report-section show-print">
+            <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
             <h3>V. Total Voters per Barangay</h3>
             <table>
               <thead>
@@ -596,15 +838,9 @@ export default function Reports() {
                 </tr>
               </tbody>
             </table>
+            <ReportFooter />
           </div>
         )}
-
-        <div className="signature-section" style={{ marginTop: '50px', pageBreakInside: 'avoid' }}>
-          <p>Certified Correct by:</p>
-          <br /><br />
-          <p>__________________________</p>
-          <p><strong>POPDEV OFFICER</strong></p>
-        </div>
       </div>
     </div>
   );

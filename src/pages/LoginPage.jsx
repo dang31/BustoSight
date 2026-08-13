@@ -16,7 +16,7 @@ export default function LoginPage() {
     if (location.state?.message) {
       setToast({ message: location.state.message, type: 'error' });
       setTimeout(() => setToast(null), 3500);
-      
+
       // Clear state so it doesn't reappear on refresh
       navigate(location.pathname, { replace: true });
     }
@@ -38,7 +38,7 @@ export default function LoginPage() {
           .select('email')
           .eq('username', username)
           .single();
-        
+
         if (profileData && profileData.email) {
           loginEmail = profileData.email;
         } else {
