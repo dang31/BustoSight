@@ -18,6 +18,7 @@ const REPORT_SECTIONS = [
   { id: 'brgy-stats', label: 'Barangay Statistics Summary' },
   { id: 'senior-pwd', label: 'Senior Citizen & PWD Report' },
   { id: 'voters-report', label: 'Total Voters per Barangay' },
+  { id: 'generations', label: 'Generations Report' },
 ];
 
 function ReportHeader({ selectedYear, currentDate }) {
@@ -66,6 +67,9 @@ export default function Reports() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
   const [genderFilter, setGenderFilter] = useState('both');
+  const [generationFilter, setGenerationFilter] = useState('all');
+  const [customStartYear, setCustomStartYear] = useState(1990);
+  const [customEndYear, setCustomEndYear] = useState(2005);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   const currentDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -94,7 +98,7 @@ export default function Reports() {
           const to = from + PAGE_SIZE - 1;
           const { data, error } = await supabase
             .from('residents')
-            .select('barangay, sex, age, is_pwd, is_senior, is_solo_parent, is_4ps, is_voter, h_no, is_household_head, has_senior_id, has_pwd_id, has_solo_parent_id')
+            .select('barangay, sex, age, birth_date, is_pwd, is_senior, is_solo_parent, is_4ps, is_voter, h_no, is_household_head, has_senior_id, has_pwd_id, has_solo_parent_id')
             .eq('is_archived', false)
             .eq('data_year', selectedYear)
             .range(from, to);
@@ -113,6 +117,7 @@ export default function Reports() {
           barangay: c.brgy,
           sex: c.s,
           age: c.age,
+          birth_date: c.bd,
           is_pwd: c.isPwd,
           has_pwd_id: c.hasPwdId,
           is_senior: c.isSenior,
@@ -151,6 +156,20 @@ export default function Reports() {
       alert('Please select at least one report!');
       return;
     }
+
+    if (selectedSections.includes('generations') && generationFilter === 'custom') {
+      const s = parseInt(customStartYear, 10);
+      const e = parseInt(customEndYear, 10);
+      if (!customStartYear || !customEndYear || isNaN(s) || isNaN(e)) {
+        alert('Invalid Year Range: Please enter both Start Year and End Year.');
+        return;
+      }
+      if (s > e) {
+        alert(`Invalid Year Range: Start Year (${s}) cannot be greater than End Year (${e}).`);
+        return;
+      }
+    }
+
     window.print();
   };
 
@@ -387,11 +406,151 @@ export default function Reports() {
     };
   };
 
+  const getGenerationTitle = () => {
+    switch (generationFilter) {
+      case 'gen-z': return 'Generation Z (1997–2012)';
+      case 'millennials': return 'Millennials (1981–1996)';
+      case 'gen-x': return 'Generation X (1965–1980)';
+      case 'boomers-2': return 'Boomers II (1955–1964)';
+      case 'boomers-1': return 'Boomers I (1946–1954)';
+      case 'post-war': return 'Post War (1928–1945)';
+      case 'ww2': return 'WWII (1922–1927)';
+      case 'custom': {
+        const s = customStartYear || '...';
+        const e = customEndYear || '...';
+        return `Specific Year Range (${s}–${e})`;
+      }
+      default: return 'All Generations';
+    }
+  };
+
+  const generationsRep = () => {
+    const barangayData = {};
+    barangayNames.forEach(name => {
+      barangayData[name] = {
+        genZ: 0,
+        millennials: 0,
+        genX: 0,
+        boomers2: 0,
+        boomers1: 0,
+        postWar: 0,
+        ww2: 0,
+        male: 0,
+        female: 0,
+        total: 0,
+      };
+    });
+
+    const startYr = generationFilter === 'custom' ? parseInt(customStartYear, 10) : null;
+    const endYr = generationFilter === 'custom' ? parseInt(customEndYear, 10) : null;
+
+    residents.forEach(r => {
+      const brgy = r.barangay;
+      if (!barangayData[brgy]) return;
+
+      let birthYear = null;
+      if (r.birth_date) {
+        const yr = new Date(r.birth_date).getFullYear();
+        if (!isNaN(yr)) birthYear = yr;
+      }
+      if (birthYear === null && r.age !== null && r.age !== undefined && r.age !== '') {
+        const ageNum = parseInt(r.age, 10);
+        if (!isNaN(ageNum) && ageNum >= 0) {
+          birthYear = selectedYear - ageNum;
+        }
+      }
+
+      if (birthYear === null) return;
+
+      const sex = (r.sex || '').toUpperCase();
+      const isMale = sex === 'MALE' || sex === 'M';
+      const isFemale = sex === 'FEMALE' || sex === 'F';
+
+      // Count by generation for 'all' breakdown
+      if (birthYear >= 1997 && birthYear <= 2012) barangayData[brgy].genZ++;
+      else if (birthYear >= 1981 && birthYear <= 1996) barangayData[brgy].millennials++;
+      else if (birthYear >= 1965 && birthYear <= 1980) barangayData[brgy].genX++;
+      else if (birthYear >= 1955 && birthYear <= 1964) barangayData[brgy].boomers2++;
+      else if (birthYear >= 1946 && birthYear <= 1954) barangayData[brgy].boomers1++;
+      else if (birthYear >= 1928 && birthYear <= 1945) barangayData[brgy].postWar++;
+      else if (birthYear >= 1922 && birthYear <= 1927) barangayData[brgy].ww2++;
+
+      // Check filter match for single selection
+      let isMatch = false;
+      if (generationFilter === 'all') {
+        isMatch = true;
+      } else if (generationFilter === 'gen-z' && birthYear >= 1997 && birthYear <= 2012) {
+        isMatch = true;
+      } else if (generationFilter === 'millennials' && birthYear >= 1981 && birthYear <= 1996) {
+        isMatch = true;
+      } else if (generationFilter === 'gen-x' && birthYear >= 1965 && birthYear <= 1980) {
+        isMatch = true;
+      } else if (generationFilter === 'boomers-2' && birthYear >= 1955 && birthYear <= 1964) {
+        isMatch = true;
+      } else if (generationFilter === 'boomers-1' && birthYear >= 1946 && birthYear <= 1954) {
+        isMatch = true;
+      } else if (generationFilter === 'post-war' && birthYear >= 1928 && birthYear <= 1945) {
+        isMatch = true;
+      } else if (generationFilter === 'ww2' && birthYear >= 1922 && birthYear <= 1927) {
+        isMatch = true;
+      } else if (generationFilter === 'custom') {
+        const s = parseInt(customStartYear, 10);
+        const e = parseInt(customEndYear, 10);
+        if (!isNaN(s) && !isNaN(e) && s <= e) {
+          if (birthYear >= s && birthYear <= e) {
+            isMatch = true;
+          }
+        }
+      }
+
+      if (isMatch) {
+        if (isMale) barangayData[brgy].male++;
+        else if (isFemale) barangayData[brgy].female++;
+        barangayData[brgy].total++;
+      }
+    });
+
+    let grandGenZ = 0, grandMillennials = 0, grandGenX = 0, grandBoomers2 = 0, grandBoomers1 = 0, grandPostWar = 0, grandWw2 = 0;
+    let grandMale = 0, grandFemale = 0, grandTotal = 0;
+
+    const rows = barangayNames.map(name => {
+      const d = barangayData[name];
+      grandGenZ += d.genZ;
+      grandMillennials += d.millennials;
+      grandGenX += d.genX;
+      grandBoomers2 += d.boomers2;
+      grandBoomers1 += d.boomers1;
+      grandPostWar += d.postWar;
+      grandWw2 += d.ww2;
+      grandMale += d.male;
+      grandFemale += d.female;
+      grandTotal += d.total;
+      return { name, ...d };
+    });
+
+    return {
+      rows,
+      grandTotal: {
+        genZ: grandGenZ,
+        millennials: grandMillennials,
+        genX: grandGenX,
+        boomers2: grandBoomers2,
+        boomers1: grandBoomers1,
+        postWar: grandPostWar,
+        ww2: grandWw2,
+        male: grandMale,
+        female: grandFemale,
+        total: grandTotal,
+      }
+    };
+  };
+
   const ageData = ageGenderDist();
   const householdData = householdPop();
   const statsSummary = brgyStatsSum();
   const seniorPwdData = seniorPwdRep();
   const votersData = votersRep();
+  const generationsData = generationsRep();
 
   return (
     <div className="dashboard-wrapper">
@@ -399,8 +558,8 @@ export default function Reports() {
       <div className="overlay" />
       <Sidebar />
 
-      <main className="content">
-        <header className="main-header">
+      <main className="content reports-content">
+        <header className="main-header reports-header">
           <h1>Bustos Population Reports</h1>
           <UserProfileBadge />
         </header>
@@ -531,6 +690,66 @@ export default function Reports() {
                               </button>
                             ))}
                           </div>
+                        </div>
+                      )}
+                      {section.id === 'generations' && selectedSections.includes('generations') && (
+                        <div style={{ marginLeft: '32px', marginTop: '6px', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '10px', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--primary-dark)' }}>Select Generation Target:</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '8px' }}>
+                            {[
+                              { id: 'custom', label: 'Specific Year Range' },
+                              { id: 'all', label: 'All' },
+                              { id: 'gen-z', label: 'Generation Z (1997–2012)' },
+                              { id: 'millennials', label: 'Millennials (1981–1996)' },
+                              { id: 'gen-x', label: 'Generation X (1965–1980)' },
+                              { id: 'boomers-2', label: 'Boomers II (1955–1964)' },
+                              { id: 'boomers-1', label: 'Boomers I (1946–1954)' },
+                              { id: 'post-war', label: 'Post War (1928–1945)' },
+                              { id: 'ww2', label: 'WWII (1922–1927)' },
+                            ].map(opt => (
+                              <label key={opt.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: '#334155', fontWeight: generationFilter === opt.id ? '700' : '500' }}>
+                                <input
+                                  type="radio"
+                                  name="generationFilter"
+                                  value={opt.id}
+                                  checked={generationFilter === opt.id}
+                                  onChange={() => setGenerationFilter(opt.id)}
+                                  style={{ accentColor: 'var(--primary)', cursor: 'pointer', width: '15px', height: '15px' }}
+                                />
+                                {opt.label}
+                              </label>
+                            ))}
+                          </div>
+
+                          {generationFilter === 'custom' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px', padding: '10px 14px', background: 'white', borderRadius: '6px', border: '1px solid #94a3b8' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>Specific Year Range (Birth Year):</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <input
+                                    type="number"
+                                    placeholder="Start (e.g. 1990)"
+                                    value={customStartYear}
+                                    onChange={(e) => setCustomStartYear(e.target.value)}
+                                    style={{ width: '130px', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid #cbd5e1', color: '#1e293b', fontWeight: '600' }}
+                                  />
+                                  <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#64748b' }}>–</span>
+                                  <input
+                                    type="number"
+                                    placeholder="End (e.g. 2005)"
+                                    value={customEndYear}
+                                    onChange={(e) => setCustomEndYear(e.target.value)}
+                                    style={{ width: '130px', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid #cbd5e1', color: '#1e293b', fontWeight: '600' }}
+                                  />
+                                </div>
+                              </div>
+                              {customStartYear && customEndYear && parseInt(customStartYear, 10) > parseInt(customEndYear, 10) && (
+                                <span style={{ color: '#ef4444', fontSize: '12px', fontWeight: '600' }}>
+                                  ⚠ Invalid Year Range: Start Year ({customStartYear}) cannot be greater than End Year ({customEndYear}).
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -838,6 +1057,89 @@ export default function Reports() {
                 </tr>
               </tbody>
             </table>
+            <ReportFooter />
+          </div>
+        )}
+
+        {selectedSections.includes('generations') && (
+          <div id="generations" className="report-section show-print">
+            <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
+            <h3>VI. Generations Population Report ({getGenerationTitle()})</h3>
+            
+            {generationFilter === 'all' ? (
+              <table style={{ fontSize: '11px' }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'center', width: '30px' }}>#</th>
+                    <th style={{ textAlign: 'left' }}>BARANGAY</th>
+                    <th style={{ textAlign: 'center' }}>GEN Z<br/><span style={{ fontSize: '9px', fontWeight: 'normal' }}>(1997–2012)</span></th>
+                    <th style={{ textAlign: 'center' }}>MILLENNIALS<br/><span style={{ fontSize: '9px', fontWeight: 'normal' }}>(1981–1996)</span></th>
+                    <th style={{ textAlign: 'center' }}>GEN X<br/><span style={{ fontSize: '9px', fontWeight: 'normal' }}>(1965–1980)</span></th>
+                    <th style={{ textAlign: 'center' }}>BOOMERS II<br/><span style={{ fontSize: '9px', fontWeight: 'normal' }}>(1955–1964)</span></th>
+                    <th style={{ textAlign: 'center' }}>BOOMERS I<br/><span style={{ fontSize: '9px', fontWeight: 'normal' }}>(1946–1954)</span></th>
+                    <th style={{ textAlign: 'center' }}>POST WAR<br/><span style={{ fontSize: '9px', fontWeight: 'normal' }}>(1928–1945)</span></th>
+                    <th style={{ textAlign: 'center' }}>WWII<br/><span style={{ fontSize: '9px', fontWeight: 'normal' }}>(1922–1927)</span></th>
+                    <th style={{ textAlign: 'center' }}>TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {generationsData.rows.map((row, idx) => (
+                    <tr key={row.name}>
+                      <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                      <td>{row.name}</td>
+                      <td style={{ textAlign: 'center' }}>{row.genZ}</td>
+                      <td style={{ textAlign: 'center' }}>{row.millennials}</td>
+                      <td style={{ textAlign: 'center' }}>{row.genX}</td>
+                      <td style={{ textAlign: 'center' }}>{row.boomers2}</td>
+                      <td style={{ textAlign: 'center' }}>{row.boomers1}</td>
+                      <td style={{ textAlign: 'center' }}>{row.postWar}</td>
+                      <td style={{ textAlign: 'center' }}>{row.ww2}</td>
+                      <td style={{ textAlign: 'center' }}><strong>{row.total}</strong></td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan="2" style={{ textAlign: 'left' }}><strong>GRAND TOTAL</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.genZ}</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.millennials}</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.genX}</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.boomers2}</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.boomers1}</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.postWar}</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.ww2}</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.total}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>#</th>
+                    <th style={{ textAlign: 'left' }}>BARANGAY</th>
+                    <th style={{ textAlign: 'center' }}>MALE</th>
+                    <th style={{ textAlign: 'center' }}>FEMALE</th>
+                    <th style={{ textAlign: 'center' }}>TOTAL POPULATION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {generationsData.rows.map((row, idx) => (
+                    <tr key={row.name}>
+                      <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                      <td>{row.name}</td>
+                      <td style={{ textAlign: 'center' }}>{row.male}</td>
+                      <td style={{ textAlign: 'center' }}>{row.female}</td>
+                      <td style={{ textAlign: 'center' }}><strong>{row.total}</strong></td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan="2" style={{ textAlign: 'left' }}><strong>GRAND TOTAL</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.male}</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.female}</strong></td>
+                    <td style={{ textAlign: 'center' }}><strong>{generationsData.grandTotal.total}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
             <ReportFooter />
           </div>
         )}

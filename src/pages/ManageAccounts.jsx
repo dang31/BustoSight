@@ -245,11 +245,75 @@ export default function ManageAccounts() {
     confirmPassword: "",
   });
 
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState("");
   const [formErrors, setFormErrors] = useState({});
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  const verifyAdminPassword = async (pwdToVerify) => {
+    const pwd = (pwdToVerify !== undefined ? pwdToVerify : adminPasswordConfirm) || "";
+    if (!pwd.trim()) {
+      alert("Security Check Failed: Logged-in Admin password is required.");
+      return false;
+    }
+
+    const trimmedPassword = pwd.trim();
+    const storedUser = JSON.parse(localStorage.getItem("popdev_user")) || {};
+
+    // 1. Direct local stored password check
+    if (storedUser && storedUser.password && storedUser.password === trimmedPassword) {
+      return true;
+    }
+
+    try {
+      // 2. Create isolated auth client to prevent session mutation/disruption
+      const tempAuthClient = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+          },
+        }
+      );
+
+      let emailsToTry = [];
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && user.email) emailsToTry.push(user.email);
+      if (storedUser && storedUser.email) emailsToTry.push(storedUser.email);
+      if (storedUser && storedUser.username) {
+        emailsToTry.push(`${storedUser.username}@bustos.gov.ph`);
+      }
+      emailsToTry.push("admin@bustos.gov.ph");
+
+      const uniqueEmails = [...new Set(emailsToTry.filter(Boolean))];
+
+      for (const email of uniqueEmails) {
+        const { error: authError } = await tempAuthClient.auth.signInWithPassword({
+          email: email,
+          password: trimmedPassword,
+        });
+
+        if (!authError) {
+          return true;
+        }
+      }
+
+      alert("Security Check Failed: Incorrect Admin Password.");
+      return false;
+    } catch (err) {
+      console.warn("Auth verification error:", err.message);
+      if (storedUser && storedUser.password && storedUser.password === trimmedPassword) {
+        return true;
+      }
+      alert("Security Check Failed: Incorrect Admin Password.");
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -494,6 +558,9 @@ export default function ManageAccounts() {
     e.preventDefault();
     if (!validateForm(false)) return;
 
+    const isVerified = await verifyAdminPassword(adminPasswordConfirm);
+    if (!isVerified) return;
+
     setIsLoading(true);
 
     try {
@@ -547,6 +614,9 @@ export default function ManageAccounts() {
     e.preventDefault();
     if (!validateForm(true)) return;
 
+    const isVerified = await verifyAdminPassword(adminPasswordConfirm);
+    if (!isVerified) return;
+
     setIsLoading(true);
     const updatedFields = {
       employee_id: formData.employee_id.trim() || null,
@@ -584,6 +654,9 @@ export default function ManageAccounts() {
   const handleChangePassword = async (e) => {
     e.preventDefault();
 
+    const isVerified = await verifyAdminPassword(adminPasswordConfirm);
+    if (!isVerified) return;
+
     setIsLoading(true);
     try {
       // In a secure RLS setup, admins cannot arbitrarily update passwords without the service_role key.
@@ -604,7 +677,16 @@ export default function ManageAccounts() {
     }
   };
 
-  const handleToggleStatus = async (account) => {
+  const handleToggleStatus = (account) => {
+    const newStatus = account.status === "Active" ? "Inactive" : "Active";
+    openConfirmModal(
+      "toggle-status",
+      account,
+      `Are you sure you want to change status of account "${account.first_name} ${account.last_name}" to ${newStatus}?`
+    );
+  };
+
+  const handleToggleStatusExecute = async (account) => {
     const newStatus = account.status === "Active" ? "Inactive" : "Active";
     setIsLoading(true);
 
@@ -625,6 +707,7 @@ export default function ManageAccounts() {
       showToast(`Account status updated to ${newStatus}.`, "info");
     } finally {
       setIsLoading(false);
+      closeModal();
       setOpenMenuId(null);
     }
   };
@@ -786,6 +869,7 @@ export default function ManageAccounts() {
       status: "Active",
     });
     setFormErrors({});
+    setAdminPasswordConfirm("");
     setModalState({ type: "create", data: null });
   };
 
@@ -801,6 +885,7 @@ export default function ManageAccounts() {
       status: account.status || "Active",
     });
     setFormErrors({});
+    setAdminPasswordConfirm("");
     setModalState({ type: "edit", data: account });
     setOpenMenuId(null);
   };
@@ -808,6 +893,7 @@ export default function ManageAccounts() {
   const openChangePasswordModal = (account) => {
     setPasswordData({ newPassword: "", confirmPassword: "" });
     setFormErrors({});
+    setAdminPasswordConfirm("");
     setModalState({ type: "changePassword", data: account });
     setOpenMenuId(null);
   };
@@ -823,6 +909,7 @@ export default function ManageAccounts() {
   };
 
   const openConfirmModal = (actionType, targetData, message) => {
+    setAdminPasswordConfirm("");
     setModalState({
       type: "confirm",
       data: { actionType, targetData, message },
@@ -833,6 +920,7 @@ export default function ManageAccounts() {
   const closeModal = () => {
     setModalState({ type: null, data: null });
     setFormErrors({});
+    setAdminPasswordConfirm("");
   };
 
   const getInitials = (firstName, lastName) => {
@@ -1502,6 +1590,17 @@ export default function ManageAccounts() {
                 <div></div>
               </div>
 
+              <div className="field-group" style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #e2e8f0" }}>
+                <label style={{ color: "var(--primary-dark)", fontWeight: "700" }}>Your Admin Password (Security Verification) *</label>
+                <input
+                  type="password"
+                  placeholder="Enter your current logged-in admin password"
+                  value={adminPasswordConfirm}
+                  onChange={(e) => setAdminPasswordConfirm(e.target.value)}
+                  required
+                />
+              </div>
+
               <div className="modal-footer-btns">
                 <button
                   type="button"
@@ -1693,6 +1792,17 @@ export default function ManageAccounts() {
                   />
                 </div>
                 <div></div>
+              </div>
+
+              <div className="field-group" style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #e2e8f0" }}>
+                <label style={{ color: "var(--primary-dark)", fontWeight: "700" }}>Your Admin Password (Security Verification) *</label>
+                <input
+                  type="password"
+                  placeholder="Enter your current logged-in admin password"
+                  value={adminPasswordConfirm}
+                  onChange={(e) => setAdminPasswordConfirm(e.target.value)}
+                  required
+                />
               </div>
 
               <div className="modal-footer-btns">
@@ -1899,6 +2009,18 @@ export default function ManageAccounts() {
                 reset link to <strong>@{modalState.data?.username}</strong>?
               </p>
 
+              <div className="field-group" style={{ marginBottom: "16px" }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: 'var(--primary-dark)', marginBottom: '6px' }}>Your Admin Password (Security Verification) *</label>
+                <input
+                  type="password"
+                  placeholder="Enter your current logged-in admin password"
+                  value={adminPasswordConfirm}
+                  onChange={(e) => setAdminPasswordConfirm(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-300)', borderRadius: '6px', fontSize: '14px' }}
+                  required
+                />
+              </div>
+
               <div className="modal-footer-btns">
                 <button
                   type="button"
@@ -2027,38 +2149,65 @@ export default function ManageAccounts() {
           <div className="admin-modal animate-fade-up">
             <h2>Confirm Action</h2>
             <p>{modalState.data.message}</p>
-            <div className="modal-btns">
-              <button
-                className="btn-back"
-                style={{ flex: 1 }}
-                onClick={closeModal}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn-next"
-                style={{ flex: 1, background: "var(--primary)" }}
-                onClick={() => {
-                  const { actionType, targetData } = modalState.data;
-                  if (actionType === "archive")
-                    handleArchiveAccount(targetData);
-                  else if (actionType === "restore")
-                    handleRestoreAccount(targetData);
-                  else if (actionType === "delete")
-                    handlePermanentDelete(targetData);
-                  else if (actionType === "bulk-activate")
-                    handleExecuteBulkAction("activate");
-                  else if (actionType === "bulk-deactivate")
-                    handleExecuteBulkAction("deactivate");
-                  else if (actionType === "bulk-archive")
-                    handleExecuteBulkAction("archive");
-                  else if (actionType === "bulk-delete")
-                    handleExecuteBulkAction("delete");
-                }}
-              >
-                Confirm
-              </button>
-            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const isVerified = await verifyAdminPassword(adminPasswordConfirm);
+                if (!isVerified) return;
+
+                const { actionType, targetData } = modalState.data;
+                if (actionType === "archive")
+                  handleArchiveAccount(targetData);
+                else if (actionType === "restore")
+                  handleRestoreAccount(targetData);
+                else if (actionType === "delete")
+                  handlePermanentDelete(targetData);
+                else if (actionType === "toggle-status")
+                  handleToggleStatusExecute(targetData);
+                else if (actionType === "bulk-activate")
+                  handleExecuteBulkAction("activate");
+                else if (actionType === "bulk-deactivate")
+                  handleExecuteBulkAction("deactivate");
+                else if (actionType === "bulk-archive")
+                  handleExecuteBulkAction("archive");
+                else if (actionType === "bulk-delete")
+                  handleExecuteBulkAction("delete");
+              }}
+            >
+              <div style={{ marginTop: '16px', marginBottom: '16px', textAlign: 'left' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: 'var(--primary-dark)', marginBottom: '6px' }}>
+                  Your Admin Password (Security Verification) *
+                </label>
+                <input
+                  type="password"
+                  placeholder="Enter your current logged-in admin password"
+                  value={adminPasswordConfirm}
+                  onChange={(e) => setAdminPasswordConfirm(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px' }}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="modal-btns">
+                <button
+                  type="button"
+                  className="btn-back"
+                  style={{ flex: 1 }}
+                  onClick={closeModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-next"
+                  style={{ flex: 1, background: "var(--primary)" }}
+                >
+                  Confirm
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
