@@ -800,22 +800,13 @@ export default function BarangayList() {
                               >
                                 <i className="fa-solid fa-eye"></i>
                               </button>
-                              <button
-                                className="action-btn edit-btn"
-                                onClick={() =>
-                                  alert("Edit feature is under development.")
-                                }
-                                title="Edit Resident"
-                              >
-                                <i className="fa-solid fa-pen-to-square"></i>
-                              </button>
                               {!isStaff && (
                                 <button
-                                  className="action-btn delete-btn"
+                                  className="action-btn archive-btn"
                                   onClick={() => handleArchive(res)}
                                   title="Archive Resident"
                                 >
-                                  <i className="fa-solid fa-trash-can"></i>
+                                  <i className="fa-solid fa-box-archive"></i>
                                 </button>
                               )}
                             </div>
