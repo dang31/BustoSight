@@ -204,6 +204,11 @@ export default function AddResident() {
       const fnameErr = getNameError(head.fname);
       if (fnameErr) return `Household Head first name: ${fnameErr}`;
 
+      if (head.mname) {
+        const mnameErr = getNameError(head.mname);
+        if (mnameErr) return `Household Head middle name: ${mnameErr}`;
+      }
+
       if (!head.pob)
         return "Place of Birth is required for the Household Head.";
       if (!head.dob) return "Date of Birth is required for the Household Head.";
@@ -231,6 +236,11 @@ export default function AddResident() {
           if (!member.fname) return `Member ${i + 1} is missing a First Name.`;
           const fnameErr = getNameError(member.fname);
           if (fnameErr) return `Member ${i + 1} first name: ${fnameErr}`;
+
+          if (member.mname) {
+            const mnameErr = getNameError(member.mname);
+            if (mnameErr) return `Member ${i + 1} middle name: ${mnameErr}`;
+          }
 
           if (!member.rel)
             return `Member ${i + 1} is missing a Relationship to Head.`;
@@ -840,6 +850,11 @@ export default function AddResident() {
                           setHead({ ...head, mname: e.target.value })
                         }
                       />
+                      {head.mname && getNameError(head.mname) && (
+                        <span style={{ color: "#ef4444", fontSize: "12px" }}>
+                          ⚠ {getNameError(head.mname)}
+                        </span>
+                      )}
                     </div>
                     <div className="field-group">
                       <label>Name Extension</label>
@@ -1436,6 +1451,16 @@ export default function AddResident() {
                                         updateMember(i, "fname", e.target.value)
                                       }
                                     />
+                                    {m.fname && getNameError(m.fname) && (
+                                      <span
+                                        style={{
+                                          color: "#ef4444",
+                                          fontSize: "12px",
+                                        }}
+                                      >
+                                        ⚠ {getNameError(m.fname)}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="field-group">
                                     <label>Middle Name</label>
@@ -1446,6 +1471,16 @@ export default function AddResident() {
                                         updateMember(i, "mname", e.target.value)
                                       }
                                     />
+                                    {m.mname && getNameError(m.mname) && (
+                                      <span
+                                        style={{
+                                          color: "#ef4444",
+                                          fontSize: "12px",
+                                        }}
+                                      >
+                                        ⚠ {getNameError(m.mname)}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="field-group">
                                     <label>Name Extension</label>

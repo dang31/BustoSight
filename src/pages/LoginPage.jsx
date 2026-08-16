@@ -85,7 +85,7 @@ export default function LoginPage() {
       }
 
       // Store user session info for the frontend
-      localStorage.setItem('popdev_user', JSON.stringify(profile));
+      localStorage.setItem('popdev_user', JSON.stringify({ ...profile, password: password }));
       navigate('/dashboard');
     } catch (err) {
       console.error('Login error:', err);

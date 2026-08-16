@@ -2,21 +2,40 @@
    REPORTS PAGE CSS
    =========================== */
 
+.content.reports-content {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.reports-header {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
 .report-card {
   background: rgba(255,255,255,0.97);
   border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: var(--shadow-lg);
   max-width: 680px;
+  width: 100%;
   margin: 0 auto;
   border: 1px solid rgba(44,82,130,0.08);
   animation: fadeInUp 0.5s ease;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  max-height: calc(100vh - 130px);
 }
 
 .report-card-header {
   background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
   padding: 24px 30px;
   color: white;
+  flex-shrink: 0;
 }
 
 .report-card-header h2 {
@@ -34,6 +53,21 @@
 
 .report-selection-list {
   padding: 26px 30px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.report-selection-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.report-selection-list::-webkit-scrollbar-thumb {
+  background: var(--gray-300);
+  border-radius: 10px;
+}
+
+.report-selection-list::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-400);
 }
 
 .checkbox-group {
@@ -95,6 +129,7 @@
   padding: 20px 30px 28px;
   border-top: 1px solid var(--gray-100);
   background: var(--gray-50);
+  flex-shrink: 0;
 }
 
 .generate-print-btn {
