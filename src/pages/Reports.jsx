@@ -17,6 +17,7 @@ const REPORT_SECTIONS = [
   { id: 'household', label: 'Total Household Population (14 Barangays)' },
   { id: 'brgy-stats', label: 'Barangay Statistics Summary' },
   { id: 'senior-pwd', label: 'Senior Citizen & PWD Report' },
+  { id: '4ps-report', label: '4Ps Beneficiaries Report' },
   { id: 'voters-report', label: 'Total Voters per Barangay' },
   { id: 'generations', label: 'Generations Report' },
 ];
@@ -285,7 +286,7 @@ export default function Reports() {
   const brgyStatsSum = () => {
     const dataMap = {};
     barangayNames.forEach(name => {
-      dataMap[name] = { seniors: 0, pwds: 0, voters: 0 };
+      dataMap[name] = { seniors: 0, pwds: 0, fourPs: 0, voters: 0 };
     });
 
     residents.forEach(r => {
@@ -293,6 +294,7 @@ export default function Reports() {
       if (dataMap[brgy]) {
         if (r.is_senior) dataMap[brgy].seniors++;
         if (r.is_pwd) dataMap[brgy].pwds++;
+        if (r.is_4ps) dataMap[brgy].fourPs++;
         const voterStr = (r.is_voter || '').toLowerCase();
         if (voterStr.includes('registered')) dataMap[brgy].voters++;
       }
@@ -300,19 +302,22 @@ export default function Reports() {
 
     let grandSeniors = 0;
     let grandPwds = 0;
+    let grand4Ps = 0;
     let grandVoters = 0;
 
     const rows = barangayNames.map(name => {
       const s = dataMap[name].seniors;
       const p = dataMap[name].pwds;
+      const f = dataMap[name].fourPs;
       const v = dataMap[name].voters;
       grandSeniors += s;
       grandPwds += p;
+      grand4Ps += f;
       grandVoters += v;
-      return { name, seniors: s, pwds: p, voters: v };
+      return { name, seniors: s, pwds: p, fourPs: f, voters: v };
     });
 
-    return { rows, grandTotal: { seniors: grandSeniors, pwds: grandPwds, voters: grandVoters } };
+    return { rows, grandTotal: { seniors: grandSeniors, pwds: grandPwds, fourPs: grand4Ps, voters: grandVoters } };
   };
 
   const seniorPwdRep = () => {
@@ -545,10 +550,47 @@ export default function Reports() {
     };
   };
 
+  const fourPsRep = () => {
+    const dataMap = {};
+    barangayNames.forEach(name => {
+      dataMap[name] = { male: 0, female: 0, total: 0 };
+    });
+
+    residents.forEach(r => {
+      const brgy = r.barangay;
+      if (dataMap[brgy] && r.is_4ps) {
+        dataMap[brgy].total++;
+        const sex = (r.sex || '').toUpperCase();
+        if (sex === 'MALE' || sex === 'M') dataMap[brgy].male++;
+        else if (sex === 'FEMALE' || sex === 'F') dataMap[brgy].female++;
+      }
+    });
+
+    let totalMale = 0, totalFemale = 0, total4Ps = 0;
+
+    const rows = barangayNames.map(name => {
+      const d = dataMap[name];
+      totalMale += d.male;
+      totalFemale += d.female;
+      total4Ps += d.total;
+      return { name, ...d };
+    });
+
+    return {
+      rows,
+      grandTotal: {
+        male: totalMale,
+        female: totalFemale,
+        total: total4Ps
+      }
+    };
+  };
+
   const ageData = ageGenderDist();
   const householdData = householdPop();
   const statsSummary = brgyStatsSum();
   const seniorPwdData = seniorPwdRep();
+  const fourPsData = fourPsRep();
   const votersData = votersRep();
   const generationsData = generationsRep();
 
@@ -957,7 +999,7 @@ export default function Reports() {
             <h3>III. Barangay Statistics Summary</h3>
             <table>
               <thead>
-                <tr><th>BARANGAY</th><th>SENIORS</th><th>PWDs</th><th>VOTERS</th></tr>
+                <tr><th>BARANGAY</th><th>SENIORS</th><th>PWDs</th><th>4Ps BENEFICIARIES</th><th>VOTERS</th></tr>
               </thead>
               <tbody>
                 {statsSummary.rows.map(row => (
@@ -965,6 +1007,7 @@ export default function Reports() {
                     <td>{row.name}</td>
                     <td>{row.seniors}</td>
                     <td>{row.pwds}</td>
+                    <td>{row.fourPs}</td>
                     <td>{row.voters}</td>
                   </tr>
                 ))}
@@ -972,6 +1015,7 @@ export default function Reports() {
                   <td><strong>GRAND TOTAL</strong></td>
                   <td><strong>{statsSummary.grandTotal.seniors}</strong></td>
                   <td><strong>{statsSummary.grandTotal.pwds}</strong></td>
+                  <td><strong>{statsSummary.grandTotal.fourPs}</strong></td>
                   <td><strong>{statsSummary.grandTotal.voters}</strong></td>
                 </tr>
               </tbody>
@@ -1020,6 +1064,42 @@ export default function Reports() {
                   <td><strong>{seniorPwdData.grandTotal.pwds}</strong></td>
                   <td><strong>{seniorPwdData.grandTotal.pwdsWithId}</strong></td>
                   <td><strong>{seniorPwdData.grandTotal.pwdsNoId}</strong></td>
+                </tr>
+              </tbody>
+            </table>
+            <ReportFooter />
+          </div>
+        )}
+
+        {selectedSections.includes('4ps-report') && (
+          <div id="4ps-report" className="report-section show-print">
+            <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
+            <h3>V. 4Ps Beneficiaries Detailed Report</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: '40px', textAlign: 'center' }}>#</th>
+                  <th style={{ textAlign: 'left' }}>BARANGAY</th>
+                  <th style={{ textAlign: 'center' }}>MALE 4Ps</th>
+                  <th style={{ textAlign: 'center' }}>FEMALE 4Ps</th>
+                  <th style={{ textAlign: 'center' }}>TOTAL 4Ps BENEFICIARIES</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fourPsData.rows.map((row, idx) => (
+                  <tr key={row.name}>
+                    <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                    <td>{row.name}</td>
+                    <td style={{ textAlign: 'center' }}>{row.male}</td>
+                    <td style={{ textAlign: 'center' }}>{row.female}</td>
+                    <td style={{ textAlign: 'center' }}><strong>{row.total}</strong></td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan="2" style={{ textAlign: 'left' }}><strong>GRAND TOTAL</strong></td>
+                  <td style={{ textAlign: 'center' }}><strong>{fourPsData.grandTotal.male}</strong></td>
+                  <td style={{ textAlign: 'center' }}><strong>{fourPsData.grandTotal.female}</strong></td>
+                  <td style={{ textAlign: 'center' }}><strong>{fourPsData.grandTotal.total}</strong></td>
                 </tr>
               </tbody>
             </table>

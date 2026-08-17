@@ -285,6 +285,7 @@
 .btn-bulk-activate { background: #38a169; color: white; }
 .btn-bulk-deactivate { background: #e53e3e; color: white; }
 .btn-bulk-archive { background: #718096; color: white; }
+.btn-bulk-restore { background: #2b6cb0; color: white; }
 .btn-bulk-delete { background: #9b2c2c; color: white; }
 
 .btn-bulk:hover {

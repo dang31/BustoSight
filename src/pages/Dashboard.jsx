@@ -245,6 +245,33 @@ export default function Dashboard() {
             }
           }
 
+          // Fetch 4Ps count per barangay
+          let fourPsPerBrgy = {};
+          try {
+            let query = supabase
+              .from("residents")
+              .select("barangay")
+              .eq("is_archived", false)
+              .eq("is_4ps", true);
+
+            if (targetYearArg) {
+              query = query.eq("data_year", targetYearArg);
+            }
+
+            const { data: fourPsData } = await query;
+            if (fourPsData) {
+              fourPsData.forEach((r) => {
+                if (r.barangay) {
+                  fourPsPerBrgy[r.barangay] = (fourPsPerBrgy[r.barangay] || 0) + 1;
+                }
+              });
+            }
+          } catch (fourPsErr) {
+            console.error("Error fetching 4Ps per barangay:", fourPsErr);
+          }
+
+          const computedTotal4Ps = Object.values(fourPsPerBrgy).reduce((a, b) => a + b, 0);
+
           setStats({
             totalPopulation: data.global?.totalPopulation || 0,
             totalHouseholds: data.global?.totalHouseholds || 0,
@@ -252,7 +279,7 @@ export default function Dashboard() {
             totalVoters: data.global?.registeredVoters || 0,
             totalPwd: data.global?.totalPwd || 0,
             totalSoloParent: data.global?.totalSoloParent || 0,
-            total4ps: data.global?.total4ps || 0,
+            total4ps: data.global?.total4ps || computedTotal4Ps || 0,
             maleCount: data.global?.maleCount || 0,
             femaleCount: data.global?.femaleCount || 0,
             lgbtCount: lgbtVal,
@@ -286,6 +313,7 @@ export default function Dashboard() {
               pwd: brgyMap[name]?.pwd || 0,
               households: brgyMap[name]?.households || 0,
               voters: brgyMap[name]?.voters || 0,
+              fourPs: brgyMap[name]?.fourPs || brgyMap[name]?.four_ps || brgyMap[name]?.is4ps || brgyMap[name]?.is_4ps || brgyMap[name]?.total4ps || fourPsPerBrgy[name] || 0,
               teenPreg: brgyMap[name]?.teenPreg || 0,
               teenMother: brgyMap[name]?.teenMother || 0,
             })),
@@ -365,10 +393,11 @@ export default function Dashboard() {
       acc.households += curr.households;
       acc.seniors += curr.seniors;
       acc.pwd += curr.pwd;
+      acc.fourPs += curr.fourPs;
       acc.voters += curr.voters;
       return acc;
     },
-    { count: 0, households: 0, seniors: 0, pwd: 0, voters: 0 },
+    { count: 0, households: 0, seniors: 0, pwd: 0, fourPs: 0, voters: 0 },
   );
 
   // --- Derived chart data ---
@@ -514,6 +543,7 @@ export default function Dashboard() {
     { label: "Senior Citizens", value: stats.totalSeniors.toLocaleString() },
     { label: "Registered Voters", value: stats.totalVoters.toLocaleString() },
     { label: "PWD", value: stats.totalPwd.toLocaleString() },
+    { label: "4Ps Beneficiaries", value: stats.total4ps.toLocaleString() },
     { label: "Solo Parents", value: stats.totalSoloParent.toLocaleString() },
   ];
 
@@ -642,12 +672,13 @@ export default function Dashboard() {
 
   const renderBarangayAnalysis = () => {
     const headers = [
-      { label: "Barangay", key: "name", align: "left", width: "22%" },
-      { label: "Population", key: "count", align: "right", width: "15%" },
-      { label: "Households", key: "households", align: "right", width: "15%" },
-      { label: "Senior Citizens", key: "seniors", align: "right", width: "16%" },
-      { label: "PWD", key: "pwd", align: "right", width: "14%" },
-      { label: "Registered Voters", key: "voters", align: "right", width: "18%" },
+      { label: "Barangay", key: "name", align: "left", width: "18%" },
+      { label: "Population", key: "count", align: "right", width: "13%" },
+      { label: "Households", key: "households", align: "right", width: "13%" },
+      { label: "Senior Citizens", key: "seniors", align: "right", width: "14%" },
+      { label: "PWD", key: "pwd", align: "right", width: "13%" },
+      { label: "4Ps Beneficiaries", key: "fourPs", align: "right", width: "15%" },
+      { label: "Registered Voters", key: "voters", align: "right", width: "14%" },
     ];
 
     return (
@@ -751,13 +782,19 @@ export default function Dashboard() {
                         className="cell-number"
                         style={{ textAlign: "right" }}
                       >
+                        {b.fourPs.toLocaleString()}
+                      </td>
+                      <td
+                        className="cell-number"
+                        style={{ textAlign: "right" }}
+                      >
                         {b.voters.toLocaleString()}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="no-data-cell">
+                    <td colSpan={7} className="no-data-cell">
                       No matching barangays found.
                     </td>
                   </tr>
@@ -795,6 +832,12 @@ export default function Dashboard() {
                       style={{ textAlign: "right", fontWeight: "bold" }}
                     >
                       {brgyTotals.pwd.toLocaleString()}
+                    </td>
+                    <td
+                      className="cell-number"
+                      style={{ textAlign: "right", fontWeight: "bold" }}
+                    >
+                      {brgyTotals.fourPs.toLocaleString()}
                     </td>
                     <td
                       className="cell-number"
@@ -908,6 +951,28 @@ export default function Dashboard() {
       ],
     };
 
+    // 4Ps Beneficiaries
+    const fourPsPieData = {
+      labels: ["4Ps Beneficiary", "Non-4Ps Resident"],
+      datasets: [
+        {
+          data: [stats.total4ps, Math.max(0, stats.totalPopulation - stats.total4ps)],
+          backgroundColor: ["#f59e0b", "#e2e8f0"],
+          borderWidth: 0,
+        },
+      ],
+    };
+    const fourPsBarData = {
+      labels: brgyData.map((b) => b.name),
+      datasets: [
+        {
+          label: "4Ps Beneficiaries",
+          data: brgyData.map((b) => b.fourPs),
+          backgroundColor: "#f59e0b",
+        },
+      ],
+    };
+
     return (
       <div className="tab-content animate-fade-up">
         {/* Row 1: Senior Citizens */}
@@ -942,7 +1007,37 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Row 3: Voters */}
+        {/* Row 3: 4Ps Beneficiaries */}
+        <div className="charts-grid" style={{ marginTop: "24px" }}>
+          <div className="chart-item">
+            <h4>4Ps Beneficiaries Ratio</h4>
+            <div className="chart-container pie-box">
+              {!isLoading && <Pie data={fourPsPieData} options={chartOpts} />}
+            </div>
+            <div
+              style={{
+                marginTop: "12px",
+                fontSize: "12px",
+                color: "#64748b",
+                textAlign: "center",
+              }}
+            >
+              <span>
+                <b>4Ps Enrolled:</b> {stats.total4ps.toLocaleString()} |{" "}
+                <b>Non-4Ps:</b>{" "}
+                {Math.max(0, stats.totalPopulation - stats.total4ps).toLocaleString()}
+              </span>
+            </div>
+          </div>
+          <div className="chart-item">
+            <h4>4Ps Beneficiaries by Barangay</h4>
+            <div className="chart-container">
+              {!isLoading && <Bar data={fourPsBarData} options={chartOpts} />}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 4: Voters */}
         <div className="charts-grid" style={{ marginTop: "24px" }}>
           <div className="chart-item">
             <h4>Voter Registration Status</h4>
@@ -958,7 +1053,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Row 4: Employment & Pregnancy */}
+        {/* Row 5: Employment & Pregnancy */}
         <div className="charts-grid" style={{ marginTop: "24px" }}>
           <div className="chart-item">
             <h4>Employment Status Breakdown</h4>
@@ -1224,6 +1319,8 @@ export default function Dashboard() {
                   val = item.voters;
                 else if (modal.category.toLowerCase().includes("pwd"))
                   val = item.pwd;
+                else if (modal.category.toLowerCase().includes("4p"))
+                  val = item.fourPs;
                 return (
                   <div key={item.name} className="dist-item">
                     <span>{item.name}</span>

@@ -742,6 +742,15 @@ export default function ManageAccounts() {
           `${selectedIds.length} account(s) archived and deactivated.`,
           "info",
         );
+      } else if (action === "restore") {
+        await supabase
+          .from("profiles")
+          .update({ archived: false, status: "Active" })
+          .in("id", selectedIds);
+        showToast(
+          `${selectedIds.length} account(s) restored and activated.`,
+          "success",
+        );
       } else if (action === "delete") {
         await supabase.from("profiles").delete().in("id", selectedIds);
         showToast(
@@ -764,6 +773,12 @@ export default function ManageAccounts() {
         updated = updated.map((a) =>
           selectedIds.includes(a.id)
             ? { ...a, archived: true, status: "Inactive" }
+            : a,
+        );
+      } else if (action === "restore") {
+        updated = updated.map((a) =>
+          selectedIds.includes(a.id)
+            ? { ...a, archived: false, status: "Active" }
             : a,
         );
       } else if (action === "delete") {
@@ -1022,18 +1037,6 @@ export default function ManageAccounts() {
                     {activeTab === "active" && (
                       <>
                         <button
-                          className="btn-bulk btn-bulk-activate"
-                          onClick={() =>
-                            openConfirmModal(
-                              "bulk-activate",
-                              null,
-                              `Are you sure you want to activate ${selectedIds.length} selected account(s)?`,
-                            )
-                          }
-                        >
-                          Activate Selected
-                        </button>
-                        <button
                           className="btn-bulk btn-bulk-deactivate"
                           onClick={() =>
                             openConfirmModal(
@@ -1056,6 +1059,22 @@ export default function ManageAccounts() {
                           }
                         >
                           Archive Selected
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "archived" && (
+                      <>
+                        <button
+                          className="btn-bulk btn-bulk-restore"
+                          onClick={() =>
+                            openConfirmModal(
+                              "bulk-restore",
+                              null,
+                              `Are you sure you want to restore ${selectedIds.length} selected account(s)?`,
+                            )
+                          }
+                        >
+                          Restore Selected
                         </button>
                       </>
                     )}
@@ -1943,6 +1962,8 @@ export default function ManageAccounts() {
                   handleExecuteBulkAction("deactivate");
                 else if (actionType === "bulk-archive")
                   handleExecuteBulkAction("archive");
+                else if (actionType === "bulk-restore")
+                  handleExecuteBulkAction("restore");
                 else if (actionType === "bulk-delete")
                   handleExecuteBulkAction("delete");
               }}
