@@ -18,6 +18,7 @@ const REPORT_SECTIONS = [
   { id: 'brgy-stats', label: 'Barangay Statistics Summary' },
   { id: 'senior-pwd', label: 'Senior Citizen & PWD Report' },
   { id: '4ps-report', label: '4Ps Beneficiaries Report' },
+  { id: 'solo-parent-report', label: 'Solo Parents Detailed Report' },
   { id: 'voters-report', label: 'Total Voters per Barangay' },
   { id: 'generations', label: 'Generations Report' },
 ];
@@ -286,7 +287,7 @@ export default function Reports() {
   const brgyStatsSum = () => {
     const dataMap = {};
     barangayNames.forEach(name => {
-      dataMap[name] = { seniors: 0, pwds: 0, fourPs: 0, voters: 0 };
+      dataMap[name] = { seniors: 0, pwds: 0, fourPs: 0, soloParents: 0, voters: 0 };
     });
 
     residents.forEach(r => {
@@ -295,6 +296,7 @@ export default function Reports() {
         if (r.is_senior) dataMap[brgy].seniors++;
         if (r.is_pwd) dataMap[brgy].pwds++;
         if (r.is_4ps) dataMap[brgy].fourPs++;
+        if (r.is_solo_parent) dataMap[brgy].soloParents++;
         const voterStr = (r.is_voter || '').toLowerCase();
         if (voterStr.includes('registered')) dataMap[brgy].voters++;
       }
@@ -303,21 +305,24 @@ export default function Reports() {
     let grandSeniors = 0;
     let grandPwds = 0;
     let grand4Ps = 0;
+    let grandSoloParents = 0;
     let grandVoters = 0;
 
     const rows = barangayNames.map(name => {
       const s = dataMap[name].seniors;
       const p = dataMap[name].pwds;
       const f = dataMap[name].fourPs;
+      const sp = dataMap[name].soloParents;
       const v = dataMap[name].voters;
       grandSeniors += s;
       grandPwds += p;
       grand4Ps += f;
+      grandSoloParents += sp;
       grandVoters += v;
-      return { name, seniors: s, pwds: p, fourPs: f, voters: v };
+      return { name, seniors: s, pwds: p, fourPs: f, soloParents: sp, voters: v };
     });
 
-    return { rows, grandTotal: { seniors: grandSeniors, pwds: grandPwds, fourPs: grand4Ps, voters: grandVoters } };
+    return { rows, grandTotal: { seniors: grandSeniors, pwds: grandPwds, fourPs: grand4Ps, soloParents: grandSoloParents, voters: grandVoters } };
   };
 
   const seniorPwdRep = () => {
@@ -586,11 +591,55 @@ export default function Reports() {
     };
   };
 
+  const soloParentRep = () => {
+    const dataMap = {};
+    barangayNames.forEach(name => {
+      dataMap[name] = { male: 0, female: 0, withId: 0, noId: 0, total: 0 };
+    });
+
+    residents.forEach(r => {
+      const brgy = r.barangay;
+      if (dataMap[brgy] && r.is_solo_parent) {
+        dataMap[brgy].total++;
+        const sex = (r.sex || '').toUpperCase();
+        if (sex === 'MALE' || sex === 'M') dataMap[brgy].male++;
+        else if (sex === 'FEMALE' || sex === 'F') dataMap[brgy].female++;
+
+        if (r.has_solo_parent_id) dataMap[brgy].withId++;
+        else dataMap[brgy].noId++;
+      }
+    });
+
+    let totalMale = 0, totalFemale = 0, totalWithId = 0, totalNoId = 0, totalSoloParents = 0;
+
+    const rows = barangayNames.map(name => {
+      const d = dataMap[name];
+      totalMale += d.male;
+      totalFemale += d.female;
+      totalWithId += d.withId;
+      totalNoId += d.noId;
+      totalSoloParents += d.total;
+      return { name, ...d };
+    });
+
+    return {
+      rows,
+      grandTotal: {
+        male: totalMale,
+        female: totalFemale,
+        withId: totalWithId,
+        noId: totalNoId,
+        total: totalSoloParents
+      }
+    };
+  };
+
   const ageData = ageGenderDist();
   const householdData = householdPop();
   const statsSummary = brgyStatsSum();
   const seniorPwdData = seniorPwdRep();
   const fourPsData = fourPsRep();
+  const soloParentData = soloParentRep();
   const votersData = votersRep();
   const generationsData = generationsRep();
 
@@ -999,7 +1048,7 @@ export default function Reports() {
             <h3>III. Barangay Statistics Summary</h3>
             <table>
               <thead>
-                <tr><th>BARANGAY</th><th>SENIORS</th><th>PWDs</th><th>4Ps BENEFICIARIES</th><th>VOTERS</th></tr>
+                <tr><th>BARANGAY</th><th>SENIORS</th><th>PWDs</th><th>4Ps BENEFICIARIES</th><th>SOLO PARENTS</th><th>VOTERS</th></tr>
               </thead>
               <tbody>
                 {statsSummary.rows.map(row => (
@@ -1008,6 +1057,7 @@ export default function Reports() {
                     <td>{row.seniors}</td>
                     <td>{row.pwds}</td>
                     <td>{row.fourPs}</td>
+                    <td>{row.soloParents}</td>
                     <td>{row.voters}</td>
                   </tr>
                 ))}
@@ -1016,6 +1066,7 @@ export default function Reports() {
                   <td><strong>{statsSummary.grandTotal.seniors}</strong></td>
                   <td><strong>{statsSummary.grandTotal.pwds}</strong></td>
                   <td><strong>{statsSummary.grandTotal.fourPs}</strong></td>
+                  <td><strong>{statsSummary.grandTotal.soloParents}</strong></td>
                   <td><strong>{statsSummary.grandTotal.voters}</strong></td>
                 </tr>
               </tbody>
@@ -1107,10 +1158,52 @@ export default function Reports() {
           </div>
         )}
 
+        {selectedSections.includes('solo-parent-report') && (
+          <div id="solo-parent-report" className="report-section show-print">
+            <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
+            <h3>VI. Solo Parents Detailed Report</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: '40px', textAlign: 'center' }}>#</th>
+                  <th style={{ textAlign: 'left' }}>BARANGAY</th>
+                  <th style={{ textAlign: 'center' }}>MALE SOLO PARENTS</th>
+                  <th style={{ textAlign: 'center' }}>FEMALE SOLO PARENTS</th>
+                  <th style={{ textAlign: 'center' }}>WITH ID</th>
+                  <th style={{ textAlign: 'center' }}>NO ID</th>
+                  <th style={{ textAlign: 'center' }}>TOTAL SOLO PARENTS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {soloParentData.rows.map((row, idx) => (
+                  <tr key={row.name}>
+                    <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                    <td>{row.name}</td>
+                    <td style={{ textAlign: 'center' }}>{row.male}</td>
+                    <td style={{ textAlign: 'center' }}>{row.female}</td>
+                    <td style={{ textAlign: 'center' }}>{row.withId}</td>
+                    <td style={{ textAlign: 'center' }}>{row.noId}</td>
+                    <td style={{ textAlign: 'center' }}><strong>{row.total}</strong></td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan="2" style={{ textAlign: 'left' }}><strong>GRAND TOTAL</strong></td>
+                  <td style={{ textAlign: 'center' }}><strong>{soloParentData.grandTotal.male}</strong></td>
+                  <td style={{ textAlign: 'center' }}><strong>{soloParentData.grandTotal.female}</strong></td>
+                  <td style={{ textAlign: 'center' }}><strong>{soloParentData.grandTotal.withId}</strong></td>
+                  <td style={{ textAlign: 'center' }}><strong>{soloParentData.grandTotal.noId}</strong></td>
+                  <td style={{ textAlign: 'center' }}><strong>{soloParentData.grandTotal.total}</strong></td>
+                </tr>
+              </tbody>
+            </table>
+            <ReportFooter />
+          </div>
+        )}
+
         {selectedSections.includes('voters-report') && (
           <div id="voters-report" className="report-section show-print">
             <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
-            <h3>V. Total Voters per Barangay</h3>
+            <h3>VII. Total Voters per Barangay</h3>
             <table>
               <thead>
                 <tr>
@@ -1144,7 +1237,7 @@ export default function Reports() {
         {selectedSections.includes('generations') && (
           <div id="generations" className="report-section show-print">
             <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
-            <h3>VI. Generations Population Report ({getGenerationTitle()})</h3>
+            <h3>VIII. Generations Population Report ({getGenerationTitle()})</h3>
             
             {generationFilter === 'all' ? (
               <table style={{ fontSize: '11px' }}>
