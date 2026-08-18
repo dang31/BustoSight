@@ -183,6 +183,8 @@ export default function Dashboard() {
     pwdNoId: 0,
     seniorWithId: 0,
     seniorNoId: 0,
+    soloParentWithId: 0,
+    soloParentNoId: 0,
     registeredVoters: 0,
     nonVoters: 0,
     teenPregnancyCases: 0,
@@ -199,6 +201,8 @@ export default function Dashboard() {
       pwd: 0,
       households: 0,
       voters: 0,
+      fourPs: 0,
+      soloParents: 0,
       teenPreg: 0,
       teenMother: 0,
     })),
@@ -270,7 +274,40 @@ export default function Dashboard() {
             console.error("Error fetching 4Ps per barangay:", fourPsErr);
           }
 
+          // Fetch Solo Parent count per barangay & ID status
+          let soloParentsPerBrgy = {};
+          let soloParentWithIdCount = 0;
+          let soloParentNoIdCount = 0;
+          try {
+            let query = supabase
+              .from("residents")
+              .select("barangay, has_solo_parent_id")
+              .eq("is_archived", false)
+              .eq("is_solo_parent", true);
+
+            if (targetYearArg) {
+              query = query.eq("data_year", targetYearArg);
+            }
+
+            const { data: soloParentData } = await query;
+            if (soloParentData) {
+              soloParentData.forEach((r) => {
+                if (r.barangay) {
+                  soloParentsPerBrgy[r.barangay] = (soloParentsPerBrgy[r.barangay] || 0) + 1;
+                }
+                if (r.has_solo_parent_id) {
+                  soloParentWithIdCount++;
+                } else {
+                  soloParentNoIdCount++;
+                }
+              });
+            }
+          } catch (spErr) {
+            console.error("Error fetching Solo Parents per barangay:", spErr);
+          }
+
           const computedTotal4Ps = Object.values(fourPsPerBrgy).reduce((a, b) => a + b, 0);
+          const computedTotalSoloParent = Object.values(soloParentsPerBrgy).reduce((a, b) => a + b, 0);
 
           setStats({
             totalPopulation: data.global?.totalPopulation || 0,
@@ -278,7 +315,7 @@ export default function Dashboard() {
             totalSeniors: data.global?.totalSeniors || 0,
             totalVoters: data.global?.registeredVoters || 0,
             totalPwd: data.global?.totalPwd || 0,
-            totalSoloParent: data.global?.totalSoloParent || 0,
+            totalSoloParent: data.global?.totalSoloParent || computedTotalSoloParent || 0,
             total4ps: data.global?.total4ps || computedTotal4Ps || 0,
             maleCount: data.global?.maleCount || 0,
             femaleCount: data.global?.femaleCount || 0,
@@ -290,6 +327,8 @@ export default function Dashboard() {
             pwdNoId: data.global?.pwdNoId || 0,
             seniorWithId: data.global?.seniorWithId || 0,
             seniorNoId: data.global?.seniorNoId || 0,
+            soloParentWithId: data.global?.soloParentWithId || soloParentWithIdCount || 0,
+            soloParentNoId: data.global?.soloParentNoId || soloParentNoIdCount || 0,
             registeredVoters: data.global?.registeredVoters || 0,
             nonVoters: data.global?.nonVoters || 0,
             teenPregnancyCases: data.global?.teenPregnancyCases || 0,
@@ -314,6 +353,7 @@ export default function Dashboard() {
               households: brgyMap[name]?.households || 0,
               voters: brgyMap[name]?.voters || 0,
               fourPs: brgyMap[name]?.fourPs || brgyMap[name]?.four_ps || brgyMap[name]?.is4ps || brgyMap[name]?.is_4ps || brgyMap[name]?.total4ps || fourPsPerBrgy[name] || 0,
+              soloParents: brgyMap[name]?.soloParents || brgyMap[name]?.solo_parent || brgyMap[name]?.isSoloParent || brgyMap[name]?.is_solo_parent || brgyMap[name]?.totalSoloParent || soloParentsPerBrgy[name] || 0,
               teenPreg: brgyMap[name]?.teenPreg || 0,
               teenMother: brgyMap[name]?.teenMother || 0,
             })),
@@ -394,10 +434,11 @@ export default function Dashboard() {
       acc.seniors += curr.seniors;
       acc.pwd += curr.pwd;
       acc.fourPs += curr.fourPs;
+      acc.soloParents += curr.soloParents;
       acc.voters += curr.voters;
       return acc;
     },
-    { count: 0, households: 0, seniors: 0, pwd: 0, fourPs: 0, voters: 0 },
+    { count: 0, households: 0, seniors: 0, pwd: 0, fourPs: 0, soloParents: 0, voters: 0 },
   );
 
   // --- Derived chart data ---
@@ -672,13 +713,14 @@ export default function Dashboard() {
 
   const renderBarangayAnalysis = () => {
     const headers = [
-      { label: "Barangay", key: "name", align: "left", width: "18%" },
-      { label: "Population", key: "count", align: "right", width: "13%" },
-      { label: "Households", key: "households", align: "right", width: "13%" },
-      { label: "Senior Citizens", key: "seniors", align: "right", width: "14%" },
-      { label: "PWD", key: "pwd", align: "right", width: "13%" },
-      { label: "4Ps Beneficiaries", key: "fourPs", align: "right", width: "15%" },
-      { label: "Registered Voters", key: "voters", align: "right", width: "14%" },
+      { label: "Barangay", key: "name", align: "left", width: "16%" },
+      { label: "Population", key: "count", align: "right", width: "12%" },
+      { label: "Households", key: "households", align: "right", width: "12%" },
+      { label: "Senior Citizens", key: "seniors", align: "right", width: "12%" },
+      { label: "PWD", key: "pwd", align: "right", width: "10%" },
+      { label: "4Ps Beneficiaries", key: "fourPs", align: "right", width: "13%" },
+      { label: "Solo Parents", key: "soloParents", align: "right", width: "12%" },
+      { label: "Registered Voters", key: "voters", align: "right", width: "13%" },
     ];
 
     return (
@@ -702,7 +744,6 @@ export default function Dashboard() {
           <div className="table-header-container">
             <h4 className="table-title">Barangay Summary Table</h4>
             <div className="table-search-wrapper">
-              <span className="search-icon">🔍</span>
               <input
                 type="text"
                 placeholder="Search Barangay..."
@@ -788,13 +829,19 @@ export default function Dashboard() {
                         className="cell-number"
                         style={{ textAlign: "right" }}
                       >
+                        {b.soloParents.toLocaleString()}
+                      </td>
+                      <td
+                        className="cell-number"
+                        style={{ textAlign: "right" }}
+                      >
                         {b.voters.toLocaleString()}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="no-data-cell">
+                    <td colSpan={8} className="no-data-cell">
                       No matching barangays found.
                     </td>
                   </tr>
@@ -838,6 +885,12 @@ export default function Dashboard() {
                       style={{ textAlign: "right", fontWeight: "bold" }}
                     >
                       {brgyTotals.fourPs.toLocaleString()}
+                    </td>
+                    <td
+                      className="cell-number"
+                      style={{ textAlign: "right", fontWeight: "bold" }}
+                    >
+                      {brgyTotals.soloParents.toLocaleString()}
                     </td>
                     <td
                       className="cell-number"
@@ -973,6 +1026,28 @@ export default function Dashboard() {
       ],
     };
 
+    // Solo Parents
+    const soloParentPieData = {
+      labels: ["Has Solo Parent ID", "No ID"],
+      datasets: [
+        {
+          data: [stats.soloParentWithId, stats.soloParentNoId],
+          backgroundColor: ["#ec4899", "#fbcfe8"],
+          borderWidth: 0,
+        },
+      ],
+    };
+    const soloParentBarData = {
+      labels: brgyData.map((b) => b.name),
+      datasets: [
+        {
+          label: "Solo Parents Count",
+          data: brgyData.map((b) => b.soloParents),
+          backgroundColor: "#ec4899",
+        },
+      ],
+    };
+
     return (
       <div className="tab-content animate-fade-up">
         {/* Row 1: Senior Citizens */}
@@ -1033,6 +1108,35 @@ export default function Dashboard() {
             <h4>4Ps Beneficiaries by Barangay</h4>
             <div className="chart-container">
               {!isLoading && <Bar data={fourPsBarData} options={chartOpts} />}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 4: Solo Parents */}
+        <div className="charts-grid" style={{ marginTop: "24px" }}>
+          <div className="chart-item">
+            <h4>Solo Parent ID Status</h4>
+            <div className="chart-container pie-box">
+              {!isLoading && <Pie data={soloParentPieData} options={chartOpts} />}
+            </div>
+            <div
+              style={{
+                marginTop: "12px",
+                fontSize: "12px",
+                color: "#64748b",
+                textAlign: "center",
+              }}
+            >
+              <span>
+                <b>With ID:</b> {stats.soloParentWithId.toLocaleString()} |{" "}
+                <b>No ID:</b> {stats.soloParentNoId.toLocaleString()}
+              </span>
+            </div>
+          </div>
+          <div className="chart-item">
+            <h4>Solo Parents by Barangay</h4>
+            <div className="chart-container">
+              {!isLoading && <Bar data={soloParentBarData} options={chartOpts} />}
             </div>
           </div>
         </div>
@@ -1321,6 +1425,8 @@ export default function Dashboard() {
                   val = item.pwd;
                 else if (modal.category.toLowerCase().includes("4p"))
                   val = item.fourPs;
+                else if (modal.category.toLowerCase().includes("solo"))
+                  val = item.soloParents;
                 return (
                   <div key={item.name} className="dist-item">
                     <span>{item.name}</span>
