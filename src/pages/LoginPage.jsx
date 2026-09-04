@@ -1,20 +1,20 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import '../css/LoginPage.css';
+import { useState, useEffect } from "react";
+import { useNavigate, Link, useLocation } from "react-router-dom";
+import { supabase } from "../lib/supabase";
+import "../css/LoginPage.css";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState("");
   const location = useLocation();
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
     if (location.state?.message) {
-      setToast({ message: location.state.message, type: 'error' });
+      setToast({ message: location.state.message, type: "error" });
       setTimeout(() => setToast(null), 3500);
 
       // Clear state so it doesn't reappear on refresh
@@ -25,18 +25,18 @@ export default function LoginPage() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    setErrorMsg('');
+    setErrorMsg("");
 
     try {
-      // Supabase Auth requires an email. If the user enters a username, 
+      // Supabase Auth requires an email. If the user enters a username,
       // we first look up their actual email from the profiles table.
       let loginEmail = username;
 
-      if (!username.includes('@')) {
+      if (!username.includes("@")) {
         const { data: profileData } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('username', username)
+          .from("profiles")
+          .select("email")
+          .eq("username", username)
           .single();
 
         if (profileData && profileData.email) {
@@ -47,49 +47,66 @@ export default function LoginPage() {
         }
       }
 
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: password,
-      });
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: password,
+        });
 
       if (authError || !authData.user) {
         // Check local storage accounts fallback for testing
-        const localUsers = JSON.parse(localStorage.getItem('popdevUsers')) || [];
+        const localUsers =
+          JSON.parse(localStorage.getItem("popdevUsers")) || [];
         const localMatch = localUsers.find(
           (u) =>
-            (u.username || '').toLowerCase() === username.toLowerCase() ||
-            (u.email || '').toLowerCase() === username.toLowerCase()
+            (u.username || "").toLowerCase() === username.toLowerCase() ||
+            (u.email || "").toLowerCase() === username.toLowerCase(),
         );
 
-        if (localMatch && (localMatch.archived || localMatch.status !== 'Active')) {
-          setErrorMsg('Your account is deactivated. Contact the admin to activate it.');
+        if (
+          localMatch &&
+          (localMatch.archived || localMatch.status !== "Active")
+        ) {
+          setErrorMsg(
+            "Your account is deactivated. Contact the admin to activate it.",
+          );
           return;
         }
 
-        setErrorMsg(authError?.message || 'Invalid username or password.');
+        setErrorMsg(authError?.message || "Invalid username or password.");
         return;
       }
 
       // Fetch the user's profile to check their status and archiving
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authData.user.id)
+        .from("profiles")
+        .select("*")
+        .eq("id", authData.user.id)
         .single();
 
-      if (profileError || !profile || profile.archived || profile.status !== 'Active') {
+      if (
+        profileError ||
+        !profile ||
+        profile.archived ||
+        profile.status !== "Active"
+      ) {
         // If account is archived, inactive, or missing, log them out immediately
         await supabase.auth.signOut();
-        setErrorMsg('Your account is deactivated. Contact the admin to activate it.');
+        setErrorMsg(
+          "Your account is deactivated. Contact the admin to activate it.",
+        );
         return;
       }
 
       // Store user session info for the frontend
-      localStorage.setItem('popdev_user', JSON.stringify({ ...profile, password: password }));
-      navigate('/dashboard');
+      localStorage.setItem(
+        "popdev_user",
+        JSON.stringify({ ...profile, password: password }),
+      );
+      navigate("/dashboard");
     } catch (err) {
-      console.error('Login error:', err);
-      setErrorMsg('An error occurred during login.');
+      console.error("Login error:", err);
+      setErrorMsg("An error occurred during login.");
     } finally {
       setIsLoading(false);
     }
@@ -103,21 +120,37 @@ export default function LoginPage() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className={`login-toast login-toast-${toast.type} animate-fade-up`}>
+        <div
+          className={`login-toast login-toast-${toast.type} animate-fade-up`}
+        >
           <span>{toast.message}</span>
           <button onClick={() => setToast(null)}>×</button>
         </div>
       )}
 
       {/* Back button */}
-      <Link to="/" className="back-btn">← Back to Home</Link>
+      <Link to="/" className="back-btn">
+        ← Back to Home
+      </Link>
 
       <div className="login-container">
         {/* Logos */}
         <header className="login-logos">
-          <img src="/bustos-logo.png" alt="Bustos Logo" className="login-logo" />
-          <img src="/bp-logo.png" alt="Bagong Pilipinas" className="login-logo" />
-          <img src="/popdev-logo.png" alt="Commission on Population" className="login-logo" />
+          <img
+            src="/bustos-logo.png"
+            alt="Bustos Logo"
+            className="login-logo"
+          />
+          <img
+            src="/bp-logo.png"
+            alt="Bagong Pilipinas"
+            className="login-logo"
+          />
+          <img
+            src="/popdev-logo.png"
+            alt="Commission on Population"
+            className="login-logo"
+          />
         </header>
 
         {/* Login Card */}
@@ -126,17 +159,31 @@ export default function LoginPage() {
           <div className="card-left">
             <h1>Authorized Access</h1>
             <p>
-              Please sign in using your authorized account to access the
-              Bustos Population Development System.
+              Please sign in using your authorized account to access the Bustos
+              Population Development System.
             </p>
           </div>
 
           {/* Right (form) panel */}
           <div className="card-right">
             <h2>Login</h2>
-            <p className="login-instruction">Please log in with your official credentials.</p>
+            <p className="login-instruction">
+              Please log in with your official credentials.
+            </p>
 
-            {errorMsg && <div className="login-error-msg" style={{ color: '#ff4d4d', marginBottom: '15px', fontSize: '14px', fontWeight: 'bold' }}>{errorMsg}</div>}
+            {errorMsg && (
+              <div
+                className="login-error-msg"
+                style={{
+                  color: "#ff4d4d",
+                  marginBottom: "15px",
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                }}
+              >
+                {errorMsg}
+              </div>
+            )}
 
             <form id="loginForm" onSubmit={handleLogin}>
               <div className="login-input-group">
@@ -167,8 +214,13 @@ export default function LoginPage() {
                 />
               </div>
 
-              <button type="submit" className={`btn-login-submit ${isLoading ? 'loading' : ''}`} id="loginSubmitBtn" disabled={isLoading}>
-                {isLoading ? 'Authenticating...' : 'Login'}
+              <button
+                type="submit"
+                className={`btn-login-submit ${isLoading ? "loading" : ""}`}
+                id="loginSubmitBtn"
+                disabled={isLoading}
+              >
+                {isLoading ? "Authenticating..." : "Login"}
               </button>
             </form>
           </div>
@@ -177,7 +229,10 @@ export default function LoginPage() {
         {/* Footer */}
         <footer className="login-footer">
           <p>© 2026 Bustos Population Development System</p>
-          <p>Developed by BS Information Technology Students – Bulacan State University</p>
+          <p>
+            Developed by BS Information Technology Students – Bulacan State
+            University
+          </p>
         </footer>
       </div>
     </div>

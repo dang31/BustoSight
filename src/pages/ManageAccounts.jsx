@@ -121,7 +121,6 @@ const CustomDropdown = ({
         </svg>
       </div>
 
-
       {isOpen && (
         <div
           style={{
@@ -254,7 +253,8 @@ export default function ManageAccounts() {
   };
 
   const verifyAdminPassword = async (pwdToVerify) => {
-    const pwd = (pwdToVerify !== undefined ? pwdToVerify : adminPasswordConfirm) || "";
+    const pwd =
+      (pwdToVerify !== undefined ? pwdToVerify : adminPasswordConfirm) || "";
     if (!pwd.trim()) {
       alert("Security Check Failed: Logged-in Admin password is required.");
       return false;
@@ -264,7 +264,11 @@ export default function ManageAccounts() {
     const storedUser = JSON.parse(localStorage.getItem("popdev_user")) || {};
 
     // 1. Direct local stored password check
-    if (storedUser && storedUser.password && storedUser.password === trimmedPassword) {
+    if (
+      storedUser &&
+      storedUser.password &&
+      storedUser.password === trimmedPassword
+    ) {
       return true;
     }
 
@@ -279,11 +283,13 @@ export default function ManageAccounts() {
             autoRefreshToken: false,
             detectSessionInUrl: false,
           },
-        }
+        },
       );
 
       let emailsToTry = [];
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user && user.email) emailsToTry.push(user.email);
       if (storedUser && storedUser.email) emailsToTry.push(storedUser.email);
       if (storedUser && storedUser.username) {
@@ -294,10 +300,11 @@ export default function ManageAccounts() {
       const uniqueEmails = [...new Set(emailsToTry.filter(Boolean))];
 
       for (const email of uniqueEmails) {
-        const { error: authError } = await tempAuthClient.auth.signInWithPassword({
-          email: email,
-          password: trimmedPassword,
-        });
+        const { error: authError } =
+          await tempAuthClient.auth.signInWithPassword({
+            email: email,
+            password: trimmedPassword,
+          });
 
         if (!authError) {
           return true;
@@ -308,7 +315,11 @@ export default function ManageAccounts() {
       return false;
     } catch (err) {
       console.warn("Auth verification error:", err.message);
-      if (storedUser && storedUser.password && storedUser.password === trimmedPassword) {
+      if (
+        storedUser &&
+        storedUser.password &&
+        storedUser.password === trimmedPassword
+      ) {
         return true;
       }
       alert("Security Check Failed: Incorrect Admin Password.");
@@ -682,7 +693,7 @@ export default function ManageAccounts() {
     openConfirmModal(
       "toggle-status",
       account,
-      `Are you sure you want to change status of account "${account.first_name} ${account.last_name}" to ${newStatus}?`
+      `Are you sure you want to change status of account "${account.first_name} ${account.last_name}" to ${newStatus}?`,
     );
   };
 
@@ -1280,8 +1291,8 @@ export default function ManageAccounts() {
                                     Added{" "}
                                     {acc.created_at
                                       ? new Date(
-                                        acc.created_at,
-                                      ).toLocaleDateString()
+                                          acc.created_at,
+                                        ).toLocaleDateString()
                                       : "N/A"}
                                   </div>
                                 </div>
@@ -1609,8 +1620,19 @@ export default function ManageAccounts() {
                 <div></div>
               </div>
 
-              <div className="field-group" style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #e2e8f0" }}>
-                <label style={{ color: "var(--primary-dark)", fontWeight: "700" }}>Your Admin Password (Security Verification) *</label>
+              <div
+                className="field-group"
+                style={{
+                  marginTop: "16px",
+                  paddingTop: "14px",
+                  borderTop: "1px solid #e2e8f0",
+                }}
+              >
+                <label
+                  style={{ color: "var(--primary-dark)", fontWeight: "700" }}
+                >
+                  Your Admin Password (Security Verification) *
+                </label>
                 <input
                   type="password"
                   placeholder="Enter your current logged-in admin password"
@@ -1813,8 +1835,19 @@ export default function ManageAccounts() {
                 <div></div>
               </div>
 
-              <div className="field-group" style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #e2e8f0" }}>
-                <label style={{ color: "var(--primary-dark)", fontWeight: "700" }}>Your Admin Password (Security Verification) *</label>
+              <div
+                className="field-group"
+                style={{
+                  marginTop: "16px",
+                  paddingTop: "14px",
+                  borderTop: "1px solid #e2e8f0",
+                }}
+              >
+                <label
+                  style={{ color: "var(--primary-dark)", fontWeight: "700" }}
+                >
+                  Your Admin Password (Security Verification) *
+                </label>
                 <input
                   type="password"
                   placeholder="Enter your current logged-in admin password"
@@ -1869,7 +1902,7 @@ export default function ManageAccounts() {
                   >
                     Change Password
                   </button> */}
-                  {modalState.data?.role === 'Staff' && (
+                  {modalState.data?.role === "Staff" && (
                     <button
                       type="button"
                       onClick={() =>
@@ -2029,13 +2062,29 @@ export default function ManageAccounts() {
               </p>
 
               <div className="field-group" style={{ marginBottom: "16px" }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: 'var(--primary-dark)', marginBottom: '6px' }}>Your Admin Password (Security Verification) *</label>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    color: "var(--primary-dark)",
+                    marginBottom: "6px",
+                  }}
+                >
+                  Your Admin Password (Security Verification) *
+                </label>
                 <input
                   type="password"
                   placeholder="Enter your current logged-in admin password"
                   value={adminPasswordConfirm}
                   onChange={(e) => setAdminPasswordConfirm(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-300)', borderRadius: '6px', fontSize: '14px' }}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    border: "1px solid var(--gray-300)",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                  }}
                   required
                 />
               </div>
@@ -2172,12 +2221,12 @@ export default function ManageAccounts() {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                const isVerified = await verifyAdminPassword(adminPasswordConfirm);
+                const isVerified =
+                  await verifyAdminPassword(adminPasswordConfirm);
                 if (!isVerified) return;
 
                 const { actionType, targetData } = modalState.data;
-                if (actionType === "archive")
-                  handleArchiveAccount(targetData);
+                if (actionType === "archive") handleArchiveAccount(targetData);
                 else if (actionType === "restore")
                   handleRestoreAccount(targetData);
                 else if (actionType === "delete")
@@ -2196,8 +2245,22 @@ export default function ManageAccounts() {
                   handleExecuteBulkAction("delete");
               }}
             >
-              <div style={{ marginTop: '16px', marginBottom: '16px', textAlign: 'left' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: 'var(--primary-dark)', marginBottom: '6px' }}>
+              <div
+                style={{
+                  marginTop: "16px",
+                  marginBottom: "16px",
+                  textAlign: "left",
+                }}
+              >
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    color: "var(--primary-dark)",
+                    marginBottom: "6px",
+                  }}
+                >
                   Your Admin Password (Security Verification) *
                 </label>
                 <input
@@ -2205,7 +2268,13 @@ export default function ManageAccounts() {
                   placeholder="Enter your current logged-in admin password"
                   value={adminPasswordConfirm}
                   onChange={(e) => setAdminPasswordConfirm(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px' }}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                  }}
                   required
                   autoFocus
                 />
