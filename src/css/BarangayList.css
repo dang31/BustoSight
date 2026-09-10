@@ -835,6 +835,9 @@ tbody tr:last-child td {
   font-size: 20px;
   font-weight: 700;
   color: var(--gray-800);
+  word-break: break-word;
+  white-space: normal;
+  line-height: 1.3;
 }
 
 .res-modal-title p {
@@ -845,20 +848,39 @@ tbody tr:last-child td {
 
 .res-details-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
+  align-items: stretch;
+}
+
+@media (max-width: 768px) {
+  .res-details-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .res-card-section {
   background: #f8fafc;
   border: 1px solid var(--gray-200);
   border-radius: 12px;
-  padding: 18px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  transition: var(--transition);
+}
+
+.res-card-section:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .res-card-section h3 {
   margin-top: 0;
   margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid var(--gray-200);
   font-size: 13px;
   font-weight: 700;
   color: var(--primary-dark);
@@ -869,44 +891,251 @@ tbody tr:last-child td {
   gap: 8px;
 }
 
+.res-card-section h3 i {
+  color: var(--primary);
+  font-size: 14px;
+}
+
+.res-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
 .res-detail-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 7px 0;
-  border-bottom: 1px dashed var(--gray-200);
+  padding: 8px 10px;
+  border-radius: 6px;
   font-size: 13px;
+  transition: background-color 0.15s ease;
 }
 
-.res-detail-row:last-child {
-  border-bottom: none;
+.res-detail-row:nth-child(even) {
+  background: rgba(241, 245, 249, 0.6);
+}
+
+.res-detail-row:hover {
+  background: rgba(74, 141, 240, 0.06);
 }
 
 .res-detail-label {
-  color: var(--gray-600);
+  color: #64748b;
   font-weight: 500;
+  font-size: 12.5px;
+  flex-shrink: 0;
+  margin-right: 12px;
 }
 
 .res-detail-value {
-  color: var(--gray-800);
+  color: #1e293b;
   font-weight: 600;
+  font-size: 13px;
   text-align: right;
+  word-break: break-word;
 }
 
+/* Household Modal Cards Grid & Elements */
+.hh-members-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 16px;
+  padding: 4px 0;
+  align-items: stretch;
+}
+
+.hh-member-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px;
+  position: relative;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  transition: all 0.2s ease;
+}
+
+.hh-member-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+  border-color: #cbd5e1;
+}
+
+.hh-member-card.is-head {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 2px solid #f6ad55;
+  box-shadow: 0 4px 14px rgba(246,173,85,0.18);
+}
+
+.hh-member-card.is-head:hover {
+  box-shadow: 0 8px 20px rgba(246,173,85,0.25);
+}
+
+.hh-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.hh-member-card.is-head .hh-card-header {
+  border-bottom: 1px dashed #f6ad55;
+}
+
+.hh-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #4a8df0 0%, #2c5282 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.hh-member-card.is-head .hh-card-avatar {
+  background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);
+}
+
+.hh-card-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.hh-card-field {
+  font-size: 12px;
+  min-width: 0;
+}
+
+.hh-card-field-label {
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 2px;
+}
+
+.hh-card-field-value {
+  color: #1e293b;
+  font-weight: 600;
+  font-size: 12.5px;
+  word-break: break-word;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.hh-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 12px;
+  min-height: 22px;
+  align-items: center;
+}
+
+.hh-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.hh-member-card.is-head .hh-card-actions {
+  border-top: 1px dashed #f6ad55;
+}
+
+/* Individual View Button */
 .btn-view-indiv {
+  flex: 1;
   background: #ebf8ff;
   color: #2b6cb0;
   border: 1px solid #bee3f8;
-  padding: 4px 10px;
+  padding: 7px 12px;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  margin-right: 6px;
-  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
 }
 
 .btn-view-indiv:hover {
   background: #3182ce;
   color: white;
+  border-color: #3182ce;
+  box-shadow: 0 2px 6px rgba(49, 130, 206, 0.25);
+}
+
+/* Archive Button in Card */
+.btn-archive-card {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.2s ease;
+}
+
+.btn-archive-card:hover {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  color: white;
+  border-color: #c2410c;
+  box-shadow: 0 3px 8px rgba(234, 88, 12, 0.28);
+}
+
+/* Prominent Archive Button in Modal Footer */
+.btn-archive-modal {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  color: white;
+  border: none;
+  padding: 0 20px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.28);
+  transition: var(--transition);
+}
+
+.btn-archive-modal:hover {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(234, 88, 12, 0.4);
+}
+
+.btn-archive-modal:active {
+  transform: translateY(0);
 }

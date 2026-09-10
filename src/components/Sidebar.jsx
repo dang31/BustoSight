@@ -158,7 +158,7 @@ export default function Sidebar() {
                           closeSidebar();
                         }}
                       >
-                        ↳ Household
+                        Household
                       </li>
                       <li
                         className={`sub-item ${location.pathname === '/resident' ? 'active' : ''}`}
@@ -168,7 +168,7 @@ export default function Sidebar() {
                           closeSidebar();
                         }}
                       >
-                        ↳ Resident
+                        Resident
                       </li>
                     </ul>
                   )}
