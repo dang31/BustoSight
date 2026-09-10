@@ -939,45 +939,32 @@ export default function BarangayList({ defaultMode = "household" }) {
               <p>Household ID: <strong>{selectedHousehold.hhNo}</strong> &bull; {selectedHousehold.members.length} member{selectedHousehold.members.length !== 1 ? 's' : ''}</p>
             </div>
 
-            <div style={{ maxHeight: '520px', overflowY: 'auto', paddingRight: '4px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', padding: '4px 0' }}>
-                {selectedHousehold.members.map((m, i) => {
-                  const isHead = (m.rel || '').toUpperCase() === 'HEAD';
-                  const fullName = `${m.first || ''} ${m.mid ? (m.mid.endsWith('.') ? m.mid : m.mid[0] + '.') + ' ' : ''}${m.last || ''} ${m.q || ''}`.trim();
-                  const initials = `${(m.first?.[0] || '').toUpperCase()}${(m.last?.[0] || '').toUpperCase()}`;
-                  return (
-                    <div
-                      key={i}
-                      style={{
-                        background: isHead ? 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)' : '#f8fafc',
-                        border: isHead ? '2px solid #f6ad55' : '1px solid #e2e8f0',
-                        borderRadius: '12px',
-                        padding: '18px',
-                        position: 'relative',
-                        boxShadow: isHead ? '0 4px 12px rgba(246,173,85,0.15)' : '0 2px 6px rgba(0,0,0,0.04)',
-                      }}
-                    >
-                      {/* Card Header */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px', paddingBottom: '12px', borderBottom: isHead ? '1px dashed #f6ad55' : '1px dashed #e2e8f0' }}>
-                        <div style={{
-                          width: '44px', height: '44px', borderRadius: '50%', flexShrink: 0,
-                          background: isHead ? 'linear-gradient(135deg, #f6ad55 0%, #ed8936 100%)' : 'linear-gradient(135deg, #4a8df0 0%, #2c5282 100%)',
-                          color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontWeight: '700', fontSize: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)'
-                        }}>
-                          {initials || 'M'}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: '700', fontSize: '14px', color: '#1a202c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fullName || '—'}</div>
-                          <div style={{ fontSize: '12px', color: isHead ? '#c05621' : '#718096', fontWeight: '600', marginTop: '2px' }}>
-                            {m.rel || 'MEMBER'}
-                            {isHead && <span style={{ marginLeft: '6px', background: '#f6ad55', color: 'white', fontSize: '10px', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>HEAD</span>}
-                          </div>
+            <div className="hh-members-grid">
+              {selectedHousehold.members.map((m, i) => {
+                const isHead = (m.rel || '').toUpperCase() === 'HEAD';
+                const fullName = `${m.first || ''} ${m.mid ? (m.mid.endsWith('.') ? m.mid : m.mid[0] + '.') + ' ' : ''}${m.last || ''} ${m.q || ''}`.trim();
+                const initials = `${(m.first?.[0] || '').toUpperCase()}${(m.last?.[0] || '').toUpperCase()}`;
+                return (
+                  <div
+                    key={m.id || i}
+                    className={`hh-member-card ${isHead ? 'is-head' : ''}`}
+                  >
+                    {/* Card Header */}
+                    <div className="hh-card-header">
+                      <div className="hh-card-avatar">
+                        {initials || 'M'}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: '700', fontSize: '14px', color: '#1a202c', wordBreak: 'break-word', lineHeight: '1.3' }}>{fullName || '—'}</div>
+                        <div style={{ fontSize: '12px', color: isHead ? '#c05621' : '#718096', fontWeight: '600', marginTop: '2px' }}>
+                          {m.rel || 'MEMBER'}
+                          {isHead && <span style={{ marginLeft: '6px', background: '#f6ad55', color: 'white', fontSize: '10px', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>HEAD</span>}
                         </div>
                       </div>
+                    </div>
 
                       {/* Card Info Grid */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                      <div className="hh-card-info-grid">
                         {[
                           { label: 'Age', value: m.age != null ? `${m.age} yrs` : '—' },
                           { label: 'Gender', value: m.s || '—' },
@@ -988,39 +975,36 @@ export default function BarangayList({ defaultMode = "household" }) {
                           { label: 'Religion', value: m.religion || '—' },
                           { label: 'Voter', value: m.isVoter || '—' },
                         ].map(({ label, value }) => (
-                          <div key={label} style={{ fontSize: '12px' }}>
-                            <div style={{ color: '#718096', fontWeight: '500', marginBottom: '1px' }}>{label}</div>
-                            <div style={{ color: '#2d3748', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+                          <div key={label} className="hh-card-field">
+                            <div className="hh-card-field-label">{label}</div>
+                            <div className="hh-card-field-value">{value}</div>
                           </div>
                         ))}
                       </div>
 
                       {/* Tags Row */}
-                      {(m.isSenior || m.isPwd || m.isSoloParent || m.is4ps) && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed #e2e8f0' }}>
-                          {m.isSenior && <span style={{ fontSize: '10px', background: '#3182ce', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>Senior</span>}
-                          {m.isPwd && <span style={{ fontSize: '10px', background: '#38a169', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>PWD</span>}
-                          {m.isSoloParent && <span style={{ fontSize: '10px', background: '#e53e3e', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>Solo Parent</span>}
-                          {m.is4ps && <span style={{ fontSize: '10px', background: '#d69e2e', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>4Ps</span>}
-                        </div>
-                      )}
+                      <div className="hh-card-tags">
+                        {m.isSenior && <span style={{ fontSize: '10px', background: '#3182ce', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>Senior</span>}
+                        {m.isPwd && <span style={{ fontSize: '10px', background: '#38a169', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>PWD</span>}
+                        {m.isSoloParent && <span style={{ fontSize: '10px', background: '#e53e3e', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>Solo Parent</span>}
+                        {m.is4ps && <span style={{ fontSize: '10px', background: '#d69e2e', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>4Ps</span>}
+                      </div>
 
                       {/* Action Buttons */}
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+                      <div className="hh-card-actions">
                         <button
                           className="btn-view-indiv"
-                          style={{ flex: 1, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '5px' }}
                           onClick={() => setSelectedResident(m)}
                         >
-                          <i className="fa-solid fa-eye" style={{ fontSize: '11px' }}></i> View Full Profile
+                          <i className="fa-solid fa-eye" style={{ fontSize: '11px' }}></i> View Profile
                         </button>
                         {userRole !== 'Staff' && (
                           <button
-                            className="btn-archive-row"
-                            style={{ padding: '4px 10px' }}
+                            className="btn-archive-card"
                             onClick={() => handleArchive(m)}
+                            title="Archive Resident"
                           >
-                            Archive
+                            <i className="fa-solid fa-box-archive" style={{ fontSize: '11px' }}></i> Archive
                           </button>
                         )}
                       </div>
@@ -1030,8 +1014,7 @@ export default function BarangayList({ defaultMode = "household" }) {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Individual Resident Profile Modal */}
       {selectedResident && (
@@ -1061,7 +1044,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                   {selectedResident.first} {selectedResident.mid ? (selectedResident.mid.endsWith('.') ? selectedResident.mid + ' ' : selectedResident.mid[0] + '. ') : ''}{selectedResident.last} {selectedResident.q || ''}
                 </h2>
                 <p>
-                  Household ID: <strong>{selectedResident.h_no || "N/A"}</strong> &bull; Relation: <strong>{selectedResident.rel || "MEMBER"}</strong> &bull; Barangay <strong>{selectedResident.brgy}</strong>
+                  Household ID: <strong>{selectedResident.h_no || "N/A"}</strong> &bull; Relation: <strong>{selectedResident.rel || "MEMBER"}</strong> &bull; Barangay: <strong>{selectedResident.brgy}</strong>
                 </p>
               </div>
             </div>
@@ -1071,136 +1054,164 @@ export default function BarangayList({ defaultMode = "household" }) {
               {/* Personal Info */}
               <div className="res-card-section">
                 <h3><i className="fa-solid fa-id-card"></i> Personal Information</h3>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Full Name</span>
-                  <span className="res-detail-value">{selectedResident.first} {selectedResident.mid || ''} {selectedResident.last} {selectedResident.q || ''}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Age</span>
-                  <span className="res-detail-value">{selectedResident.age !== null && selectedResident.age !== undefined ? `${selectedResident.age} years old` : "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Gender</span>
-                  <span className="res-detail-value">{selectedResident.s || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Birth Date</span>
-                  <span className="res-detail-value">{selectedResident.bd || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Birth Place</span>
-                  <span className="res-detail-value">{selectedResident.bp || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Civil Status</span>
-                  <span className="res-detail-value">{selectedResident.cs || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Citizenship</span>
-                  <span className="res-detail-value">{selectedResident.cz || "FILIPINO"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Religion</span>
-                  <span className="res-detail-value">{selectedResident.religion || "N/A"}</span>
+                <div className="res-card-content">
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Full Name</span>
+                    <span className="res-detail-value">{selectedResident.first} {selectedResident.mid || ''} {selectedResident.last} {selectedResident.q || ''}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Age</span>
+                    <span className="res-detail-value">{selectedResident.age !== null && selectedResident.age !== undefined ? `${selectedResident.age} years old` : "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Gender</span>
+                    <span className="res-detail-value">{selectedResident.s || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Birth Date</span>
+                    <span className="res-detail-value">{selectedResident.bd || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Birth Place</span>
+                    <span className="res-detail-value">{selectedResident.bp || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Civil Status</span>
+                    <span className="res-detail-value">{selectedResident.cs || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Citizenship</span>
+                    <span className="res-detail-value">{selectedResident.cz || "FILIPINO"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Religion</span>
+                    <span className="res-detail-value">{selectedResident.religion || "N/A"}</span>
+                  </div>
                 </div>
               </div>
 
               {/* Address & Housing */}
               <div className="res-card-section">
                 <h3><i className="fa-solid fa-house-user"></i> Address & Household</h3>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Household No.</span>
-                  <span className="res-detail-value">{selectedResident.h_no || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">House No.</span>
-                  <span className="res-detail-value">{selectedResident.no || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Street</span>
-                  <span className="res-detail-value">{selectedResident.st || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Purok</span>
-                  <span className="res-detail-value">{selectedResident.p || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Barangay</span>
-                  <span className="res-detail-value">{selectedResident.brgy || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Relation to Head</span>
-                  <span className="res-detail-value">{selectedResident.rel || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Residence Type</span>
-                  <span className="res-detail-value">{selectedResident.residenceType || "N/A"}</span>
+                <div className="res-card-content">
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Household No.</span>
+                    <span className="res-detail-value">{selectedResident.h_no || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">House No.</span>
+                    <span className="res-detail-value">{selectedResident.no || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Street</span>
+                    <span className="res-detail-value">{selectedResident.st || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Purok</span>
+                    <span className="res-detail-value">{selectedResident.p || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Barangay</span>
+                    <span className="res-detail-value">{selectedResident.brgy || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Relation to Head</span>
+                    <span className="res-detail-value">{selectedResident.rel || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Residence Type</span>
+                    <span className="res-detail-value">{selectedResident.residenceType || "N/A"}</span>
+                  </div>
                 </div>
               </div>
 
               {/* Education & Occupation */}
               <div className="res-card-section">
                 <h3><i className="fa-solid fa-briefcase"></i> Work & Education</h3>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Occupation</span>
-                  <span className="res-detail-value">{selectedResident.oc || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Educational Attainment</span>
-                  <span className="res-detail-value">{selectedResident.edu || "N/A"}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Registered Voter</span>
-                  <span className="res-detail-value">{selectedResident.isVoter || "N/A"}</span>
+                <div className="res-card-content">
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Occupation</span>
+                    <span className="res-detail-value">{selectedResident.oc || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Educational Attainment</span>
+                    <span className="res-detail-value">{selectedResident.edu || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Registered Voter</span>
+                    <span className="res-detail-value">
+                      <span className={`boolean-badge ${(selectedResident.isVoter || '').toUpperCase() === 'YES' ? 'yes' : 'no'}`}>
+                        {selectedResident.isVoter || 'No'}
+                      </span>
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {/* Special Sectors & Programs */}
               <div className="res-card-section">
                 <h3><i className="fa-solid fa-layer-group"></i> Special Sectors & Programs</h3>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Senior Citizen</span>
-                  <span className="res-detail-value">
-                    {selectedResident.isSenior ? `Yes ${selectedResident.hasSeniorId ? '(With ID)' : ''}` : 'No'}
-                  </span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">PWD</span>
-                  <span className="res-detail-value">
-                    {selectedResident.isPwd ? `Yes ${selectedResident.hasPwdId ? '(With ID)' : ''}` : 'No'}
-                  </span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Solo Parent</span>
-                  <span className="res-detail-value">
-                    {selectedResident.isSoloParent ? `Yes ${selectedResident.hasSoloParentId ? '(With ID)' : ''}` : 'No'}
-                  </span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">4Ps Beneficiary</span>
-                  <span className="res-detail-value">{selectedResident.is4ps ? 'Yes' : 'No'}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Teenage Pregnancy Case</span>
-                  <span className="res-detail-value">{selectedResident.teenagePregnancy ? 'Yes' : 'No'}</span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Current Teenage Mother</span>
-                  <span className="res-detail-value">
-                    {selectedResident.teenageMother ? `Yes ${selectedResident.ageFirstBirth ? `(Age ${selectedResident.ageFirstBirth})` : ''}` : 'No'}
-                  </span>
-                </div>
-                <div className="res-detail-row">
-                  <span className="res-detail-label">Data Year</span>
-                  <span className="res-detail-value">{selectedResident.dataYear || "N/A"}</span>
+                <div className="res-card-content">
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Senior Citizen</span>
+                    <span className="res-detail-value">
+                      <span className={`boolean-badge ${selectedResident.isSenior ? 'yes' : 'no'}`}>
+                        {selectedResident.isSenior ? `Yes ${selectedResident.hasSeniorId ? '(With ID)' : ''}` : 'No'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">PWD</span>
+                    <span className="res-detail-value">
+                      <span className={`boolean-badge ${selectedResident.isPwd ? 'yes' : 'no'}`}>
+                        {selectedResident.isPwd ? `Yes ${selectedResident.hasPwdId ? '(With ID)' : ''}` : 'No'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Solo Parent</span>
+                    <span className="res-detail-value">
+                      <span className={`boolean-badge ${selectedResident.isSoloParent ? 'yes' : 'no'}`}>
+                        {selectedResident.isSoloParent ? `Yes ${selectedResident.hasSoloParentId ? '(With ID)' : ''}` : 'No'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">4Ps Beneficiary</span>
+                    <span className="res-detail-value">
+                      <span className={`boolean-badge ${selectedResident.is4ps ? 'yes' : 'no'}`}>
+                        {selectedResident.is4ps ? 'Yes' : 'No'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Teenage Pregnancy Case</span>
+                    <span className="res-detail-value">
+                      <span className={`boolean-badge ${selectedResident.teenagePregnancy ? 'yes' : 'no'}`}>
+                        {selectedResident.teenagePregnancy ? 'Yes' : 'No'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Current Teenage Mother</span>
+                    <span className="res-detail-value">
+                      <span className={`boolean-badge ${selectedResident.teenageMother ? 'yes' : 'no'}`}>
+                        {selectedResident.teenageMother ? `Yes ${selectedResident.ageFirstBirth ? `(Age ${selectedResident.ageFirstBirth})` : ''}` : 'No'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Data Year</span>
+                    <span className="res-detail-value">{selectedResident.dataYear || "N/A"}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+            <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end", gap: "12px", borderTop: "1px solid #f1f5f9", paddingTop: "18px" }}>
               {!isStaff && (
                 <button
-                  className="btn btn-view-archive"
+                  className="btn-archive-modal"
                   onClick={() => {
                     const target = selectedResident;
                     setSelectedResident(null);
@@ -1212,7 +1223,7 @@ export default function BarangayList({ defaultMode = "household" }) {
               )}
               <button
                 className="btn"
-                style={{ background: "#cbd5e1", color: "#1e293b" }}
+                style={{ background: "#e2e8f0", color: "#334155", fontWeight: "600" }}
                 onClick={() => setSelectedResident(null)}
               >
                 Close

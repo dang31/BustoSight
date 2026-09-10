@@ -265,7 +265,10 @@
   background: var(--gray-50);
 }
 
-.btn-back {
+.form-nav-buttons .btn-back {
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
   padding: 12px 28px;
   background: white;
   border: 1.5px solid var(--gray-300);
@@ -277,7 +280,7 @@
   font-size: 13px;
 }
 
-.btn-back:hover {
+.form-nav-buttons .btn-back:hover {
   background: var(--gray-100);
   border-color: var(--gray-400);
 }

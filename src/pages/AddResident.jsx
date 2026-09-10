@@ -90,6 +90,7 @@ export default function AddResident() {
     age_first_birth: "",
     teenage_pregnancy: false,
     teenage_mother: false,
+    services_attended: "",
   };
   const [household, setHousehold] = useState(initialHousehold);
   const [head, setHead] = useState(initialHead);
@@ -292,6 +293,7 @@ export default function AddResident() {
         age_first_birth: "",
         teenage_pregnancy: false,
         teenage_mother: false,
+        services_attended: "",
       },
     ]);
     setExpandedMemberIndex(members.length);
@@ -640,20 +642,20 @@ export default function AddResident() {
             style={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
+              justifyContent: "center",
+              position: "relative",
+              textAlign: "center",
             }}
           >
-            <div>
-              <h1 style={{ margin: 0, fontSize: "18px", textTransform: "none", letterSpacing: "0.3px" }}>
-                {currentStep === 1
-                  ? "Step 1: Household & Location Details"
-                  : currentStep === 2
-                    ? "Step 2: Household Head Profile"
-                    : currentStep === 3
-                      ? "Step 3: Family Members & Dependents"
-                      : "Step 4: Summary & Verification Review"}
-              </h1>
-            </div>
+            <h1 style={{ margin: 0, fontSize: "18px", textTransform: "none", letterSpacing: "0.4px", textAlign: "center" }}>
+              {currentStep === 1
+                ? "Step 1: Household & Location Details"
+                : currentStep === 2
+                  ? "Step 2: Household Head Profile"
+                  : currentStep === 3
+                    ? "Step 3: Family Members & Dependents"
+                    : "Step 4: Summary & Verification Review"}
+            </h1>
 
             <button
               type="button"
@@ -661,12 +663,16 @@ export default function AddResident() {
               onClick={resetForm}
               disabled={isLoading}
               style={{
+                position: "absolute",
+                right: "24px",
+                top: "50%",
+                transform: "translateY(-50%)",
                 background: "none",
-                border: "1px solid #cbd5e1",
-                color: "#f5f5f5ff",
+                border: "1px solid rgba(255, 255, 255, 0.4)",
+                color: "#ffffff",
                 fontSize: "13px",
                 fontWeight: "600",
-                padding: "10px 18px",
+                padding: "8px 16px",
                 borderRadius: "8px",
                 cursor: "pointer",
                 textShadow: "0 1px 2px rgba(0,0,0,0.2)",
@@ -1280,6 +1286,18 @@ export default function AddResident() {
                       </div>
                     </div>
                   )}
+
+                  <div className="field-group" style={{ marginTop: "18px" }}>
+                    <label>Services/Program Attended:</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Family Planning, Medical Mission, Livelihood Seminar"
+                      value={head.services_attended || ""}
+                      onChange={(e) =>
+                        setHead({ ...head, services_attended: e.target.value })
+                      }
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1999,6 +2017,18 @@ export default function AddResident() {
                                     </div>
                                   </div>
                                 )}
+
+                                <div className="field-group" style={{ marginTop: "18px" }}>
+                                  <label>Services/Program Attended:</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Immunization, Feeding Program, Youth Summit, Skills Training"
+                                    value={m.services_attended || ""}
+                                    onChange={(e) =>
+                                      updateMember(i, "services_attended", e.target.value)
+                                    }
+                                  />
+                                </div>
                               </div>
                             )}
                           </div>
@@ -2097,6 +2127,11 @@ export default function AddResident() {
                             : "None"}
                         </span>
                       )}
+                      {head.services_attended && (
+                        <span>
+                          <b>Services/Program Attended:</b> {head.services_attended}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="summary-section">
@@ -2121,6 +2156,7 @@ export default function AddResident() {
                               <th>Relation</th>
                               <th>Basic Details</th>
                               <th>Classification</th>
+                              <th>Services/Program Attended</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2150,6 +2186,7 @@ export default function AddResident() {
                                   <td>{m.rel}</td>
                                   <td>{basicDetails}</td>
                                   <td>{classList}</td>
+                                  <td>{m.services_attended || "—"}</td>
                                 </tr>
                               );
                             })}

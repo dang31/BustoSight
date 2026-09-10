@@ -257,7 +257,7 @@
 }
 
 /* Back Button inside container */
-.btn-back {
+.landing-about-container .btn-back {
   position: absolute;
   top: 24px;
   left: 28px;
@@ -276,7 +276,7 @@
   z-index: 10;
 }
 
-.btn-back:hover {
+.landing-about-container .btn-back:hover {
   background: #1e3a8a;
   color: #ffffff;
   border-color: #1e3a8a;
@@ -476,7 +476,7 @@
     border-radius: 12px;
   }
 
-  .btn-back {
+  .landing-about-container .btn-back {
     top: 16px;
     left: 16px;
     padding: 6px 14px;
