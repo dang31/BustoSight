@@ -266,6 +266,41 @@ img {
   box-shadow: 0 4px 12px rgba(44, 82, 130, 0.2);
 }
 
+.nav-menu ul.sub-menu {
+  list-style: none;
+  padding-left: 0;
+  margin: 2px 0 6px 0;
+}
+
+.nav-menu li.sub-item {
+  padding: 8px 20px 8px 38px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: var(--transition);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gray-600);
+  margin: 2px 8px 2px 10px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.nav-menu li.sub-item:hover {
+  background: rgba(44, 82, 130, 0.08);
+  color: var(--primary-dark);
+  padding-left: 42px;
+  border-left-color: var(--primary-light);
+}
+
+.nav-menu li.sub-item.active {
+  background: rgba(44, 82, 130, 0.12);
+  color: var(--primary-dark);
+  font-weight: 700;
+  border-left-color: var(--primary-dark);
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding: 20px 18px 10px;
@@ -534,3 +569,41 @@ img {
 .grid-2-cols { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .grid-4-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+/* Password Input Toggle Button */
+.password-input-container {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-container input {
+  padding-right: 40px !important;
+  width: 100%;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray-500, #718096);
+  outline: none;
+  transition: color 0.2s ease, transform 0.1s ease;
+  z-index: 2;
+}
+
+.password-toggle-btn:hover {
+  color: var(--primary, #2c5282);
+}
+
+.password-toggle-btn:active {
+  transform: scale(0.92);
+}
+

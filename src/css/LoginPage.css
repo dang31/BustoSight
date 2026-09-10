@@ -293,6 +293,10 @@
   border-left-color: #ff4d4d;
 }
 
+.login-toast-warning {
+  border-left-color: #dd6b20;
+}
+
 .login-toast button {
   background: none;
   border: none;

@@ -28,7 +28,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
         }
 
         if (allowedRoles) {
-          const storedUser = localStorage.getItem('popdev_user');
+          const storedUser = sessionStorage.getItem('popdev_user') || localStorage.getItem('popdev_user');
           if (profile && !allowedRoles.includes(profile.role)) {
             setHasAccess(false);
           } else if (storedUser) {

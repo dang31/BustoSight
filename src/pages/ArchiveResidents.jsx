@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import '../css/BarangayList.css';
 import '../css/ArchiveResidents.css';
+import { logTransaction } from '../utils/logger';
 
 export default function ArchiveResidents() {
   const [archived, setArchived] = useState([]);
@@ -89,7 +90,13 @@ export default function ArchiveResidents() {
 
       const updatedArchived = archived.filter(r => r.id !== res.id);
       setArchived(updatedArchived);
-      
+
+      logTransaction({
+        action: 'Restore Archived Resident',
+        category: 'Resident Management',
+        details: `Restored resident ${res.first} ${res.last} (HH# ${res.h_no || 'N/A'}) from the archive back to active list.`,
+      });
+
       alert('Success! The resident has been restored.');
     } catch (err) {
       console.error('Error restoring:', err);

@@ -17,17 +17,17 @@ export default function LandingPage() {
 
   return (
     <div className="landing-hero">
-      {/* Background video */}
-      <video
-        className="landing-video"
-        autoPlay
-        muted
-        loop
-        playsInline
-        aria-hidden="true"
-      >
-        <source src="/landing-video.mp4" type="video/mp4" />
-      </video>
+      {/* Background video (YouTube embed) */}
+      <div className="landing-video-container">
+        <iframe
+          className="landing-video-iframe"
+          src="https://www.youtube-nocookie.com/embed/b0NFMOHMt4Y?autoplay=1&mute=1&loop=1&playlist=b0NFMOHMt4Y&controls=0&showinfo=0&rel=0&iv_load_policy=3&enablejsapi=1&disablekb=1&modestbranding=1"
+          title="Bustos Background Video"
+          allow="autoplay; encrypted-media"
+          allowFullScreen
+          aria-hidden="true"
+        />
+      </div>
 
       {/* Dark overlay */}
       <div className="landing-overlay" />
@@ -99,6 +99,19 @@ export default function LandingPage() {
 
             <h1 className="about-main-title">Learn More About BustoSight</h1>
             <div className="about-divider" />
+
+            {/* Video Showcase Card */}
+            <div className="about-card video-card">
+              <h2>Bustos Video Showcase</h2>
+              <div className="video-responsive">
+                <iframe
+                  src="https://www.youtube-nocookie.com/embed/b0NFMOHMt4Y"
+                  title="Bustos Showcase Video"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </div>
 
             {/* What is BustoSight */}
             <div className="about-card">

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import PasswordInput from '../Common/PasswordInput';
 
 export default function ResetStaffPasswordModal({ targetUser, onClose, onSuccess }) {
   const [adminPassword, setAdminPassword] = useState('');
@@ -77,24 +78,22 @@ export default function ResetStaffPasswordModal({ targetUser, onClose, onSuccess
 
           <div className="field-group" style={{ marginBottom: "12px" }}>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: 'var(--gray-700)', marginBottom: '6px' }}>New Password for Staff</label>
-            <input
-              type="password"
+            <PasswordInput
               placeholder="••••••••"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-300)', borderRadius: '6px', fontSize: '14px' }}
+              style={{ border: '1px solid var(--gray-300)', borderRadius: '6px', fontSize: '14px' }}
               required
             />
           </div>
 
           <div className="field-group" style={{ marginBottom: "12px" }}>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: 'var(--gray-700)', marginBottom: '6px' }}>Confirm New Password</label>
-            <input
-              type="password"
+            <PasswordInput
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-300)', borderRadius: '6px', fontSize: '14px' }}
+              style={{ border: '1px solid var(--gray-300)', borderRadius: '6px', fontSize: '14px' }}
               required
             />
           </div>
@@ -103,12 +102,11 @@ export default function ResetStaffPasswordModal({ targetUser, onClose, onSuccess
 
           <div className="field-group" style={{ marginBottom: "20px" }}>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: 'var(--gray-700)', marginBottom: '6px' }}>Your Admin Password (Security Check)</label>
-            <input
-              type="password"
+            <PasswordInput
               placeholder="Enter your current password"
               value={adminPassword}
               onChange={(e) => setAdminPassword(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-300)', borderRadius: '6px', fontSize: '14px' }}
+              style={{ border: '1px solid var(--gray-300)', borderRadius: '6px', fontSize: '14px' }}
               required
             />
           </div>

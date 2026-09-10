@@ -6,6 +6,7 @@ import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/AddResident.css";
 import { isValidName, getNameError } from "../lib/nameValidation";
+import { logTransaction } from "../utils/logger";
 
 export default function AddResident() {
   const navigate = useNavigate();
@@ -532,6 +533,12 @@ export default function AddResident() {
         "tanawanData",
         JSON.stringify([...allRecords, ...newRecordsLocal]),
       );
+
+      logTransaction({
+        action: "Add Resident",
+        category: "Resident Management",
+        details: `Registered household ${residentsToSave[0]?.h_no || ""} in ${residentsToSave[0]?.barangay || ""} with ${residentsToSave.length} member(s) for year ${residentsToSave[0]?.data_year || ""}.`,
+      });
 
       alert("Resident successfully saved to Supabase!");
       navigate("/barangay");

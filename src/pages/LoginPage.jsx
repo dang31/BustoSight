@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import PasswordInput from "../components/Common/PasswordInput";
+import { logTransaction } from "../utils/logger";
 import "../css/LoginPage.css";
 
 export default function LoginPage() {
@@ -14,11 +16,15 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (location.state?.message) {
-      setToast({ message: location.state.message, type: "error" });
-      setTimeout(() => setToast(null), 3500);
+      const isTimeoutMsg = location.state.message.toLowerCase().includes('inactivity');
+      setToast({
+        message: location.state.message,
+        type: isTimeoutMsg ? "warning" : "error",
+      });
+      setTimeout(() => setToast(null), 5000);
 
       // Clear state so it doesn't reappear on refresh
-      navigate(location.pathname, { replace: true });
+      navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location, navigate]);
 
@@ -99,10 +105,18 @@ export default function LoginPage() {
       }
 
       // Store user session info for the frontend
-      localStorage.setItem(
-        "popdev_user",
-        JSON.stringify({ ...profile, password: password }),
-      );
+      const userPayload = { ...profile, password: password };
+      sessionStorage.setItem("popdev_user", JSON.stringify(userPayload));
+      localStorage.setItem("popdev_user", JSON.stringify(userPayload));
+
+      // Log successful login transaction
+      logTransaction({
+        action: "User Login",
+        category: "Authentication",
+        details: `User @${profile.username || username} logged in successfully as ${profile.role || 'Staff'}.`,
+        user: userPayload,
+      });
+
       navigate("/dashboard");
     } catch (err) {
       console.error("Login error:", err);
@@ -202,8 +216,7 @@ export default function LoginPage() {
 
               <div className="login-input-group">
                 <label htmlFor="password">Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   id="password"
                   name="password"
                   placeholder="Enter password"

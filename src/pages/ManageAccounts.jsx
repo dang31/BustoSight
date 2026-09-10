@@ -5,6 +5,8 @@ import Sidebar from "../components/Sidebar";
 import UserProfileBadge from "../components/UserProfileBadge";
 import { supabase } from "../lib/supabase";
 import ResetStaffPasswordModal from "../components/Admin/ResetStaffPasswordModal";
+import PasswordInput from "../components/Common/PasswordInput";
+import { logTransaction } from "../utils/logger";
 import "../css/ManageAccounts.css";
 import "../css/AddResident.css";
 
@@ -260,8 +262,8 @@ export default function ManageAccounts() {
       return false;
     }
 
-    const trimmedPassword = pwd.trim();
-    const storedUser = JSON.parse(localStorage.getItem("popdev_user")) || {};
+    const storedUserStr = sessionStorage.getItem("popdev_user") || localStorage.getItem("popdev_user");
+    const storedUser = JSON.parse(storedUserStr) || {};
 
     // 1. Direct local stored password check
     if (
@@ -608,6 +610,13 @@ export default function ManageAccounts() {
 
       if (error) throw error;
 
+      // Log account creation
+      logTransaction({
+        action: "Created Account",
+        category: "Account Management",
+        details: `Created new ${formData.role} account for @${formData.username.trim()} (${formData.first_name} ${formData.last_name}).`,
+      });
+
       // Wait a moment for the database trigger to insert the profile
       await new Promise((resolve) => setTimeout(resolve, 1000));
       fetchAccounts();
@@ -648,6 +657,13 @@ export default function ManageAccounts() {
 
       if (error) throw error;
       fetchAccounts();
+
+      logTransaction({
+        action: "Edit Account",
+        category: "Account Management",
+        details: `Updated account details for ${updatedFields.first_name} ${updatedFields.last_name} (Username: ${updatedFields.username}, Role: ${updatedFields.role}, Status: ${updatedFields.status}).`,
+      });
+
       showToast("Account details updated successfully!", "success");
     } catch (err) {
       console.warn("Supabase update fallback:", err.message);
@@ -677,6 +693,12 @@ export default function ManageAccounts() {
 
       const { error } = await supabase.auth.resetPasswordForEmail(targetEmail);
       if (error) throw error;
+
+      logTransaction({
+        action: "Reset Account Password",
+        category: "Account Management",
+        details: `Sent password reset email to ${targetEmail} for account: ${modalState.data.first_name} ${modalState.data.last_name} (${modalState.data.username}).`,
+      });
 
       showToast("Password reset email sent securely!", "success");
     } catch (err) {
@@ -709,6 +731,13 @@ export default function ManageAccounts() {
 
       if (error) throw error;
       fetchAccounts();
+
+      logTransaction({
+        action: "Toggle Account Status",
+        category: "Account Management",
+        details: `Changed status of account ${account.first_name} ${account.last_name} (${account.username}) to ${newStatus}.`,
+      });
+
       showToast(`Account status updated to ${newStatus}.`, "info");
     } catch (err) {
       const updated = accounts.map((a) =>
@@ -737,6 +766,13 @@ export default function ManageAccounts() {
 
       if (error) throw error;
       fetchAccounts();
+
+      logTransaction({
+        action: "Archive Account",
+        category: "Account Management",
+        details: `Archived and deactivated account: ${account.first_name} ${account.last_name} (${account.username}).`,
+      });
+
       showToast("Account archived and deactivated.", "info");
     } catch (err) {
       const updated = accounts.map((a) =>
@@ -765,6 +801,13 @@ export default function ManageAccounts() {
 
       if (error) throw error;
       fetchAccounts();
+
+      logTransaction({
+        action: "Restore Account",
+        category: "Account Management",
+        details: `Restored and activated account: ${account.first_name} ${account.last_name} (${account.username}).`,
+      });
+
       showToast("Account restored and activated.", "success");
     } catch (err) {
       const updated = accounts.map((a) =>
@@ -788,6 +831,13 @@ export default function ManageAccounts() {
         .eq("id", account.id);
       if (error) throw error;
       fetchAccounts();
+
+      logTransaction({
+        action: "Delete Account",
+        category: "Account Management",
+        details: `Permanently deleted account: ${account.first_name} ${account.last_name} (${account.username}).`,
+      });
+
       showToast("Account permanently deleted.", "error");
     } catch (err) {
       const updated = accounts.filter((a) => a.id !== account.id);
@@ -843,6 +893,12 @@ export default function ManageAccounts() {
         );
       }
       fetchAccounts();
+
+      logTransaction({
+        action: `Bulk Account Action: ${action.charAt(0).toUpperCase() + action.slice(1)}`,
+        category: "Account Management",
+        details: `Bulk action "${action}" applied to ${selectedIds.length} account(s).`,
+      });
     } catch (err) {
       let updated = [...accounts];
       if (action === "activate") {
@@ -1565,8 +1621,7 @@ export default function ManageAccounts() {
               <div className="grid-2-cols" style={{ marginTop: "12px" }}>
                 <div className="field-group">
                   <label>Password *</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     placeholder="••••••••"
                     value={formData.password}
                     onChange={(e) =>
@@ -1582,8 +1637,7 @@ export default function ManageAccounts() {
 
                 <div className="field-group">
                   <label>Confirm Password *</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     placeholder="••••••••"
                     value={formData.confirm_password}
                     onChange={(e) =>
@@ -1633,8 +1687,7 @@ export default function ManageAccounts() {
                 >
                   Your Admin Password (Security Verification) *
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   placeholder="Enter your current logged-in admin password"
                   value={adminPasswordConfirm}
                   onChange={(e) => setAdminPasswordConfirm(e.target.value)}
@@ -1848,8 +1901,7 @@ export default function ManageAccounts() {
                 >
                   Your Admin Password (Security Verification) *
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   placeholder="Enter your current logged-in admin password"
                   value={adminPasswordConfirm}
                   onChange={(e) => setAdminPasswordConfirm(e.target.value)}
@@ -2073,14 +2125,11 @@ export default function ManageAccounts() {
                 >
                   Your Admin Password (Security Verification) *
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   placeholder="Enter your current logged-in admin password"
                   value={adminPasswordConfirm}
                   onChange={(e) => setAdminPasswordConfirm(e.target.value)}
                   style={{
-                    width: "100%",
-                    padding: "10px 12px",
                     border: "1px solid var(--gray-300)",
                     borderRadius: "6px",
                     fontSize: "14px",
@@ -2263,14 +2312,11 @@ export default function ManageAccounts() {
                 >
                   Your Admin Password (Security Verification) *
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   placeholder="Enter your current logged-in admin password"
                   value={adminPasswordConfirm}
                   onChange={(e) => setAdminPasswordConfirm(e.target.value)}
                   style={{
-                    width: "100%",
-                    padding: "10px 12px",
                     border: "1px solid #cbd5e1",
                     borderRadius: "6px",
                     fontSize: "14px",
