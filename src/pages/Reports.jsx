@@ -3,6 +3,7 @@ import Sidebar from '../components/Sidebar';
 import UserProfileBadge from '../components/UserProfileBadge';
 import { supabase } from '../lib/supabase';
 import { barangayNames } from '../data/brgyData';
+import { logTransaction } from '../utils/logger';
 import '../css/Reports.css';
 
 const START_YEAR = 2020;
@@ -26,12 +27,6 @@ const REPORT_SECTIONS = [
 function ReportHeader({ selectedYear, currentDate }) {
   return (
     <div className="report-header-wrapper" style={{ marginBottom: '20px' }}>
-      <div className="report-header-logos" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '30px', marginBottom: '15px' }}>
-        <img src="/BP LOGO.png" alt="Bagong Pilipinas Logo" style={{ height: '70px', width: '70px', objectFit: 'contain' }} />
-        <img src="/bustos-logo.png" alt="Bustos Logo" style={{ height: '70px', width: '70px', objectFit: 'contain' }} />
-        <img src="/POPDEV LOGO.png" alt="POPDEV Logo" style={{ height: '70px', width: '70px', objectFit: 'contain' }} />
-      </div>
-      
       <div className="report-header-text" style={{ textAlign: 'center', marginBottom: '25px' }}>
         <p style={{ margin: '2px 0', fontSize: '11px', textTransform: 'uppercase', color: '#4a5568', letterSpacing: '0.5px' }}>Republic of the Philippines</p>
         <p style={{ margin: '2px 0', fontSize: '11px', textTransform: 'uppercase', color: '#4a5568', letterSpacing: '0.5px' }}>Province of Bulacan</p>
@@ -171,6 +166,12 @@ export default function Reports() {
         return;
       }
     }
+
+    logTransaction({
+      action: "Generated Report",
+      category: "Reports",
+      details: `Generated & printed official census report for year ${selectedYear} (${selectedSections.length} report sections).`,
+    });
 
     window.print();
   };

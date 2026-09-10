@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import Sidebar from '../components/Sidebar';
 import UserProfileBadge from '../components/UserProfileBadge';
 import { supabase } from '../lib/supabase';
+import { logTransaction } from '../utils/logger';
 import '../css/UploadData.css';
 
 const BARANGAYS = [
@@ -461,6 +462,13 @@ export default function UploadData() {
 
       addLog(`Database upload complete! Total successfully imported records: ${totalUploaded} (data year: ${dataYear}).`, 'success');
       setUploadComplete(true);
+
+      logTransaction({
+        action: "Uploaded Dataset",
+        category: "Data Upload",
+        details: `Uploaded file "${file?.name || 'workbook.xlsx'}" with ${totalUploaded} imported records (Data Year: ${dataYear}).`,
+      });
+
       alert(`Import Successful! Added ${totalUploaded} residents to Supabase for data year ${dataYear}.`);
     } catch (err) {
       console.error('Error uploading to Supabase:', err);

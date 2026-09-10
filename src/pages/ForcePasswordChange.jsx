@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import PasswordInput from '../components/Common/PasswordInput';
+import { logTransaction } from '../utils/logger';
 
 export default function ForcePasswordChange() {
   const [newPassword, setNewPassword] = useState('');
@@ -43,6 +45,12 @@ export default function ForcePasswordChange() {
         console.warn("Failed to update must_change_password flag:", profileError);
       }
 
+      logTransaction({
+        action: 'Force Password Change',
+        category: 'Authentication',
+        details: 'User successfully set a new password after admin-triggered password reset.',
+      });
+
       // Redirect to dashboard
       navigate('/dashboard', { replace: true });
     } catch (err) {
@@ -69,12 +77,11 @@ export default function ForcePasswordChange() {
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#334155', marginBottom: '6px' }}>New Password</label>
-            <input
-              type="password"
+            <PasswordInput
               placeholder="••••••••"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box' }}
+              style={{ padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box' }}
               onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
               onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
               required
@@ -83,12 +90,11 @@ export default function ForcePasswordChange() {
 
           <div style={{ marginBottom: '24px' }}>
             <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#334155', marginBottom: '6px' }}>Confirm New Password</label>
-            <input
-              type="password"
+            <PasswordInput
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box' }}
+              style={{ padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box' }}
               onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
               onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
               required

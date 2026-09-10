@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 
 export default function UserProfileBadge() {
   const [userProfile, setUserProfile] = useState(() => {
-    const storedUser = localStorage.getItem('popdev_user');
+    const storedUser = sessionStorage.getItem('popdev_user') || localStorage.getItem('popdev_user');
     return storedUser ? JSON.parse(storedUser) : null;
   });
 
@@ -20,6 +20,7 @@ export default function UserProfileBadge() {
               .single();
             if (profile) {
               setUserProfile(profile);
+              sessionStorage.setItem('popdev_user', JSON.stringify(profile));
               localStorage.setItem('popdev_user', JSON.stringify(profile));
             }
           }
