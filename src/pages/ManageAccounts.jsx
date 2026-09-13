@@ -261,6 +261,7 @@ export default function ManageAccounts() {
       alert("Security Check Failed: Logged-in Admin password is required.");
       return false;
     }
+    const trimmedPassword = pwd.trim();
 
     const storedUserStr = sessionStorage.getItem("popdev_user") || localStorage.getItem("popdev_user");
     const storedUser = JSON.parse(storedUserStr) || {};

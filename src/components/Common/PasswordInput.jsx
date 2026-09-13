@@ -50,6 +50,7 @@ export default function PasswordInput({
         className={className}
         style={{
           width: "100%",
+          padding: "10px 14px",
           paddingRight: "40px",
           boxSizing: "border-box",
           ...style,

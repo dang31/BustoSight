@@ -15,7 +15,7 @@ export default function BarangayList({ defaultMode = "household" }) {
   const userProfile = storedUser ? JSON.parse(storedUser) : null;
   const userRole = userProfile?.role || "Staff";
   const isStaff = userRole !== "Admin" && userRole !== "Administrator";
-  const [activeBrgy, setActiveBrgy] = useState("Poblacion");
+  const [activeBrgy, setActiveBrgy] = useState("Bonga Mayor");
   const [allRecords, setAllRecords] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
@@ -45,6 +45,9 @@ export default function BarangayList({ defaultMode = "household" }) {
 
   const [selectedHousehold, setSelectedHousehold] = useState(null);
   const [selectedResident, setSelectedResident] = useState(null);
+  const [editingResident, setEditingResident] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [editLoading, setEditLoading] = useState(false);
 
   const getInitialMode = () => {
     if (location.pathname === '/resident') return 'resident';
@@ -128,7 +131,7 @@ export default function BarangayList({ defaultMode = "household" }) {
       if (debouncedSearchQuery) {
         const q = `%${debouncedSearchQuery}%`;
         query = query.or(
-          `last_name.ilike.${q},first_name.ilike.${q},house_no.ilike.${q}`,
+          `last_name.ilike.${q},first_name.ilike.${q},h_no.ilike.${q}`,
         );
       }
 
@@ -188,6 +191,176 @@ export default function BarangayList({ defaultMode = "household" }) {
   };
 
   const filteredRecords = allRecords;
+
+  const openEditModal = (res) => {
+    setEditingResident(res);
+    setEditForm({
+      h_no: res.h_no || "",
+      last_name: res.last || "",
+      first_name: res.first || "",
+      middle_name: res.mid || "",
+      qualifier: res.q || "",
+      house_no: res.no || "",
+      street: res.st || "",
+      purok: res.p || "",
+      birth_place: res.bp || "",
+      birth_date: res.bd || "",
+      sex: res.s || "",
+      civil_status: res.cs || "",
+      citizenship: res.cz || "FILIPINO",
+      occupation: res.oc || "",
+      relation_to_head: res.rel || "",
+      is_voter: res.isVoter || "NO",
+      age: res.age !== null && res.age !== undefined ? res.age : "",
+      residence_type: res.residenceType || "",
+      religion: res.religion || "",
+      educational_attainment: res.edu || "",
+      is_pwd: res.isPwd || false,
+      has_pwd_id: res.hasPwdId || false,
+      is_senior: res.isSenior || false,
+      has_senior_id: res.hasSeniorId || false,
+      is_solo_parent: res.isSoloParent || false,
+      has_solo_parent_id: res.hasSoloParentId || false,
+      is_4ps: res.is4ps || false,
+      teenage_pregnancy_case: res.teenagePregnancy || false,
+      current_teenage_mother: res.teenageMother || false,
+      age_at_first_birth: res.ageFirstBirth !== null && res.ageFirstBirth !== undefined ? res.ageFirstBirth : "",
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingResident) return;
+
+    const adminPassword = prompt(
+      "Security Check: Enter Admin Password to save changes:"
+    );
+    if (adminPassword === null) return;
+
+    setEditLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !user.email) {
+        alert("Session error. Please log in again.");
+        setEditLoading(false);
+        return;
+      }
+
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: adminPassword,
+      });
+
+      if (authError) {
+        alert("Access Denied: Incorrect Admin Password.");
+        setEditLoading(false);
+        return;
+      }
+
+      const updatePayload = {
+        h_no: editForm.h_no,
+        last_name: editForm.last_name,
+        first_name: editForm.first_name,
+        middle_name: editForm.middle_name,
+        qualifier: editForm.qualifier,
+        house_no: editForm.house_no,
+        street: editForm.street,
+        purok: editForm.purok,
+        birth_place: editForm.birth_place,
+        birth_date: editForm.birth_date || null,
+        sex: editForm.sex,
+        civil_status: editForm.civil_status,
+        citizenship: editForm.citizenship,
+        occupation: editForm.occupation,
+        relation_to_head: editForm.relation_to_head,
+        is_voter: editForm.is_voter,
+        age: editForm.age !== "" ? Number(editForm.age) : null,
+        residence_type: editForm.residence_type,
+        religion: editForm.religion,
+        educational_attainment: editForm.educational_attainment,
+        is_pwd: editForm.is_pwd,
+        has_pwd_id: editForm.has_pwd_id,
+        is_senior: editForm.is_senior,
+        has_senior_id: editForm.has_senior_id,
+        is_solo_parent: editForm.is_solo_parent,
+        has_solo_parent_id: editForm.has_solo_parent_id,
+        is_4ps: editForm.is_4ps,
+        teenage_pregnancy_case: editForm.teenage_pregnancy_case,
+        current_teenage_mother: editForm.current_teenage_mother,
+        age_at_first_birth: editForm.age_at_first_birth !== "" ? Number(editForm.age_at_first_birth) : null,
+      };
+
+      const { error } = await supabase
+        .from("residents")
+        .update(updatePayload)
+        .eq("id", editingResident.id);
+
+      if (error) throw error;
+
+      // Update local state
+      const updatedMapped = {
+        ...editingResident,
+        h_no: editForm.h_no,
+        last: editForm.last_name,
+        first: editForm.first_name,
+        mid: editForm.middle_name,
+        q: editForm.qualifier,
+        no: editForm.house_no,
+        st: editForm.street,
+        p: editForm.purok,
+        bp: editForm.birth_place,
+        bd: editForm.birth_date,
+        s: editForm.sex,
+        cs: editForm.civil_status,
+        cz: editForm.citizenship,
+        oc: editForm.occupation,
+        rel: editForm.relation_to_head,
+        isVoter: editForm.is_voter,
+        age: editForm.age !== "" ? Number(editForm.age) : null,
+        residenceType: editForm.residence_type,
+        religion: editForm.religion,
+        edu: editForm.educational_attainment,
+        isPwd: editForm.is_pwd,
+        hasPwdId: editForm.has_pwd_id,
+        isSenior: editForm.is_senior,
+        hasSeniorId: editForm.has_senior_id,
+        isSoloParent: editForm.is_solo_parent,
+        hasSoloParentId: editForm.has_solo_parent_id,
+        is4ps: editForm.is_4ps,
+        teenagePregnancy: editForm.teenage_pregnancy_case,
+        teenageMother: editForm.current_teenage_mother,
+        ageFirstBirth: editForm.age_at_first_birth !== "" ? Number(editForm.age_at_first_birth) : null,
+      };
+
+      setAllRecords(prev => prev.map(r => r.id === editingResident.id ? updatedMapped : r));
+
+      // Also update the household modal if open
+      if (selectedHousehold) {
+        setSelectedHousehold(prev => ({
+          ...prev,
+          members: prev.members.map(m => m.id === editingResident.id ? updatedMapped : m),
+        }));
+      }
+
+      // Also update the resident modal if it was the one being edited
+      if (selectedResident && selectedResident.id === editingResident.id) {
+        setSelectedResident(updatedMapped);
+      }
+
+      logTransaction({
+        action: "Edit Resident",
+        category: "Resident Management",
+        details: `Edited resident ${editForm.first_name} ${editForm.last_name} (HH# ${editForm.h_no || "N/A"}) in Barangay ${activeBrgy}.`,
+      });
+
+      setEditingResident(null);
+      alert("Resident updated successfully!");
+    } catch (err) {
+      console.error("Error updating resident:", err);
+      alert("Failed to update: " + err.message);
+    } finally {
+      setEditLoading(false);
+    }
+  };
 
   const handleArchive = async (res) => {
     if (userRole === "Staff") {
@@ -859,6 +1032,15 @@ export default function BarangayList({ defaultMode = "household" }) {
                               </button>
                               {!isStaff && (
                                 <button
+                                  className="action-btn edit-btn"
+                                  onClick={() => openEditModal(res)}
+                                  title="Edit Resident"
+                                >
+                                  <i className="fa-solid fa-pen-to-square"></i>
+                                </button>
+                              )}
+                              {!isStaff && (
+                                <button
                                   className="action-btn archive-btn"
                                   onClick={() => handleArchive(res)}
                                   title="Archive Resident"
@@ -1000,6 +1182,15 @@ export default function BarangayList({ defaultMode = "household" }) {
                         </button>
                         {userRole !== 'Staff' && (
                           <button
+                            className="btn-edit-card"
+                            onClick={() => openEditModal(m)}
+                            title="Edit Resident"
+                          >
+                            <i className="fa-solid fa-pen-to-square" style={{ fontSize: '11px' }}></i> Edit
+                          </button>
+                        )}
+                        {userRole !== 'Staff' && (
+                          <button
                             className="btn-archive-card"
                             onClick={() => handleArchive(m)}
                             title="Archive Resident"
@@ -1049,8 +1240,9 @@ export default function BarangayList({ defaultMode = "household" }) {
               </div>
             </div>
 
-            {/* Grid Details */}
-            <div className="res-details-grid">
+            {/* Grid Details - scrollable */}
+            <div className="res-modal-scrollable-body">
+              <div className="res-details-grid">
               {/* Personal Info */}
               <div className="res-card-section">
                 <h3><i className="fa-solid fa-id-card"></i> Personal Information</h3>
@@ -1206,9 +1398,22 @@ export default function BarangayList({ defaultMode = "household" }) {
                   </div>
                 </div>
               </div>
-            </div>
+            </div>{/* end res-details-grid */}
+            </div>{/* end res-modal-scrollable-body */}
 
-            <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end", gap: "12px", borderTop: "1px solid #f1f5f9", paddingTop: "18px" }}>
+            <div className="res-modal-footer">
+              {!isStaff && (
+                <button
+                  className="btn-edit-modal"
+                  onClick={() => {
+                    const target = selectedResident;
+                    setSelectedResident(null);
+                    openEditModal(target);
+                  }}
+                >
+                  <i className="fa-solid fa-pen-to-square"></i> Edit Resident
+                </button>
+              )}
               {!isStaff && (
                 <button
                   className="btn-archive-modal"
@@ -1227,6 +1432,219 @@ export default function BarangayList({ defaultMode = "household" }) {
                 onClick={() => setSelectedResident(null)}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================
+          EDIT RESIDENT MODAL
+          ============================================================ */}
+      {editingResident && (
+        <div className="modal-overlay" onClick={() => setEditingResident(null)}>
+          <div className="edit-modal-content" onClick={e => e.stopPropagation()}>
+            <span className="close-modal" onClick={() => setEditingResident(null)}>&times;</span>
+
+            <div className="edit-modal-header">
+              <div className="edit-modal-avatar">
+                {(editingResident.first?.[0] || 'R').toUpperCase()}
+                {(editingResident.last?.[0] || '').toUpperCase()}
+              </div>
+              <div>
+                <h2>Edit Resident</h2>
+                <p>HH#: <strong>{editingResident.h_no || "N/A"}</strong> &bull; Barangay: <strong>{activeBrgy}</strong></p>
+              </div>
+            </div>
+
+            <div className="edit-modal-body">
+
+              {/* --- Section: Identity --- */}
+              <div className="edit-section-title"><i className="fa-solid fa-id-card"></i> Identity</div>
+              <div className="edit-form-grid">
+                <div className="edit-field">
+                  <label>Household No.</label>
+                  <input value={editForm.h_no} onChange={e => setEditForm(f => ({ ...f, h_no: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Last Name</label>
+                  <input value={editForm.last_name} onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>First Name</label>
+                  <input value={editForm.first_name} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Middle Name</label>
+                  <input value={editForm.middle_name} onChange={e => setEditForm(f => ({ ...f, middle_name: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Qualifier (Jr./Sr./III)</label>
+                  <input value={editForm.qualifier} onChange={e => setEditForm(f => ({ ...f, qualifier: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Relation to Head</label>
+                  <input value={editForm.relation_to_head} onChange={e => setEditForm(f => ({ ...f, relation_to_head: e.target.value }))} />
+                </div>
+              </div>
+
+              {/* --- Section: Personal --- */}
+              <div className="edit-section-title"><i className="fa-solid fa-person"></i> Personal Info</div>
+              <div className="edit-form-grid">
+                <div className="edit-field">
+                  <label>Birth Date</label>
+                  <input type="date" value={editForm.birth_date} onChange={e => setEditForm(f => ({ ...f, birth_date: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Birth Place</label>
+                  <input value={editForm.birth_place} onChange={e => setEditForm(f => ({ ...f, birth_place: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Age</label>
+                  <input type="number" min="0" value={editForm.age} onChange={e => setEditForm(f => ({ ...f, age: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Sex</label>
+                  <select value={editForm.sex} onChange={e => setEditForm(f => ({ ...f, sex: e.target.value }))}>
+                    <option value="M">Male (M)</option>
+                    <option value="F">Female (F)</option>
+                    <option value="LGBTQ+">LGBTQ+</option>
+                  </select>
+                </div>
+                <div className="edit-field">
+                  <label>Civil Status</label>
+                  <select value={editForm.civil_status} onChange={e => setEditForm(f => ({ ...f, civil_status: e.target.value }))}>
+                    <option value="Single">Single</option>
+                    <option value="Married">Married</option>
+                    <option value="Widowed">Widowed</option>
+                    <option value="Separated">Separated</option>
+                    <option value="Annulled">Annulled</option>
+                    <option value="Live-in">Live-in</option>
+                  </select>
+                </div>
+                <div className="edit-field">
+                  <label>Citizenship</label>
+                  <input value={editForm.citizenship} onChange={e => setEditForm(f => ({ ...f, citizenship: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Religion</label>
+                  <input value={editForm.religion} onChange={e => setEditForm(f => ({ ...f, religion: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Registered Voter</label>
+                  <select value={editForm.is_voter} onChange={e => setEditForm(f => ({ ...f, is_voter: e.target.value }))}>
+                    <option value="YES">YES</option>
+                    <option value="NO">NO</option>
+                    <option value="N/A">N/A</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* --- Section: Address --- */}
+              <div className="edit-section-title"><i className="fa-solid fa-house"></i> Address</div>
+              <div className="edit-form-grid">
+                <div className="edit-field">
+                  <label>House No.</label>
+                  <input value={editForm.house_no} onChange={e => setEditForm(f => ({ ...f, house_no: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Street</label>
+                  <input value={editForm.street} onChange={e => setEditForm(f => ({ ...f, street: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Purok</label>
+                  <input value={editForm.purok} onChange={e => setEditForm(f => ({ ...f, purok: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Residence Type</label>
+                  <select value={editForm.residence_type} onChange={e => setEditForm(f => ({ ...f, residence_type: e.target.value }))}>
+                    <option value="Owner">Owner</option>
+                    <option value="Tenant">Tenant</option>
+                    <option value="Sharer">Sharer</option>
+                    <option value="N/A">N/A</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* --- Section: Work & Education --- */}
+              <div className="edit-section-title"><i className="fa-solid fa-briefcase"></i> Work &amp; Education</div>
+              <div className="edit-form-grid">
+                <div className="edit-field">
+                  <label>Occupation</label>
+                  <input value={editForm.occupation} onChange={e => setEditForm(f => ({ ...f, occupation: e.target.value }))} />
+                </div>
+                <div className="edit-field">
+                  <label>Educational Attainment</label>
+                  <select value={editForm.educational_attainment} onChange={e => setEditForm(f => ({ ...f, educational_attainment: e.target.value }))}>
+                    <option value="No Formal Education">No Formal Education</option>
+                    <option value="Elementary">Elementary</option>
+                    <option value="High School">High School</option>
+                    <option value="Senior High School">Senior High School</option>
+                    <option value="Vocational">Vocational</option>
+                    <option value="College">College</option>
+                    <option value="Post Graduate">Post Graduate</option>
+                    <option value="N/A">N/A</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* --- Section: Special Sectors --- */}
+              <div className="edit-section-title"><i className="fa-solid fa-layer-group"></i> Special Sectors &amp; Programs</div>
+              <div className="edit-toggles-grid">
+                <label className="edit-toggle-item">
+                  <input type="checkbox" checked={editForm.is_senior} onChange={e => setEditForm(f => ({ ...f, is_senior: e.target.checked }))} />
+                  <span>Senior Citizen</span>
+                </label>
+                <label className="edit-toggle-item">
+                  <input type="checkbox" checked={editForm.has_senior_id} onChange={e => setEditForm(f => ({ ...f, has_senior_id: e.target.checked }))} />
+                  <span>Has Senior ID</span>
+                </label>
+                <label className="edit-toggle-item">
+                  <input type="checkbox" checked={editForm.is_pwd} onChange={e => setEditForm(f => ({ ...f, is_pwd: e.target.checked }))} />
+                  <span>PWD</span>
+                </label>
+                <label className="edit-toggle-item">
+                  <input type="checkbox" checked={editForm.has_pwd_id} onChange={e => setEditForm(f => ({ ...f, has_pwd_id: e.target.checked }))} />
+                  <span>Has PWD ID</span>
+                </label>
+                <label className="edit-toggle-item">
+                  <input type="checkbox" checked={editForm.is_solo_parent} onChange={e => setEditForm(f => ({ ...f, is_solo_parent: e.target.checked }))} />
+                  <span>Solo Parent</span>
+                </label>
+                <label className="edit-toggle-item">
+                  <input type="checkbox" checked={editForm.has_solo_parent_id} onChange={e => setEditForm(f => ({ ...f, has_solo_parent_id: e.target.checked }))} />
+                  <span>Has Solo Parent ID</span>
+                </label>
+                <label className="edit-toggle-item">
+                  <input type="checkbox" checked={editForm.is_4ps} onChange={e => setEditForm(f => ({ ...f, is_4ps: e.target.checked }))} />
+                  <span>4Ps Beneficiary</span>
+                </label>
+                <label className="edit-toggle-item">
+                  <input type="checkbox" checked={editForm.teenage_pregnancy_case} onChange={e => setEditForm(f => ({ ...f, teenage_pregnancy_case: e.target.checked }))} />
+                  <span>Teenage Pregnancy Case</span>
+                </label>
+                <label className="edit-toggle-item">
+                  <input type="checkbox" checked={editForm.current_teenage_mother} onChange={e => setEditForm(f => ({ ...f, current_teenage_mother: e.target.checked }))} />
+                  <span>Current Teenage Mother</span>
+                </label>
+              </div>
+              {editForm.current_teenage_mother && (
+                <div className="edit-form-grid" style={{ marginTop: '12px' }}>
+                  <div className="edit-field">
+                    <label>Age at First Birth</label>
+                    <input type="number" min="0" value={editForm.age_at_first_birth} onChange={e => setEditForm(f => ({ ...f, age_at_first_birth: e.target.value }))} />
+                  </div>
+                </div>
+              )}
+
+            </div>{/* end edit-modal-body */}
+
+            <div className="edit-modal-footer">
+              <button className="btn" style={{ background: '#e2e8f0', color: '#334155', fontWeight: '600' }} onClick={() => setEditingResident(null)} disabled={editLoading}>
+                Cancel
+              </button>
+              <button className="btn-save-edit" onClick={handleSaveEdit} disabled={editLoading}>
+                {editLoading ? <><i className="fa-solid fa-spinner fa-spin"></i> Saving...</> : <><i className="fa-solid fa-floppy-disk"></i> Save Changes</>}
               </button>
             </div>
           </div>
