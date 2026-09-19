@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard' },
   { label: 'Barangay List', path: '/barangay' },
   { label: 'Reports', path: '/reports' },
+  { label: 'Programs', path: '/programs' },
   { label: 'Add Residents', path: '/add-resident' },
   { label: 'Upload Files', path: '/upload' },
   { label: 'Manage Account', path: '/manage-accounts' },
@@ -52,15 +53,15 @@ export default function Sidebar() {
   const userRole = userProfile?.role || 'Staff';
 
   const filteredNavItems = NAV_ITEMS.filter((item) => {
-    if (item.path === '/transaction-logs') {
+    if (item.path === '/transaction-logs' || item.path === '/programs') {
       return userRole === 'Admin' || userRole === 'Administrator';
     }
     if (userRole === 'Staff') {
-      if (item.path === '/manage-accounts') {
+      if (item.path === '/manage-accounts' || item.path === '/programs') {
         return false;
       }
     } else if (userRole !== 'Admin' && userRole !== 'Administrator') {
-      if (item.path === '/upload' || item.path === '/manage-accounts' || item.path === '/add-resident') {
+      if (item.path === '/upload' || item.path === '/manage-accounts' || item.path === '/add-resident' || item.path === '/programs') {
         return false;
       }
     }

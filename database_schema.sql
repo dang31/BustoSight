@@ -201,27 +201,88 @@ CREATE TRIGGER trg_prevent_duplicate_resident
 
 
 -- ============================================================
+-- SECTION 4: PROGRAMS & SEMINARS TABLES
+-- Stores community/educational programs and their child seminars.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.programs (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT NULL,
+    status TEXT NOT NULL DEFAULT 'Active',
+    is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+    archived_at TIMESTAMP WITH TIME ZONE NULL,
+    archived_by UUID NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
+    archived_by_name TEXT NULL,
+    created_by UUID NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_by_name TEXT NULL,
+    updated_by UUID NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
+    updated_by_name TEXT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    CONSTRAINT programs_pkey PRIMARY KEY (id),
+    CONSTRAINT programs_name_unique UNIQUE (name)
+) TABLESPACE pg_default;
+
+CREATE TABLE IF NOT EXISTS public.seminars (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    program_id UUID NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NULL,
+    status TEXT NOT NULL DEFAULT 'Active',
+    is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+    archived_at TIMESTAMP WITH TIME ZONE NULL,
+    archived_by UUID NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
+    archived_by_name TEXT NULL,
+    created_by UUID NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_by_name TEXT NULL,
+    updated_by UUID NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
+    updated_by_name TEXT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    CONSTRAINT seminars_pkey PRIMARY KEY (id),
+    CONSTRAINT seminars_program_id_fkey FOREIGN KEY (program_id) REFERENCES public.programs(id) ON DELETE CASCADE,
+    CONSTRAINT seminars_program_title_unique UNIQUE (program_id, title)
+) TABLESPACE pg_default;
+
+CREATE INDEX IF NOT EXISTS idx_seminars_program_id ON public.seminars(program_id);
+CREATE INDEX IF NOT EXISTS idx_programs_is_archived ON public.programs(is_archived);
+CREATE INDEX IF NOT EXISTS idx_seminars_is_archived ON public.seminars(is_archived);
+
+ALTER TABLE public.programs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.seminars ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all actions on programs"
+ON public.programs FOR ALL
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Allow all actions on seminars"
+ON public.seminars FOR ALL
+USING (true)
+WITH CHECK (true);
+
+
+-- ============================================================
 -- DONE. Summary of what was created:
 --
 --  Tables:
 --    - public.profiles           (user accounts, linked to auth.users)
 --    - public.admin_action_logs  (audit log for admin actions)
 --    - public.residents          (barangay census data)
+--    - public.programs           (community & development programs)
+--    - public.seminars           (seminars under each program)
 --
 --  Triggers & Functions:
 --    - on_auth_user_created      -> handle_new_user()
---      Fires on auth.users INSERT. Auto-populates profiles row.
---    - trigger_check_duplicate_resident -> check_duplicate_resident()
---      Fires on residents INSERT ONLY. Blocks duplicate entries.
---      Trigger name: trg_prevent_duplicate_resident
+--    - trg_prevent_duplicate_resident -> check_duplicate_resident()
 --
 --  RLS Policies:
---    - profiles: "Users can view own profile"
---    - profiles: "Admins can view all profiles"
+--    - profiles: "Users can view own profile", "Admins can view all profiles"
 --    - residents: "Allow all actions for all roles"
---
---  After running this, set Edge Function secrets:
---    supabase secrets set SERVICE_ROLE_KEY=<your-new-service-role-key>
+--    - programs: "Allow all actions on programs"
+--    - seminars: "Allow all actions on seminars"
 -- ============================================================
+
 
 

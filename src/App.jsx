@@ -11,6 +11,7 @@ import BarangayList from './pages/BarangayList';
 import AddResident from './pages/AddResident';
 import Reports from './pages/Reports';
 import ManageAccounts from './pages/ManageAccounts';
+import Programs from './pages/Programs';
 import ArchiveResidents from './pages/ArchiveResidents';
 import UploadData from './pages/UploadData';
 import TransactionLogs from './pages/TransactionLogs';
@@ -128,6 +129,10 @@ function AppInner() {
         <Route path="/resident" element={<ProtectedRoute><BarangayList defaultMode="resident" /></ProtectedRoute>} />
         <Route path="/add-resident" element={<ProtectedRoute><AddResident /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+        <Route path="/programs" element={
+          <ProtectedRoute allowedRoles={['Admin', 'Administrator']}>
+            <Programs />
+          </ProtectedRoute>} />
         <Route path="/manage-accounts" element={
           <ProtectedRoute allowedRoles={['Admin', 'Administrator']}>
             <ManageAccounts />

@@ -281,7 +281,7 @@
 }
 
 /* Table Layout */
-table {
+.table-wrapper table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
@@ -292,21 +292,21 @@ table {
 }
 
 /* Round the corner cells */
-thead tr:first-child th:first-child {
+.table-wrapper thead tr:first-child th:first-child {
   border-top-left-radius: var(--radius-md);
 }
-thead tr:first-child th:last-child {
+.table-wrapper thead tr:first-child th:last-child {
   border-top-right-radius: var(--radius-md);
 }
-tbody tr:last-child td:first-child {
+.table-wrapper tbody tr:last-child td:first-child {
   border-bottom-left-radius: var(--radius-md);
 }
-tbody tr:last-child td:last-child {
+.table-wrapper tbody tr:last-child td:last-child {
   border-bottom-right-radius: var(--radius-md);
 }
 
 /* Sticky Headers with subtle shadow */
-thead th {
+.table-wrapper thead th {
   position: sticky;
   top: 0;
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
@@ -322,7 +322,7 @@ thead th {
 }
 
 /* Table body rows */
-tbody td {
+.table-wrapper tbody td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--gray-100);
   font-size: 12.5px;
@@ -331,24 +331,24 @@ tbody td {
 }
 
 /* Zebra striping */
-tbody tr:nth-child(even) {
+.table-wrapper tbody tr:nth-child(even) {
   background-color: #f8fafc;
 }
-tbody tr:nth-child(odd) {
+.table-wrapper tbody tr:nth-child(odd) {
   background-color: #ffffff;
 }
 
 /* Row Hover Effect */
-tbody tr {
+.table-wrapper tbody tr {
   transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
 }
 
-tbody tr:hover {
+.table-wrapper tbody tr:hover {
   background-color: rgba(74, 141, 240, 0.08) !important;
 }
 
-tbody tr:last-child td {
+.table-wrapper tbody tr:last-child td {
   border-bottom: none;
 }
 
@@ -704,7 +704,7 @@ tbody tr:last-child td {
     display: none !important;
   }
   
-  table {
+  .table-wrapper table {
     min-width: 1200px;
   }
 }
@@ -728,7 +728,7 @@ tbody tr:last-child td {
     display: none !important;
   }
   
-  table {
+  .table-wrapper table {
     min-width: 800px;
   }
 }
