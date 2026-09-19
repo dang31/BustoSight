@@ -440,7 +440,8 @@ export default function Programs() {
     const adminId = user?.id || adminUser?.id || null;
 
     if (programModal.mode === "add") {
-      let insertPayload = {
+      // Try inserting with full payload; progressively strip unknown columns on error
+      const fullInsertPayload = {
         name: trimmedName,
         description: description.trim() || null,
         status,
@@ -451,15 +452,31 @@ export default function Programs() {
         updated_by_name: adminName,
       };
 
-      let { error } = await supabase.from("programs").insert([insertPayload]);
+      let { error } = await supabase.from("programs").insert([fullInsertPayload]);
 
-      if (error && (error.message || "").includes("created_by")) {
-        const fallbackPayload = {
+      // If is_archived column doesn't exist, retry without it
+      if (error && (error.message || "").toLowerCase().includes("is_archived")) {
+        const noArchivedPayload = {
+          name: trimmedName,
+          description: description.trim() || null,
+          status,
+          created_by: adminId,
+          created_by_name: adminName,
+          updated_by: adminId,
+          updated_by_name: adminName,
+        };
+        const res = await supabase.from("programs").insert([noArchivedPayload]);
+        error = res.error;
+      }
+
+      // If audit columns don't exist, fall back to minimal payload
+      if (error && (error.message || "").toLowerCase().includes("created_by")) {
+        const minimalPayload = {
           name: trimmedName,
           description: description.trim() || null,
           status,
         };
-        const res = await supabase.from("programs").insert([fallbackPayload]);
+        const res = await supabase.from("programs").insert([minimalPayload]);
         error = res.error;
       }
 
