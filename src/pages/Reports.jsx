@@ -4,6 +4,7 @@ import UserProfileBadge from '../components/UserProfileBadge';
 import { supabase } from '../lib/supabase';
 import { barangayNames } from '../data/brgyData';
 import { logTransaction } from '../utils/logger';
+import { useToast } from '../components/Feedback/FeedbackProvider';
 import '../css/Reports.css';
 
 const START_YEAR = 2020;
@@ -66,6 +67,7 @@ export default function Reports() {
   const [genderFilter, setGenderFilter] = useState('both');
   const [generationFilter, setGenerationFilter] = useState('all');
   const [customStartYear, setCustomStartYear] = useState(1990);
+  const toast = useToast();
   const [customEndYear, setCustomEndYear] = useState(2005);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -150,7 +152,7 @@ export default function Reports() {
 
   const handlePrint = () => {
     if (selectedSections.length === 0) {
-      alert('Please select at least one report!');
+      toast.warning('Please select at least one report section to print.');
       return;
     }
 
@@ -158,11 +160,11 @@ export default function Reports() {
       const s = parseInt(customStartYear, 10);
       const e = parseInt(customEndYear, 10);
       if (!customStartYear || !customEndYear || isNaN(s) || isNaN(e)) {
-        alert('Invalid Year Range: Please enter both Start Year and End Year.');
+        toast.error('Invalid year range: please enter both a start year and an end year.');
         return;
       }
       if (s > e) {
-        alert(`Invalid Year Range: Start Year (${s}) cannot be greater than End Year (${e}).`);
+        toast.error(`Invalid year range: start year (${s}) cannot be greater than end year (${e}).`);
         return;
       }
     }

@@ -4,11 +4,15 @@ import { supabase } from '../lib/supabase';
 import '../css/BarangayList.css';
 import '../css/ArchiveResidents.css';
 import { logTransaction } from '../utils/logger';
+import { useToast, useConfirm, useAdminPassword } from '../components/Feedback/FeedbackProvider';
 
 export default function ArchiveResidents() {
   const [archived, setArchived] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const toast = useToast();
+  const confirm = useConfirm();
+  const requestAdminPassword = useAdminPassword();
 
   useEffect(() => {
     fetchArchived();
@@ -54,35 +58,28 @@ export default function ArchiveResidents() {
   };
 
   const handleRestore = async (res) => {
-    if (!window.confirm('Are you sure you want to restore this resident to the active list?')) return;
+    const confirmed = await confirm({
+      title: 'Restore this resident?',
+      message: `${res.first} ${res.last} (HH# ${res.h_no || 'N/A'}) will be returned to the active resident list.`,
+      details: ['The archived record will be marked active again', 'The archive date will be cleared'],
+      confirmLabel: 'Restore',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
 
-    const adminPassword = prompt('SECURITY CHECK: Enter Admin Password to confirm restoration:');
+    const adminPassword = await requestAdminPassword({
+      actionTitle: 'Admin Verification Required',
+      actionDescription: `Enter your admin password to restore ${res.first} ${res.last}.`,
+    });
     if (adminPassword === null) return;
 
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !user.email) {
-        setIsLoading(false);
-        alert('Session error. Could not verify your identity. Please log in again.');
-        return;
-      }
-
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: adminPassword,
-      });
-
-      if (authError) {
-        setIsLoading(false);
-        alert('Error: Incorrect Admin Password.');
-        return;
-      }
       const { error } = await supabase
         .from('residents')
-        .update({ 
-          is_archived: false, 
-          archive_date: null 
+        .update({
+          is_archived: false,
+          archive_date: null
         })
         .eq('id', res.id);
 
@@ -97,10 +94,10 @@ export default function ArchiveResidents() {
         details: `Restored resident ${res.first} ${res.last} (HH# ${res.h_no || 'N/A'}) from the archive back to active list.`,
       });
 
-      alert('Success! The resident has been restored.');
+      toast.success(`Success! ${res.first} ${res.last} has been restored to the active list.`);
     } catch (err) {
       console.error('Error restoring:', err);
-      alert('Failed to restore: ' + err.message);
+      toast.error('Failed to restore: ' + err.message);
     } finally {
       setIsLoading(false);
     }

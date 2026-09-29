@@ -2,50 +2,6 @@
    MANAGE ACCOUNTS MODULE CSS - CLEAN & REFINED
    ============================================ */
 
-/* --- Toast Notification --- */
-.acc-toast {
-  position: fixed;
-  top: 24px;
-  right: 24px;
-  z-index: 10001;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  border-radius: var(--radius-md);
-  font-size: 13.5px;
-  font-weight: 600;
-  color: white;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(8px);
-}
-
-.acc-toast-success {
-  background: linear-gradient(135deg, #276749 0%, #38a169 100%);
-}
-
-.acc-toast-info {
-  background: linear-gradient(135deg, #2b6cb0 0%, #3182ce 100%);
-}
-
-.acc-toast-error {
-  background: linear-gradient(135deg, #9b2c2c 0%, #e53e3e 100%);
-}
-
-.acc-toast button {
-  background: transparent;
-  border: none;
-  color: white;
-  font-size: 18px;
-  cursor: pointer;
-  opacity: 0.85;
-  transition: opacity 0.2s;
-}
-
-.acc-toast button:hover {
-  opacity: 1;
-}
-
 /* --- Statistics Grid --- */
 .acc-stats-grid {
   display: grid;

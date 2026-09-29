@@ -5,6 +5,7 @@ import Sidebar from '../components/Sidebar';
 import UserProfileBadge from '../components/UserProfileBadge';
 import { supabase } from '../lib/supabase';
 import { logTransaction } from '../utils/logger';
+import { useToast, useConfirm } from '../components/Feedback/FeedbackProvider';
 import '../css/UploadData.css';
 
 const BARANGAYS = [
@@ -112,6 +113,8 @@ export default function UploadData() {
   const [uploadComplete, setUploadComplete] = useState(false);
   const [totalRowsToUpload, setTotalRowsToUpload] = useState(0);
   const [dataYear, setDataYear] = useState('');
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const addLog = (message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -198,7 +201,7 @@ export default function UploadData() {
   const processSelectedFile = (selectedFile) => {
     const fileExt = selectedFile.name.split('.').pop().toLowerCase();
     if (fileExt !== 'xlsx' && fileExt !== 'xls') {
-      alert('Invalid file format. Please upload an Excel file (.xlsx or .xls).');
+      toast.error('Invalid file format. Please upload an Excel file (.xlsx or .xls).');
       return;
     }
 
@@ -309,7 +312,7 @@ export default function UploadData() {
       } catch (error) {
         console.error('Error parsing excel:', error);
         addLog(`Error parsing file: ${error.message}`, 'error');
-        alert(`Failed to parse file: ${error.message}`);
+        toast.error(`Failed to parse file: ${error.message}`);
       } finally {
         setIsParsing(false);
       }
@@ -341,7 +344,7 @@ export default function UploadData() {
     if (parsedSummary.length === 0 || totalRowsToUpload === 0) return;
 
     if (!dataYear) {
-      alert('Please select the year this data belongs to before uploading.');
+      toast.warning('Please select the year this data belongs to before uploading.');
       return;
     }
 
@@ -469,11 +472,11 @@ export default function UploadData() {
         details: `Uploaded file "${file?.name || 'workbook.xlsx'}" with ${totalUploaded} imported records (Data Year: ${dataYear}).`,
       });
 
-      alert(`Import Successful! Added ${totalUploaded} residents to Supabase for data year ${dataYear}.`);
+      toast.success(`Import successful! Added ${totalUploaded} residents for data year ${dataYear}.`, 6000);
     } catch (err) {
       console.error('Error uploading to Supabase:', err);
       addLog(`CRITICAL ERROR during upload: ${err.message}`, 'error');
-      alert(`Upload failed: ${err.message}`);
+      toast.error(`Upload failed: ${err.message}`);
     } finally {
       setIsUploading(false);
     }
@@ -623,10 +626,15 @@ export default function UploadData() {
               <button
                 type="button"
                 className="btn-cancel"
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to go back?')) {
-                    navigate('/barangay');
-                  }
+                onClick={async () => {
+                  const goBack = await confirm({
+                    title: 'Discard this upload?',
+                    message: 'You will go back without uploading the selected file.',
+                    confirmLabel: 'Discard and go back',
+                    cancelLabel: 'Keep working',
+                    variant: 'warning',
+                  });
+                  if (goBack) navigate('/barangay');
                 }}
                 disabled={isUploading}
               >

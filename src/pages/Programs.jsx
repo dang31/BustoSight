@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import UserProfileBadge from "../components/UserProfileBadge";
-import PasswordInput from "../components/Common/PasswordInput";
 import { supabase } from "../lib/supabase";
 import { logTransaction } from "../utils/logger";
+import { useToast, useAdminPassword } from "../components/Feedback/FeedbackProvider";
 import "../css/Programs.css";
 
 // ── SVG Icons ─────────────────────────────────────────────────────────────
@@ -108,109 +108,39 @@ const IconUser = () => (
   </svg>
 );
 
-const IconLock = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-  </svg>
-);
-
-// ── Admin Password Verification Modal ─────────────────────────────────────
+// ── Admin Password Gate ───────────────────────────────────────────────────
+// Bridges the app-wide, promise-based admin password dialog to this page's
+// existing onConfirm/onClose callback shape, so callers stay unchanged. The
+// dialog itself verifies the password via the isolated client (see
+// utils/adminPassword.js), which does not disturb the active session.
 function AdminPasswordAuthModal({ actionTitle, actionDescription, onConfirm, onClose }) {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const requestAdminPassword = useAdminPassword();
+  const startedRef = useRef(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
 
-    if (!password.trim()) {
-      setError("Admin password is required.");
-      return;
-    }
+    let cancelled = false;
+    requestAdminPassword({
+      actionTitle: actionTitle || "Admin Password Required",
+      actionDescription:
+        actionDescription ||
+        "Please enter your administrator password to authorize this action.",
+      confirmLabel: "Authorize & Proceed",
+    }).then((password) => {
+      if (cancelled) return;
+      if (password !== null) onConfirm();
+      else onClose();
+    });
 
-    setLoading(true);
-    try {
-      const { data: { user }, error: userErr } = await supabase.auth.getUser();
-      if (userErr || !user || !user.email) {
-        throw new Error("Unable to identify active admin session. Please log in again.");
-      }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      const { error: signInErr } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: password,
-      });
-
-      if (signInErr) {
-        setError("Incorrect admin password. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      await onConfirm();
-    } catch (err) {
-      setError(err.message || "Authentication verification failed.");
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="prog-modal-overlay" onClick={onClose}>
-      <div className="prog-modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "440px" }}>
-        <div className="prog-modal-header">
-          <h3>
-            <IconShield /> Admin Authentication
-          </h3>
-          <button className="prog-modal-close-btn" onClick={onClose} disabled={loading}>
-            ✕
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="prog-modal-body" style={{ textAlign: "center" }}>
-            <div className="prog-auth-lock-icon">
-              <IconLock />
-            </div>
-
-            <h4 style={{ fontSize: "16px", fontWeight: "700", color: "var(--gray-800)", margin: "0 0 6px" }}>
-              {actionTitle || "Admin Password Required"}
-            </h4>
-            <p style={{ fontSize: "13px", color: "var(--gray-600)", margin: "0 0 18px", lineHeight: "1.4" }}>
-              {actionDescription || "Please enter your administrator password to authorize this action."}
-            </p>
-
-            <div style={{ textAlign: "left", marginBottom: "14px" }}>
-              <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "var(--gray-700)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
-                Admin Password <span style={{ color: "#e53e3e" }}>*</span>
-              </label>
-              <PasswordInput
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                placeholder="Enter your current password"
-                autoFocus
-                disabled={loading}
-              />
-              {error && (
-                <div style={{ color: "#e53e3e", fontSize: "12px", marginTop: "6px", fontWeight: "500" }}>
-                  {error}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="prog-modal-footer">
-            <button type="button" className="btn-modal-cancel" onClick={onClose} disabled={loading}>
-              Cancel
-            </button>
-            <button type="submit" className="btn-modal-submit" disabled={loading}>
-              {loading ? "Authenticating..." : "Authorize & Proceed"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+  return null;
 }
 
 // ── Main Page Component ───────────────────────────────────────────────────
@@ -246,12 +176,13 @@ export default function Programs() {
     pendingHandler: null,
   });
 
-  // Toast notifications
-  const [toast, setToast] = useState(null);
+  // Toasts come from the app-wide provider so notices are positioned
+  // consistently and survive navigation.
+  const toast = useToast();
 
   const showToast = (message, type = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    const emit = toast[type] ?? toast.info;
+    emit(message);
   };
 
   // ── Load Authenticated Admin Profile ─────────────────────────────────────
@@ -811,14 +742,6 @@ export default function Programs() {
       <Sidebar />
 
       <main className="prog-content">
-        {/* Toast Notification */}
-        {toast && (
-          <div className={`prog-toast prog-toast-${toast.type}`}>
-            <span>{toast.message}</span>
-            <button onClick={() => setToast(null)}>✕</button>
-          </div>
-        )}
-
         {/* ── Fixed Top Section (non-scrolling) ── */}
         <div className="prog-fixed-top">
 

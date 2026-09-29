@@ -6,10 +6,18 @@ import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/BarangayList.css";
 import { logTransaction } from "../utils/logger";
+import {
+  useToast,
+  useConfirm,
+  useAdminPassword,
+} from "../components/Feedback/FeedbackProvider";
 
 export default function BarangayList({ defaultMode = "household" }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const requestAdminPassword = useAdminPassword();
   const [searchParams, setSearchParams] = useSearchParams();
   const storedUser = sessionStorage.getItem("popdev_user") || localStorage.getItem("popdev_user");
   const userProfile = storedUser ? JSON.parse(storedUser) : null;
@@ -231,31 +239,14 @@ export default function BarangayList({ defaultMode = "household" }) {
   const handleSaveEdit = async () => {
     if (!editingResident) return;
 
-    const adminPassword = prompt(
-      "Security Check: Enter Admin Password to save changes:"
-    );
+    const adminPassword = await requestAdminPassword({
+      actionTitle: 'Save Changes',
+      actionDescription: `Enter your admin password to save the edits to ${editingResident.first} ${editingResident.last}.`,
+    });
     if (adminPassword === null) return;
 
     setEditLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !user.email) {
-        alert("Session error. Please log in again.");
-        setEditLoading(false);
-        return;
-      }
-
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: adminPassword,
-      });
-
-      if (authError) {
-        alert("Access Denied: Incorrect Admin Password.");
-        setEditLoading(false);
-        return;
-      }
-
       const updatePayload = {
         h_no: editForm.h_no,
         last_name: editForm.last_name,
@@ -353,10 +344,10 @@ export default function BarangayList({ defaultMode = "household" }) {
       });
 
       setEditingResident(null);
-      alert("Resident updated successfully!");
+      toast.success("Resident updated successfully!");
     } catch (err) {
       console.error("Error updating resident:", err);
-      alert("Failed to update: " + err.message);
+      toast.error("Failed to update: " + err.message);
     } finally {
       setEditLoading(false);
     }
@@ -364,41 +355,31 @@ export default function BarangayList({ defaultMode = "household" }) {
 
   const handleArchive = async (res) => {
     if (userRole === "Staff") {
-      alert("Access Denied: Staff users are not permitted to archive residents.");
+      toast.error("Access denied: Staff accounts cannot archive residents.");
       return;
     }
 
-    if (
-      !window.confirm(
-        `Are you sure you want to archive resident ${res.first} ${res.last}?`,
-      )
-    )
-      return;
+    const confirmed = await confirm({
+      title: "Archive this resident?",
+      message: `${res.first} ${res.last} (HH# ${res.h_no || "N/A"}) will be moved to the archive.`,
+      details: [
+        "The record stays in the database and can be restored later",
+        "It will no longer appear in the active resident list",
+      ],
+      confirmLabel: "Archive",
+      cancelLabel: "Cancel",
+      variant: "warning",
+    });
+    if (!confirmed) return;
 
-    const adminPassword = prompt(
-      "Security Check: Please enter Admin Password to archive this record:",
-    );
+    const adminPassword = await requestAdminPassword({
+      actionTitle: "Admin Verification Required",
+      actionDescription: `Enter your admin password to archive ${res.first} ${res.last}.`,
+    });
     if (adminPassword === null) return;
 
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !user.email) {
-        setIsLoading(false);
-        alert("Session error. Could not verify your identity. Please log in again.");
-        return;
-      }
-
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: adminPassword,
-      });
-
-      if (authError) {
-        setIsLoading(false);
-        alert("Access Denied: Incorrect Admin Password.");
-        return;
-      }
       const { error } = await supabase
         .from("residents")
         .update({
@@ -421,47 +402,38 @@ export default function BarangayList({ defaultMode = "household" }) {
         details: `Archived resident ${res.first} ${res.last} (HH# ${res.h_no || "N/A"}) from Barangay ${activeBrgy}.`,
       });
 
-      alert("Successfully archived!");
+      toast.success(`${res.first} ${res.last} has been archived.`);
     } catch (err) {
       console.error("Error archiving:", err);
-      alert("Failed to archive: " + err.message);
+      toast.error("Failed to archive: " + err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteBrgyData = async () => {
-    if (
-      !window.confirm(
-        `WARNING: Are you sure you want to PERMANENTLY DELETE ALL records in Barangay ${activeBrgy}? This action cannot be undone.`,
-      )
-    )
-      return;
+    const confirmed = await confirm({
+      title: `Delete all records in ${activeBrgy}?`,
+      message: `This will permanently delete every resident record in Barangay ${activeBrgy}.`,
+      details: [
+        "This action cannot be undone",
+        "Archived records for this barangay are also removed",
+        "This is not the same as archiving — the data is destroyed",
+      ],
+      confirmLabel: "Delete everything",
+      cancelLabel: "Cancel",
+      variant: "danger",
+    });
+    if (!confirmed) return;
 
-    const adminPassword = prompt(
-      "Security Check: Please enter Admin Password to delete these records:",
-    );
+    const adminPassword = await requestAdminPassword({
+      actionTitle: "Confirm Permanent Deletion",
+      actionDescription: `Enter your admin password to permanently delete all records in Barangay ${activeBrgy}.`,
+    });
     if (adminPassword === null) return;
 
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !user.email) {
-        setIsLoading(false);
-        alert("Session error. Could not verify your identity. Please log in again.");
-        return;
-      }
-
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: adminPassword,
-      });
-
-      if (authError) {
-        setIsLoading(false);
-        alert("Access Denied: Incorrect Admin Password.");
-        return;
-      }
       const { error } = await supabase
         .from("residents")
         .delete()
@@ -477,10 +449,10 @@ export default function BarangayList({ defaultMode = "household" }) {
         details: `Permanently deleted ALL resident records for Barangay ${activeBrgy} (Year: ${selectedYear}).`,
       });
 
-      alert(`Successfully deleted all records in Barangay ${activeBrgy}!`);
+      toast.success(`All records in Barangay ${activeBrgy} have been permanently deleted.`, 6000);
     } catch (err) {
       console.error("Error deleting records:", err);
-      alert("Failed to delete records: " + err.message);
+      toast.error("Failed to delete records: " + err.message);
     } finally {
       setIsLoading(false);
     }
@@ -602,7 +574,7 @@ export default function BarangayList({ defaultMode = "household" }) {
 
     const newRecords = [...allRecords, ...mockResidents];
     setAllRecords(newRecords);
-    alert("Mock data generated successfully!");
+    toast.success(`Mock data generated: ${mockResidents.length} resident(s) added.`);
   };
 
   const openHousehold = async (hhNo, dataYear) => {
@@ -725,7 +697,7 @@ export default function BarangayList({ defaultMode = "household" }) {
       });
       const newAllRecords = [...allRecords, ...importedData];
       setAllRecords(newAllRecords);
-      alert("Import Successful!");
+      toast.success(`Import successful: ${importedData.length} resident(s) imported.`);
     };
     reader.readAsText(file);
   };

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { logTransaction } from '../utils/logger';
+import { logout } from '../utils/logout';
+import { useConfirm } from '../components/Feedback/FeedbackProvider';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard' },
@@ -19,6 +20,7 @@ export default function Sidebar() {
   const location = useLocation();
   const pathname = location.pathname;
   const [isOpen, setIsOpen] = useState(false);
+  const confirm = useConfirm();
 
   const [userProfile, setUserProfile] = useState(() => {
     const storedUser = sessionStorage.getItem('popdev_user') || localStorage.getItem('popdev_user');
@@ -98,18 +100,16 @@ export default function Sidebar() {
   };
 
   const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      await logTransaction({
-        action: 'User Logout',
-        category: 'Authentication',
-        details: `${userProfile?.username || userProfile?.email || 'User'} logged out of the system.`,
-        user: userProfile
-      });
-      await supabase.auth.signOut();
-      localStorage.removeItem('popdev_user');
-      sessionStorage.removeItem('popdev_user');
-      navigate('/login');
-    }
+    const confirmed = await confirm({
+      title: 'Log out?',
+      message: 'You will be returned to the login page.',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Stay signed in',
+    });
+    if (!confirmed) return;
+
+    const { message } = await logout('manual');
+    navigate('/login', { state: { message }, replace: true });
   };
 
   const closeSidebar = () => setIsOpen(false);

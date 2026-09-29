@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabase";
 import "../css/AddResident.css";
 import { isValidName, getNameError } from "../lib/nameValidation";
 import { logTransaction } from "../utils/logger";
+import { useToast, useConfirm } from "../components/Feedback/FeedbackProvider";
 
 export default function AddResident() {
   const navigate = useNavigate();
@@ -51,6 +52,8 @@ export default function AddResident() {
   const [expandedMemberIndex, setExpandedMemberIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
   const [formWarning, setFormWarning] = useState("");
+  const toast = useToast();
+  const confirm = useConfirm();
 
   // Reusable default states so we can both initialize and reset the form
   const initialHousehold = {
@@ -150,7 +153,9 @@ export default function AddResident() {
     if (field === "is_senior" && checked) {
       const age = parseInt(head.age, 10);
       if (!age || age < 60) {
-        alert("Senior Citizen classification requires age 60 or above.");
+        setFormWarning(
+          "Senior Citizen classification requires an age of 60 or above. Enter the age first.",
+        );
         return;
       }
     }
@@ -168,7 +173,9 @@ export default function AddResident() {
     if (field === "is_senior" && checked) {
       const age = parseInt(members[index].age, 10);
       if (!age || age < 60) {
-        alert("Senior Citizen classification requires age 60 or above.");
+        setFormWarning(
+          "Senior Citizen classification requires an age of 60 or above. Enter the age first.",
+        );
         return;
       }
     }
@@ -318,9 +325,6 @@ export default function AddResident() {
     if (dir === 1) {
       const warning = validateStep();
       if (warning) {
-        if (warning.includes("18 years old")) {
-          alert("Invalid: Household head must be over 18 years old.");
-        }
         setFormWarning(warning);
         return;
       }
@@ -456,7 +460,6 @@ export default function AddResident() {
             : `Cannot save: Resident ${fullName} already exists in ${r.barangay} for year ${r.data_year}.`;
 
           setFormWarning(msg);
-          alert(msg);
           setIsLoading(false);
           return;
         }
@@ -474,7 +477,6 @@ export default function AddResident() {
           const fullName = `${r.first_name} ${r.last_name}`;
           const msg = `Cannot save: Resident ${fullName} already exists in local storage for year ${r.data_year}.`;
           setFormWarning(msg);
-          alert(msg);
           setIsLoading(false);
           return;
         }
@@ -542,14 +544,16 @@ export default function AddResident() {
         details: `Registered household ${residentsToSave[0]?.h_no || ""} in ${residentsToSave[0]?.barangay || ""} with ${residentsToSave.length} member(s) for year ${residentsToSave[0]?.data_year || ""}.`,
       });
 
-      alert("Resident successfully saved to Supabase!");
+      toast.success(
+        `Resident saved successfully to Supabase${residentsToSave.length > 1 ? ` (${residentsToSave.length} members)` : ""}!`,
+      );
       navigate("/barangay");
     } catch (err) {
       console.error("Error saving to Supabase:", err);
       if (err.message && err.message.includes("already exists")) {
         setFormWarning(err.message);
       }
-      alert("Failed to save to Supabase: " + err.message);
+      toast.error("Failed to save to Supabase: " + err.message);
     } finally {
       setIsLoading(false);
     }
@@ -597,10 +601,16 @@ export default function AddResident() {
       console.error("Failed to auto-generate HH number", err);
     }
   };
-  const resetForm = () => {
-    const confirmed = window.confirm(
-      "Clear all entered fields? This cannot be undone.",
-    );
+  const resetForm = async () => {
+    const confirmed = await confirm({
+      title: "Clear all fields?",
+      message:
+        "Every household, head and member detail you have entered will be discarded. This cannot be undone.",
+      details: ["Household number and barangay", "Head of household details", "All household members"],
+      confirmLabel: "Clear all fields",
+      cancelLabel: "Keep my entries",
+      variant: "warning",
+    });
     if (!confirmed) return;
 
     setHousehold(initialHousehold);

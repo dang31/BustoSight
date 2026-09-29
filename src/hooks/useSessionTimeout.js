@@ -1,7 +1,9 @@
 import { useEffect, useRef, useCallback } from "react";
+import { TIMEOUT_MS, WARNING_MS, WARNING_SECONDS, INACTIVITY_MINUTES } from "../config/session";
 
-const TIMEOUT_MS  = 10 * 60 * 1000; // 10 minutes
-const WARNING_MS  =  2 * 60 * 1000; //  2 minutes before expiry (i.e. at 8 mins)
+const TICK_MS = 1000;
+/** mousemove fires very often; only treat it as activity once per second. */
+const ACTIVITY_THROTTLE_MS = 1000;
 
 // Events that count as "activity"
 const ACTIVITY_EVENTS = [
@@ -17,10 +19,17 @@ const ACTIVITY_EVENTS = [
 /**
  * useSessionTimeout
  *
- * @param {Function} onTimeout   – called when the 10-min deadline is reached
- * @param {Function} onWarning   – called when 2 mins remain (optional)
+ * Tracks a wall-clock deadline rather than a bare setTimeout: browsers throttle
+ * and freeze timers in background tabs, so a setTimeout can fire long after it
+ * was due. Comparing Date.now() against the deadline on every tick means an
+ * already-expired session logs out immediately, the moment the tab is usable.
+ *
+ * @param {Function} onTimeout   – called when the inactivity deadline is reached
+ * @param {Function} onWarning   – called once when the warning window opens (optional)
  * @param {Function} onDismiss   – called when the warning is dismissed / session extended (optional)
  * @param {boolean}  active      – only run while true (pass false on public/login pages)
+ *
+ * @returns {{ extendSession: Function, warningSeconds: number, inactivityMinutes: number }}
  */
 export default function useSessionTimeout({
   onTimeout,
@@ -28,60 +37,81 @@ export default function useSessionTimeout({
   onDismiss,
   active = true,
 }) {
-  const timeoutRef = useRef(null);
-  const warningRef = useRef(null);
-  const warningShownRef = useRef(false);
+  // Callbacks live in a ref so re-rendering the consumer cannot re-arm the
+  // deadline. This was the previous bug: inline callbacks made the timers
+  // restart on every render, so the timeout never actually elapsed.
+  const callbacksRef = useRef({ onTimeout, onWarning, onDismiss });
+  useEffect(() => {
+    callbacksRef.current = { onTimeout, onWarning, onDismiss };
+  });
 
-  const clearTimers = useCallback(() => {
-    clearTimeout(timeoutRef.current);
-    clearTimeout(warningRef.current);
-  }, []);
+  const deadlineRef = useRef(0);
+  const warnedRef = useRef(false);
+  const warningOpenRef = useRef(false);
+  const lastActivityRef = useRef(0);
 
-  const resetTimers = useCallback(() => {
-    clearTimers();
-
-    // Hide warning if it was showing
-    if (warningShownRef.current) {
-      warningShownRef.current = false;
-      onDismiss?.();
+  /** Push the deadline out a full window and close the warning if it is up. */
+  const extendSession = useCallback(() => {
+    deadlineRef.current = Date.now() + TIMEOUT_MS;
+    warnedRef.current = false;
+    if (warningOpenRef.current) {
+      warningOpenRef.current = false;
+      callbacksRef.current.onDismiss?.();
     }
-
-    // Warning fires at TIMEOUT_MS - WARNING_MS (i.e. 8 min mark)
-    warningRef.current = setTimeout(() => {
-      warningShownRef.current = true;
-      onWarning?.();
-    }, TIMEOUT_MS - WARNING_MS);
-
-    // Hard logout at TIMEOUT_MS (10 min mark)
-    timeoutRef.current = setTimeout(() => {
-      onTimeout();
-    }, TIMEOUT_MS);
-  }, [clearTimers, onTimeout, onWarning, onDismiss]);
+  }, []);
 
   useEffect(() => {
     if (!active) return;
 
-    // Start timers on mount
-    resetTimers();
+    deadlineRef.current = Date.now() + TIMEOUT_MS;
+    warnedRef.current = false;
+    warningOpenRef.current = false;
 
-    // Reset on every activity event
-    const handleActivity = () => resetTimers();
+    const handleActivity = () => {
+      // While the warning is on screen the user must choose explicitly —
+      // a stray mouse bump should not silently keep the session alive.
+      if (warningOpenRef.current) return;
+
+      const now = Date.now();
+      if (now - lastActivityRef.current < ACTIVITY_THROTTLE_MS) return;
+
+      lastActivityRef.current = now;
+      deadlineRef.current = now + TIMEOUT_MS;
+      warnedRef.current = false;
+    };
+
+    const interval = setInterval(() => {
+      const remaining = deadlineRef.current - Date.now();
+
+      if (remaining <= 0) {
+        clearInterval(interval);
+        callbacksRef.current.onTimeout?.();
+        return;
+      }
+
+      
+      if (remaining <= WARNING_MS && !warnedRef.current) {
+        warnedRef.current = true;
+        warningOpenRef.current = true;
+        callbacksRef.current.onWarning?.(Math.ceil(remaining / 1000));
+      }
+    }, TICK_MS);
+
     ACTIVITY_EVENTS.forEach((evt) =>
       window.addEventListener(evt, handleActivity, { passive: true })
     );
 
     return () => {
-      clearTimers();
+      clearInterval(interval);
       ACTIVITY_EVENTS.forEach((evt) =>
         window.removeEventListener(evt, handleActivity)
       );
     };
-  }, [active, resetTimers, clearTimers]);
+  }, [active, extendSession]);
 
-  /** Call this when the user clicks "Stay Logged In" in the warning modal */
-  const extendSession = useCallback(() => {
-    resetTimers();
-  }, [resetTimers]);
-
-  return { extendSession };
+  return {
+    extendSession,
+    warningSeconds: WARNING_SECONDS,
+    inactivityMinutes: INACTIVITY_MINUTES,
+  };
 }

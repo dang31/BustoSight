@@ -3,6 +3,7 @@ import { useNavigate, Link, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import PasswordInput from "../components/Common/PasswordInput";
 import { logTransaction } from "../utils/logger";
+import { useToast } from "../components/Feedback/FeedbackProvider";
 import "../css/LoginPage.css";
 
 export default function LoginPage() {
@@ -12,20 +13,18 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const location = useLocation();
-  const [toast, setToast] = useState(null);
+  const toast = useToast();
 
   useEffect(() => {
     if (location.state?.message) {
       const isTimeoutMsg = location.state.message.toLowerCase().includes('inactivity');
-      setToast({
-        message: location.state.message,
-        type: isTimeoutMsg ? "warning" : "error",
-      });
-      setTimeout(() => setToast(null), 5000);
+      if (isTimeoutMsg) toast.warning(location.state.message, 6000);
+      else toast.error(location.state.message);
 
       // Clear state so it doesn't reappear on refresh
       navigate(location.pathname, { replace: true, state: {} });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location, navigate]);
 
   const handleLogin = async (e) => {
@@ -104,8 +103,9 @@ export default function LoginPage() {
         return;
       }
 
-      // Store user session info for the frontend
-      const userPayload = { ...profile, password: password };
+      // Store user session info for the frontend.
+      // Never persist the password — it is only used for the sign-in above.
+      const userPayload = { ...profile };
       sessionStorage.setItem("popdev_user", JSON.stringify(userPayload));
       localStorage.setItem("popdev_user", JSON.stringify(userPayload));
 
@@ -131,16 +131,6 @@ export default function LoginPage() {
       {/* Shared background layers */}
       <div className="bg-image" />
       <div className="overlay" />
-
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          className={`login-toast login-toast-${toast.type} animate-fade-up`}
-        >
-          <span>{toast.message}</span>
-          <button onClick={() => setToast(null)}>×</button>
-        </div>
-      )}
 
       {/* Back button */}
       <Link to="/" className="back-btn">
