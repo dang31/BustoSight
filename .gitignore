@@ -37,3 +37,6 @@ db.json
 
 # Vite
 *.timestamp-*
+
+# Supabase CLI local link state (machine-local, churns on every CLI run)
+supabase/.temp/
