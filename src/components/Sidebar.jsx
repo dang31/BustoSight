@@ -108,8 +108,8 @@ export default function Sidebar() {
     });
     if (!confirmed) return;
 
-    const { message } = await logout('manual');
-    navigate('/login', { state: { message }, replace: true });
+    const { message, tone } = await logout('manual');
+    navigate('/login', { state: { message, tone }, replace: true });
   };
 
   const closeSidebar = () => setIsOpen(false);

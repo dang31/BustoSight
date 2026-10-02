@@ -240,6 +240,49 @@
   transform: translateY(0);
 }
 
+/* --- Loading state --- */
+.btn-login-submit.loading {
+  cursor: progress;
+  /* Stop the hover lift while authenticating so the button feels locked. */
+  transform: none;
+  box-shadow: none;
+  background: linear-gradient(135deg, #2c5282 0%, #1a365d 100%);
+}
+
+.btn-login-submit.loading:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Keeps the label centred as the spinner appears and disappears */
+.btn-login-label {
+  display: inline-block;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 9px;
+  vertical-align: -2px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-spinner {
+    animation-duration: 1.6s;
+  }
+}
+
 /* Footer */
 .login-footer {
   margin-top: 36px;

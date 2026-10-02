@@ -264,6 +264,79 @@ WITH CHECK (true);
 
 
 -- ============================================================
+-- SECTION 5: TRANSACTION LOGS TABLE
+-- Application audit trail written by src/utils/logger.js.
+-- Columns must match the payload logger.js inserts.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.transaction_logs (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    timestamp  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    user_name  TEXT NULL,
+    user_role  TEXT NULL,
+    action     TEXT NOT NULL,
+    category   TEXT NOT NULL DEFAULT 'General',
+    details    TEXT NULL
+) TABLESPACE pg_default;
+
+CREATE INDEX IF NOT EXISTS idx_transaction_logs_timestamp
+    ON public.transaction_logs (timestamp DESC);
+
+ALTER TABLE public.transaction_logs ENABLE ROW LEVEL SECURITY;
+
+-- Authenticated users may append entries.
+DROP POLICY IF EXISTS "Authenticated users can insert logs" ON public.transaction_logs;
+CREATE POLICY "Authenticated users can insert logs"
+ON public.transaction_logs FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+-- Only admins may read the trail. No UPDATE/DELETE policies exist on purpose,
+-- which keeps the log append-only.
+DROP POLICY IF EXISTS "Admins can view all logs" ON public.transaction_logs;
+CREATE POLICY "Admins can view all logs"
+ON public.transaction_logs FOR SELECT
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND p.role IN ('Admin', 'Administrator')
+          AND p.archived = FALSE
+    )
+);
+
+
+-- ============================================================
+-- SECTION 6: USER SESSIONS TABLE
+-- One row per user = the device that currently owns the session.
+-- Written only by the enforce-single-session edge function (service role);
+-- clients may read their own row so they can detect being signed out.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.user_sessions (
+    user_id    UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    session_id UUID NULL,
+    device_id  TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+) TABLESPACE pg_default;
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_device_id
+    ON public.user_sessions (device_id);
+
+ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own session record" ON public.user_sessions;
+CREATE POLICY "Users can view own session record"
+ON public.user_sessions FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
+
+-- Intentionally NO insert/update/delete policies: ownership may only be changed
+-- by the edge function using the service role key.
+
+
+-- ============================================================
 -- DONE. Summary of what was created:
 --
 --  Tables:
@@ -272,6 +345,8 @@ WITH CHECK (true);
 --    - public.residents          (barangay census data)
 --    - public.programs           (community & development programs)
 --    - public.seminars           (seminars under each program)
+--    - public.transaction_logs   (application audit trail)
+--    - public.user_sessions      (current session owner, single-session enforcement)
 --
 --  Triggers & Functions:
 --    - on_auth_user_created      -> handle_new_user()
@@ -282,6 +357,13 @@ WITH CHECK (true);
 --    - residents: "Allow all actions for all roles"
 --    - programs: "Allow all actions on programs"
 --    - seminars: "Allow all actions on seminars"
+--    - transaction_logs: "Authenticated users can insert logs",
+--                        "Admins can view all logs"
+--    - user_sessions: "Users can view own session record"
+--
+--  Edge Functions:
+--    - admin-reset-password      (admin re-auth to reset a staff password)
+--    - enforce-single-session    (one active session per account)
 -- ============================================================
 
 

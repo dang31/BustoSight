@@ -1,0 +1,261 @@
+/* ============================================================
+   LOADING SCREEN — branded full-screen loader
+   Shown while a guarded route verifies the session and role.
+   ============================================================ */
+
+.ls-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100002;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: linear-gradient(150deg, #1a365d 0%, #2c5282 55%, #2a4a69 100%);
+  overflow: hidden;
+}
+
+/* Soft brand imagery, kept faint so it never fights the spinner */
+.ls-bg {
+  position: absolute;
+  inset: 0;
+  background-image: url("/background-bustos.jpg");
+  background-size: cover;
+  background-position: center;
+  opacity: 0.14;
+  filter: blur(1px);
+}
+
+.ls-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 22rem;
+  padding: 2.25rem 1.75rem 1.9rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: ls-rise 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ls-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------- Logos ---------- */
+.ls-logos {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 1.6rem;
+}
+
+.ls-logo {
+  height: 46px;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+  opacity: 0.95;
+}
+
+/* ---------- Spinner ---------- */
+.ls-spinner-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 1.35rem;
+}
+
+.ls-glow {
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(99, 179, 237, 0.4) 0%,
+    rgba(99, 179, 237, 0) 70%
+  );
+  animation: ls-pulse 1.9s ease-in-out infinite;
+}
+
+@keyframes ls-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+
+.ls-spinner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  animation: ls-spin 1s linear infinite;
+}
+
+@keyframes ls-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ls-track {
+  stroke: rgba(255, 255, 255, 0.18);
+}
+
+.ls-arc {
+  stroke: url(#ls-grad);
+  /* 3/4 of the circumference, leaving a gap */
+  stroke-dasharray: 94 126;
+}
+
+/* ---------- Copy ---------- */
+.ls-title {
+  margin: 0 0 0.4rem;
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  letter-spacing: 0.2px;
+}
+
+.ls-step {
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  margin: 0 0 1.5rem;
+  font-size: 0.84rem;
+  color: rgba(255, 255, 255, 0.82);
+  text-align: center;
+  min-height: 1.2em;
+  animation: ls-fade 0.4s ease;
+}
+
+@keyframes ls-fade {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ls-dots {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 1px;
+}
+
+.ls-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ls-dot 1.3s ease-in-out infinite;
+}
+
+.ls-dots i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.ls-dots i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes ls-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* ---------- Indeterminate bar ---------- */
+.ls-bar {
+  width: 100%;
+  height: 4px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.ls-bar-fill {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--primary-light) 35%,
+    #90cdf4 50%,
+    var(--primary-light) 65%,
+    transparent
+  );
+  animation: ls-sweep 1.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@keyframes ls-sweep {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(360%);
+  }
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .ls-card,
+  .ls-step {
+    animation: none;
+  }
+
+  .ls-glow,
+  .ls-spinner,
+  .ls-dots i,
+  .ls-bar-fill {
+    animation-duration: 0.001ms;
+    animation-iteration-count: 1;
+  }
+
+  /* Keep a visible progress signal without motion. */
+  .ls-bar-fill {
+    width: 100%;
+    opacity: 0.6;
+  }
+}
+
+/* ---------- Small screens ---------- */
+@media (max-width: 380px) {
+  .ls-card {
+    padding: 1.75rem 1.25rem 1.5rem;
+  }
+
+  .ls-logo {
+    height: 38px;
+  }
+}

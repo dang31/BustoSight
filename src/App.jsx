@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import useSessionTimeout from './hooks/useSessionTimeout';
+import useSingleSession from './hooks/useSingleSession';
 import { logout } from './utils/logout';
 import SessionTimeoutModal from './components/Common/SessionTimeoutModal';
 import FeedbackProvider from './components/Feedback/FeedbackProvider';
@@ -70,9 +71,21 @@ function AppInner() {
     loggingOutRef.current = true;
     setShowWarning(false);
     setCountdown(null);
-    const { message } = await logout(reason);
-    navigate('/login', { state: { message }, replace: true });
+    const { message, tone } = await logout(reason);
+    navigate('/login', { state: { message, tone }, replace: true });
   }, [navigate]);
+
+  // ── Single-session watchdog ───────────────────────────────────────────────
+  // Signs this device out when the account is opened elsewhere. Shares the
+  // logout guard above so a takeover racing the idle timeout logs out once.
+  const handleSuperseded = useCallback(() => {
+    performLogout('superseded');
+  }, [performLogout]);
+
+  useSingleSession({
+    active: isAuthenticated && !isPublicPage,
+    onSuperseded: handleSuperseded,
+  });
 
   // ── Session timeout hook ──────────────────────────────────────────────────
   const { extendSession, warningSeconds, inactivityMinutes } = useSessionTimeout({
