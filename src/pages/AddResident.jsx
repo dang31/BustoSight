@@ -14,6 +14,7 @@ import {
   serializeAttendance,
 } from "../lib/attendance";
 import { logTransaction } from "../utils/logger";
+import { formatResidentName } from "../lib/residentName";
 import { useToast, useConfirm } from "../components/Feedback/FeedbackProvider";
 
 export default function AddResident() {
@@ -502,7 +503,7 @@ export default function AddResident() {
 
         if (!checkErr && existing && existing.length > 0) {
           const isArchived = existing.some((ex) => ex.is_archived);
-          const fullName = `${r.first_name} ${r.last_name}`;
+          const fullName = formatResidentName(r);
           const msg = isArchived
             ? `Cannot save: Resident ${fullName} already exists in ${r.barangay} as an archived record for year ${r.data_year}.`
             : `Cannot save: Resident ${fullName} already exists in ${r.barangay} for year ${r.data_year}.`;
@@ -522,7 +523,7 @@ export default function AddResident() {
         });
 
         if (localDup) {
-          const fullName = `${r.first_name} ${r.last_name}`;
+          const fullName = formatResidentName(r);
           const msg = `Cannot save: Resident ${fullName} already exists in local storage for year ${r.data_year}.`;
           setFormWarning(msg);
           setIsLoading(false);
@@ -1402,9 +1403,12 @@ export default function AddResident() {
                       {members.map((m, i) => {
                         const isExpanded = expandedMemberIndex === i;
                         const fullName =
-                          [m.fname, m.mname, m.lname]
-                            .filter(Boolean)
-                            .join(" ") || `Member ${i + 1}`;
+                          formatResidentName({
+                            first_name: m.fname,
+                            middle_name: m.mname,
+                            last_name: m.lname,
+                            qualifier: m.q,
+                          }) || `Member ${i + 1}`;
 
                         return (
                           <div
@@ -2225,9 +2229,12 @@ export default function AddResident() {
                           </thead>
                           <tbody>
                             {members.map((m, i) => {
-                              const mName = [m.fname, m.mname, m.lname, m.q]
-                                .filter(Boolean)
-                                .join(" ");
+                              const mName = formatResidentName({
+                                first_name: m.fname,
+                                middle_name: m.mname,
+                                last_name: m.lname,
+                                qualifier: m.q,
+                              });
                               const basicDetails = `${m.sex}, ${m.civil}, DOB: ${m.dob || "N/A"} (${m.age || "N/A"} yrs), Job: ${m.occupation || "N/A"}`;
                               const classList =
                                 [

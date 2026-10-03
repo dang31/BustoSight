@@ -14,6 +14,7 @@ import {
   summarizeAttendance,
 } from "../lib/attendance";
 import { logTransaction } from "../utils/logger";
+import { formatResidentName } from "../lib/residentName";
 import {
   useToast,
   useConfirm,
@@ -309,7 +310,7 @@ export default function BarangayList({ defaultMode = "household" }) {
 
     const adminPassword = await requestAdminPassword({
       actionTitle: 'Save Changes',
-      actionDescription: `Enter your admin password to save the edits to ${editingResident.first} ${editingResident.last}.`,
+      actionDescription: `Enter your admin password to save the edits to ${formatResidentName(editingResident)}.`,
     });
     if (adminPassword === null) return;
 
@@ -437,7 +438,7 @@ export default function BarangayList({ defaultMode = "household" }) {
 
     const confirmed = await confirm({
       title: "Archive this resident?",
-      message: `${res.first} ${res.last} (HH# ${res.h_no || "N/A"}) will be moved to the archive.`,
+      message: `${formatResidentName(res)} (HH# ${res.h_no || "N/A"}) will be moved to the archive.`,
       details: [
         "The record stays in the database and can be restored later",
         "It will no longer appear in the active resident list",
@@ -450,7 +451,7 @@ export default function BarangayList({ defaultMode = "household" }) {
 
     const adminPassword = await requestAdminPassword({
       actionTitle: "Admin Verification Required",
-      actionDescription: `Enter your admin password to archive ${res.first} ${res.last}.`,
+      actionDescription: `Enter your admin password to archive ${formatResidentName(res)}.`,
     });
     if (adminPassword === null) return;
 
@@ -475,10 +476,10 @@ export default function BarangayList({ defaultMode = "household" }) {
       logTransaction({
         action: "Archive Resident",
         category: "Resident Management",
-        details: `Archived resident ${res.first} ${res.last} (HH# ${res.h_no || "N/A"}) from Barangay ${activeBrgy}.`,
+        details: `Archived resident ${formatResidentName(res)} (HH# ${res.h_no || "N/A"}) from Barangay ${activeBrgy}.`,
       });
 
-      toast.success(`${res.first} ${res.last} has been archived.`);
+      toast.success(`${formatResidentName(res)} has been archived.`);
     } catch (err) {
       console.error("Error archiving:", err);
       toast.error("Failed to archive: " + err.message);
@@ -915,12 +916,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                     </tr>
                   ) : filteredRecords.length > 0 ? (
                     filteredRecords.map((res, i) => {
-                      const middle = res.mid
-                        ? (res.mid.trim().endsWith(".")
-                            ? res.mid.trim()
-                            : res.mid.trim()[0] + ".") + " "
-                        : "";
-                      const fullName = `${res.first} ${middle}${res.last}`;
+                      const fullName = formatResidentName(res);
                       return (
                         <tr
                           key={res.id || i}
@@ -1136,7 +1132,7 @@ export default function BarangayList({ defaultMode = "household" }) {
             <div className="hh-members-grid">
               {selectedHousehold.members.map((m, i) => {
                 const isHead = (m.rel || '').toUpperCase() === 'HEAD';
-                const fullName = `${m.first || ''} ${m.mid ? (m.mid.endsWith('.') ? m.mid : m.mid[0] + '.') + ' ' : ''}${m.last || ''} ${m.q || ''}`.trim();
+                const fullName = formatResidentName(m);
                 const initials = `${(m.first?.[0] || '').toUpperCase()}${(m.last?.[0] || '').toUpperCase()}`;
                 return (
                   <div
@@ -1243,9 +1239,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                 {(selectedResident.last?.[0] || "").toUpperCase()}
               </div>
               <div className="res-modal-title">
-                <h2>
-                  {selectedResident.first} {selectedResident.mid ? (selectedResident.mid.endsWith('.') ? selectedResident.mid + ' ' : selectedResident.mid[0] + '. ') : ''}{selectedResident.last} {selectedResident.q || ''}
-                </h2>
+                <h2>{formatResidentName(selectedResident)}</h2>
                 <p>
                   Household ID: <strong>{selectedResident.h_no || "N/A"}</strong> &bull; Relation: <strong>{selectedResident.rel || "MEMBER"}</strong> &bull; Barangay: <strong>{selectedResident.brgy}</strong>
                 </p>
@@ -1261,7 +1255,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                 <div className="res-card-content">
                   <div className="res-detail-row">
                     <span className="res-detail-label">Full Name</span>
-                    <span className="res-detail-value">{selectedResident.first} {selectedResident.mid || ''} {selectedResident.last} {selectedResident.q || ''}</span>
+                    <span className="res-detail-value">{formatResidentName(selectedResident)}</span>
                   </div>
                   <div className="res-detail-row">
                     <span className="res-detail-label">Age</span>

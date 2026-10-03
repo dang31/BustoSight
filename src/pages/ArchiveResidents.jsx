@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import '../css/BarangayList.css';
 import '../css/ArchiveResidents.css';
 import { logTransaction } from '../utils/logger';
+import { formatResidentName } from '../lib/residentName';
 import { useToast, useConfirm, useAdminPassword } from '../components/Feedback/FeedbackProvider';
 
 export default function ArchiveResidents() {
@@ -60,7 +61,7 @@ export default function ArchiveResidents() {
   const handleRestore = async (res) => {
     const confirmed = await confirm({
       title: 'Restore this resident?',
-      message: `${res.first} ${res.last} (HH# ${res.h_no || 'N/A'}) will be returned to the active resident list.`,
+      message: `${formatResidentName(res)} (HH# ${res.h_no || 'N/A'}) will be returned to the active resident list.`,
       details: ['The archived record will be marked active again', 'The archive date will be cleared'],
       confirmLabel: 'Restore',
       cancelLabel: 'Cancel',
@@ -69,7 +70,7 @@ export default function ArchiveResidents() {
 
     const adminPassword = await requestAdminPassword({
       actionTitle: 'Admin Verification Required',
-      actionDescription: `Enter your admin password to restore ${res.first} ${res.last}.`,
+      actionDescription: `Enter your admin password to restore ${formatResidentName(res)}.`,
     });
     if (adminPassword === null) return;
 
@@ -91,10 +92,10 @@ export default function ArchiveResidents() {
       logTransaction({
         action: 'Restore Archived Resident',
         category: 'Resident Management',
-        details: `Restored resident ${res.first} ${res.last} (HH# ${res.h_no || 'N/A'}) from the archive back to active list.`,
+        details: `Restored resident ${formatResidentName(res)} (HH# ${res.h_no || 'N/A'}) from the archive back to active list.`,
       });
 
-      toast.success(`Success! ${res.first} ${res.last} has been restored to the active list.`);
+      toast.success(`Success! ${formatResidentName(res)} has been restored to the active list.`);
     } catch (err) {
       console.error('Error restoring:', err);
       toast.error('Failed to restore: ' + err.message);
@@ -165,8 +166,7 @@ export default function ArchiveResidents() {
                   </tr>
                 ) : filtered.length > 0 ? (
                   filtered.map((res, i) => {
-                    const middle = res.mid ? (res.mid.trim().endsWith('.') ? res.mid.trim() : res.mid.trim()[0] + '.') + ' ' : '';
-                    const fullName = `${res.first} ${middle}${res.last}`;
+                    const fullName = formatResidentName(res);
                     return (
                       <tr key={res.id || i}>
                         <td className="text-center">{res.h_no || '—'}</td>

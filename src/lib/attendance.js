@@ -200,6 +200,82 @@ export function toItemArray(attendedItems) {
 }
 
 /**
+ * Turns selected option values into printable report targets.
+ *
+ * A program target carries the ids of its seminars, because a resident counts
+ * toward a program when they ticked the program itself OR joined any of its
+ * seminars.
+ *
+ * @param {string[]} values   "program:<uuid>" / "seminar:<uuid>" strings
+ * @param {Array}  groups     output of buildGroups
+ */
+export function resolveAttendanceTargets(values, groups) {
+  const targets = [];
+  const seen = new Set();
+
+  for (const { program, seminars } of groups) {
+    const programValue = attendanceOptionValue(PROGRAM, program.id);
+    if (values.includes(programValue) && !seen.has(programValue)) {
+      seen.add(programValue);
+      targets.push({
+        kind: PROGRAM,
+        id: program.id,
+        name: program.name,
+        seminarIds: seminars.map((seminar) => seminar.id),
+      });
+    }
+
+    for (const seminar of seminars) {
+      const seminarValue = attendanceOptionValue(SEMINAR, seminar.id);
+      if (values.includes(seminarValue) && !seen.has(seminarValue)) {
+        seen.add(seminarValue);
+        targets.push({
+          kind: SEMINAR,
+          id: seminar.id,
+          name: seminar.title,
+          programId: program.id,
+          programName: program.name,
+          seminarIds: [],
+        });
+      }
+    }
+  }
+
+  return targets;
+}
+
+/**
+ * How one resident's stored attendance relates to one report target.
+ *
+ * Seminar targets match only that seminar. Program targets match the program
+ * itself, any of its seminars, or both - returned as the label the report
+ * prints in its "Attended Via" column.
+ *
+ * @returns {'program'|'seminar'|'both'|null} null when the resident did not attend
+ */
+export function matchAttendanceTarget(attendedItems, target) {
+  const items = toItemArray(attendedItems);
+
+  if (target.kind === SEMINAR) {
+    return items.some((item) => item.kind === SEMINAR && item.id === target.id)
+      ? SEMINAR
+      : null;
+  }
+
+  const direct = items.some(
+    (item) => item.kind === PROGRAM && item.id === target.id,
+  );
+  const viaSeminar = target.seminarIds.some((seminarId) =>
+    items.some((item) => item.kind === SEMINAR && item.id === seminarId),
+  );
+
+  if (direct && viaSeminar) return "both";
+  if (direct) return "program";
+  if (viaSeminar) return "seminar";
+  return null;
+}
+
+/**
  * Read-model for the resident detail card.
  *
  * Groups a stored attended_items array by parent program so the UI can show
