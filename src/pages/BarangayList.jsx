@@ -1,16 +1,74 @@
-import { useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import UserProfileBadge from "../components/UserProfileBadge";
+import AttendanceCheckboxes from "../components/AttendanceCheckboxes";
 import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/BarangayList.css";
+import {
+  buildGroups,
+  deserializeAttendance,
+  fetchAttendanceCatalog,
+  mergeAttendance,
+  summarizeAttendance,
+} from "../lib/attendance";
 import { logTransaction } from "../utils/logger";
 import {
   useToast,
   useConfirm,
   useAdminPassword,
 } from "../components/Feedback/FeedbackProvider";
+
+/**
+ * Maps a `residents` row to the short-key shape the UI uses (res.last rather
+ * than res.last_name).
+ *
+ * This lived as two byte-identical copies inside fetchResidents and
+ * openHousehold, which meant a newly added column had to be remembered twice -
+ * and `attended_items` was in fact missed by both. Single definition now, so
+ * every resident the page can edit carries the same fields.
+ */
+function mapResidentRow(r) {
+  return {
+    id: r.id,
+    h_no: r.h_no,
+    last: r.last_name,
+    first: r.first_name,
+    mid: r.middle_name,
+    q: r.qualifier,
+    no: r.house_no,
+    st: r.street,
+    p: r.purok,
+    bp: r.birth_place,
+    bd: r.birth_date,
+    s: r.sex,
+    cs: r.civil_status,
+    cz: r.citizenship,
+    oc: r.occupation,
+    rel: r.relation_to_head,
+    isVoter: r.is_voter,
+    brgy: r.barangay,
+    age: r.age,
+    residenceType: r.residence_type,
+    isHead: r.is_household_head,
+    religion: r.religion,
+    edu: r.educational_attainment,
+    isPwd: r.is_pwd,
+    hasPwdId: r.has_pwd_id,
+    isSenior: r.is_senior,
+    hasSeniorId: r.has_senior_id,
+    isSoloParent: r.is_solo_parent,
+    hasSoloParentId: r.has_solo_parent_id,
+    ageFirstBirth: r.age_at_first_birth,
+    teenagePregnancy: r.teenage_pregnancy_case,
+    teenageMother: r.current_teenage_mother,
+    is4ps: r.is_4ps,
+    attendedItems: r.attended_items,
+    createdAt: r.created_at,
+    dataYear: r.data_year,
+  };
+}
 
 export default function BarangayList({ defaultMode = "household" }) {
   const navigate = useNavigate();
@@ -56,6 +114,41 @@ export default function BarangayList({ defaultMode = "household" }) {
   const [editingResident, setEditingResident] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [editLoading, setEditLoading] = useState(false);
+
+  // Programs/seminars available for the attendance picker. Fetched once per
+  // page visit rather than per modal open.
+  const [attendanceCatalog, setAttendanceCatalog] = useState({
+    programs: [],
+    seminars: [],
+  });
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const [attendanceError, setAttendanceError] = useState("");
+
+  const loadAttendanceCatalog = useCallback(async () => {
+    setAttendanceLoading(true);
+    setAttendanceError("");
+    const result = await fetchAttendanceCatalog();
+    setAttendanceCatalog({
+      programs: result.programs,
+      seminars: result.seminars,
+    });
+    setAttendanceError(result.error || "");
+    setAttendanceLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadAttendanceCatalog();
+  }, [loadAttendanceCatalog]);
+
+  const attendanceGroups = useMemo(
+    () => buildGroups(attendanceCatalog.programs, attendanceCatalog.seminars),
+    [attendanceCatalog],
+  );
+
+  const selectedResidentAttendance = useMemo(
+    () => summarizeAttendance(selectedResident?.attendedItems, attendanceGroups),
+    [selectedResident, attendanceGroups],
+  );
 
   const getInitialMode = () => {
     if (location.pathname === '/resident') return 'resident';
@@ -151,43 +244,7 @@ export default function BarangayList({ defaultMode = "household" }) {
       if (error) throw error;
 
       // Map Supabase columns to UI state structure
-      const mappedData = (data || []).map((r) => ({
-        id: r.id,
-        h_no: r.h_no,
-        last: r.last_name,
-        first: r.first_name,
-        mid: r.middle_name,
-        q: r.qualifier,
-        no: r.house_no,
-        st: r.street,
-        p: r.purok,
-        bp: r.birth_place,
-        bd: r.birth_date,
-        s: r.sex,
-        cs: r.civil_status,
-        cz: r.citizenship,
-        oc: r.occupation,
-        rel: r.relation_to_head,
-        isVoter: r.is_voter,
-        brgy: r.barangay,
-        age: r.age,
-        residenceType: r.residence_type,
-        isHead: r.is_household_head,
-        religion: r.religion,
-        edu: r.educational_attainment,
-        isPwd: r.is_pwd,
-        hasPwdId: r.has_pwd_id,
-        isSenior: r.is_senior,
-        hasSeniorId: r.has_senior_id,
-        isSoloParent: r.is_solo_parent,
-        hasSoloParentId: r.has_solo_parent_id,
-        ageFirstBirth: r.age_at_first_birth,
-        teenagePregnancy: r.teenage_pregnancy_case,
-        teenageMother: r.current_teenage_mother,
-        is4ps: r.is_4ps,
-        createdAt: r.created_at,
-        dataYear: r.data_year,
-      }));
+      const mappedData = (data || []).map(mapResidentRow);
 
       setAllRecords(mappedData);
       setTotalRecords(count || 0);
@@ -202,6 +259,15 @@ export default function BarangayList({ defaultMode = "household" }) {
 
   const openEditModal = (res) => {
     setEditingResident(res);
+
+    // Anything the resident attended that is no longer in the catalog (archived
+    // or renamed away) is kept aside rather than dropped, so saving an
+    // unrelated field cannot silently erase their history.
+    const { values, orphans } = deserializeAttendance(
+      res.attendedItems,
+      attendanceGroups,
+    );
+
     setEditForm({
       h_no: res.h_no || "",
       last_name: res.last || "",
@@ -233,6 +299,8 @@ export default function BarangayList({ defaultMode = "household" }) {
       teenage_pregnancy_case: res.teenagePregnancy || false,
       current_teenage_mother: res.teenageMother || false,
       age_at_first_birth: res.ageFirstBirth !== null && res.ageFirstBirth !== undefined ? res.ageFirstBirth : "",
+      attended_items: values,
+      attended_orphans: orphans,
     });
   };
 
@@ -247,6 +315,12 @@ export default function BarangayList({ defaultMode = "household" }) {
 
     setEditLoading(true);
     try {
+      const attendedItems = mergeAttendance(
+        editForm.attended_items || [],
+        attendanceGroups,
+        editForm.attended_orphans || [],
+      );
+
       const updatePayload = {
         h_no: editForm.h_no,
         last_name: editForm.last_name,
@@ -278,6 +352,7 @@ export default function BarangayList({ defaultMode = "household" }) {
         teenage_pregnancy_case: editForm.teenage_pregnancy_case,
         current_teenage_mother: editForm.current_teenage_mother,
         age_at_first_birth: editForm.age_at_first_birth !== "" ? Number(editForm.age_at_first_birth) : null,
+        attended_items: attendedItems,
       };
 
       const { error } = await supabase
@@ -320,6 +395,7 @@ export default function BarangayList({ defaultMode = "household" }) {
         teenagePregnancy: editForm.teenage_pregnancy_case,
         teenageMother: editForm.current_teenage_mother,
         ageFirstBirth: editForm.age_at_first_birth !== "" ? Number(editForm.age_at_first_birth) : null,
+        attendedItems,
       };
 
       setAllRecords(prev => prev.map(r => r.id === editingResident.id ? updatedMapped : r));
@@ -594,43 +670,7 @@ export default function BarangayList({ defaultMode = "household" }) {
 
       if (error) throw error;
 
-      const members = (data || []).map((r) => ({
-        id: r.id,
-        h_no: r.h_no,
-        last: r.last_name,
-        first: r.first_name,
-        mid: r.middle_name,
-        q: r.qualifier,
-        no: r.house_no,
-        st: r.street,
-        p: r.purok,
-        bp: r.birth_place,
-        bd: r.birth_date,
-        s: r.sex,
-        cs: r.civil_status,
-        cz: r.citizenship,
-        oc: r.occupation,
-        rel: r.relation_to_head,
-        isVoter: r.is_voter,
-        brgy: r.barangay,
-        age: r.age,
-        residenceType: r.residence_type,
-        isHead: r.is_household_head,
-        religion: r.religion,
-        edu: r.educational_attainment,
-        isPwd: r.is_pwd,
-        hasPwdId: r.has_pwd_id,
-        isSenior: r.is_senior,
-        hasSeniorId: r.has_senior_id,
-        isSoloParent: r.is_solo_parent,
-        hasSoloParentId: r.has_solo_parent_id,
-        ageFirstBirth: r.age_at_first_birth,
-        teenagePregnancy: r.teenage_pregnancy_case,
-        teenageMother: r.current_teenage_mother,
-        is4ps: r.is_4ps,
-        createdAt: r.created_at,
-        dataYear: r.data_year,
-      }));
+      const members = (data || []).map(mapResidentRow);
 
       members.sort((a, b) => ((a.rel || "").toUpperCase() === "HEAD" ? -1 : 1));
       setSelectedHousehold({ hhNo, members });
@@ -1370,6 +1410,110 @@ export default function BarangayList({ defaultMode = "household" }) {
                   </div>
                 </div>
               </div>
+
+              {/* Programs & Seminars Attended */}
+              <div className="res-card-section res-attendance-card">
+                <h3>
+                  <i className="fa-solid fa-calendar-check"></i>
+                  Programs &amp; Seminars Attended
+                </h3>
+
+                <div className="res-attendance-body">
+                  {selectedResidentAttendance.programs.length === 0 &&
+                  selectedResidentAttendance.orphans.length === 0 ? (
+                    <p className="res-attendance-empty">
+                      No programs or seminars recorded for this resident.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="res-attendance-summary">
+                        <span className="res-attendance-stat">
+                          <b>{selectedResidentAttendance.programCount}</b>
+                          {selectedResidentAttendance.programCount === 1
+                            ? " program"
+                            : " programs"}
+                        </span>
+                        <span className="res-attendance-stat-divider" />
+                        <span className="res-attendance-stat">
+                          <b>{selectedResidentAttendance.seminarCount}</b>
+                          {selectedResidentAttendance.seminarCount === 1
+                            ? " seminar"
+                            : " seminars"}
+                        </span>
+                      </div>
+
+                      {selectedResidentAttendance.programs.length > 0 && (
+                        <ul className="res-attendance-list">
+                          {selectedResidentAttendance.programs.map((entry) => (
+                            <li
+                              key={entry.id}
+                              className={`res-attendance-item${
+                                entry.programAttended ? " attended" : " derived"
+                              }`}
+                            >
+                              <div className="res-attendance-item-head">
+                                <i
+                                  className={`fa-solid ${
+                                    entry.programAttended
+                                      ? "fa-circle-check"
+                                      : "fa-circle-exclamation"
+                                  }`}
+                                />
+                                <span className="res-attendance-program">
+                                  {entry.name}
+                                </span>
+                                <span className="res-attendance-badge">
+                                  {entry.programAttended
+                                    ? "Attended"
+                                    : "Via seminars"}
+                                </span>
+                              </div>
+
+                              {entry.seminars.length > 0 && (
+                                <div className="res-attendance-chips">
+                                  {entry.seminars.map((seminar) => (
+                                    <span
+                                      key={seminar.id}
+                                      className={`res-attendance-chip${
+                                        seminar.archived ? " archived" : ""
+                                      }`}
+                                      title={
+                                        seminar.archived
+                                          ? "This seminar has been archived"
+                                          : undefined
+                                      }
+                                    >
+                                      {seminar.archived && (
+                                        <i className="fa-solid fa-box-archive" />
+                                      )}
+                                      {seminar.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {selectedResidentAttendance.orphans.length > 0 && (
+                        <div className="res-attendance-orphans">
+                          <i className="fa-solid fa-triangle-exclamation" />
+                          <span>
+                            <b>No longer listed:</b>{" "}
+                            {selectedResidentAttendance.orphans
+                              .map(
+                                (orphan) =>
+                                  `${orphan.name || orphan.id} (${orphan.kind})`,
+                              )
+                              .join(", ")}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             </div>{/* end res-details-grid */}
             </div>{/* end res-modal-scrollable-body */}
 
@@ -1606,6 +1750,51 @@ export default function BarangayList({ defaultMode = "household" }) {
                     <label>Age at First Birth</label>
                     <input type="number" min="0" value={editForm.age_at_first_birth} onChange={e => setEditForm(f => ({ ...f, age_at_first_birth: e.target.value }))} />
                   </div>
+                </div>
+              )}
+
+              {/* --- Section: Programs & Seminars Attended --- */}
+              <div className="edit-section-title"><i className="fa-solid fa-calendar-check"></i> Programs &amp; Seminars Attended</div>
+              <AttendanceCheckboxes
+                groups={attendanceGroups}
+                selected={editForm.attended_items || []}
+                onChange={(attended_items) => setEditForm(f => ({ ...f, attended_items }))}
+                loading={attendanceLoading}
+                error={attendanceError}
+                onRetry={loadAttendanceCatalog}
+              />
+
+              {editForm.attended_orphans && editForm.attended_orphans.length > 0 && (
+                <div className="attendance-orphans">
+                  <div className="attendance-orphans-head">
+                    <i className="fa-solid fa-triangle-exclamation"></i>
+                    <span>
+                      Recorded earlier, but the program or seminar has since been archived
+                      and is no longer selectable. These are kept as-is when you save.
+                    </span>
+                  </div>
+                  {editForm.attended_orphans.map((orphan) => (
+                    <div key={`${orphan.kind}:${orphan.id}`} className="attendance-orphan-row">
+                      <span className="attendance-orphan-name">
+                        {orphan.name || orphan.id}
+                        <em>({orphan.kind})</em>
+                      </span>
+                      <button
+                        type="button"
+                        className="attendance-orphan-remove"
+                        onClick={() =>
+                          setEditForm(f => ({
+                            ...f,
+                            attended_orphans: (f.attended_orphans || []).filter(
+                              (item) => !(item.kind === orphan.kind && item.id === orphan.id),
+                            ),
+                          }))
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
 

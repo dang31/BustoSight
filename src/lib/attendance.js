@@ -103,6 +103,29 @@ export function serializeAttendance(selectedValues, groups) {
 }
 
 /**
+ * Like serializeAttendance, but also carries forward stored entries whose
+ * program or seminar is no longer in the catalog (archived or renamed away).
+ *
+ * serializeAttendance can only emit items it can find in `groups`, so saving an
+ * unrelated field such as a corrected surname would otherwise silently erase a
+ * resident's attendance history. Callers pass the orphans returned by
+ * deserializeAttendance; the encoder can drop them explicitly instead.
+ */
+export function mergeAttendance(selectedValues, groups, orphans = []) {
+  const items = serializeAttendance(selectedValues, groups);
+  const kept = new Set(items.map((item) => attendanceOptionValue(item.kind, item.id)));
+
+  for (const orphan of toItemArray(orphans)) {
+    const key = attendanceOptionValue(orphan.kind, orphan.id);
+    if (kept.has(key)) continue;
+    kept.add(key);
+    items.push(orphan);
+  }
+
+  return items;
+}
+
+/**
  * Reads a stored attended_items array back into option values so an edit
  * form can preselect them. Entries no longer in the catalog are kept in
  * `orphans` so they can still be displayed rather than silently dropped.
@@ -144,7 +167,10 @@ export function toItemArray(attendedItems) {
     try {
       parsed = JSON.parse(trimmed);
     } catch {
-      parsed = [trimmed];
+      // Not JSON. Keep the raw value visible instead of dropping it, so a
+      // malformed row surfaces as an orphan rather than being silently erased
+      // the next time the resident is saved.
+      parsed = [{ kind: PROGRAM, id: trimmed, name: trimmed }];
     }
   }
 
@@ -171,6 +197,103 @@ export function toItemArray(attendedItems) {
   }
 
   return [];
+}
+
+/**
+ * Read-model for the resident detail card.
+ *
+ * Groups a stored attended_items array by parent program so the UI can show
+ * the program -> seminar hierarchy instead of one flattened string. A program
+ * whose seminars were ticked but which was never ticked itself is still listed,
+ * flagged as reached via its seminars, because that is the real relationship.
+ *
+ * Entries whose program or seminar is no longer in the catalog are kept and
+ * marked `archived` rather than dropped - seminars whose parent program is
+ * still known stay nested under it so the relationship survives.
+ *
+ * @returns {{programs: Array, orphans: Array, programCount: number, seminarCount: number}}
+ */
+export function summarizeAttendance(attendedItems, groups = []) {
+  const items = toItemArray(attendedItems);
+
+  const programById = new Map(
+    groups.map(({ program }) => [program.id, program]),
+  );
+
+  const seminarById = new Map();
+  for (const { program, seminars } of groups) {
+    for (const seminar of seminars) {
+      seminarById.set(seminar.id, { seminar, program });
+    }
+  }
+
+  const entries = new Map();
+  const orphans = [];
+
+  const entryFor = (programId, programName) => {
+    let entry = entries.get(programId);
+    if (!entry) {
+      entry = {
+        id: programId,
+        name: programName || "Unknown Program",
+        programAttended: false,
+        seminars: [],
+      };
+      entries.set(programId, entry);
+    }
+    return entry;
+  };
+
+  for (const item of items) {
+    if (item.kind === PROGRAM) {
+      const program = programById.get(item.id);
+      if (program) {
+        entryFor(program.id, program.name).programAttended = true;
+      } else {
+        orphans.push({ ...item, archived: true });
+      }
+      continue;
+    }
+
+    const match = seminarById.get(item.id);
+    if (match) {
+      const entry = entryFor(match.program.id, match.program.name);
+      if (!entry.seminars.some((s) => s.id === item.id)) {
+        entry.seminars.push({
+          id: item.id,
+          name: match.seminar.title,
+          archived: false,
+        });
+      }
+      continue;
+    }
+
+    const parent = item.program_id ? programById.get(item.program_id) : null;
+    if (parent) {
+      const entry = entryFor(parent.id, parent.name);
+      entry.seminars.push({
+        id: item.id,
+        name: item.name || item.id,
+        archived: true,
+      });
+    } else {
+      orphans.push({ ...item, archived: true });
+    }
+  }
+
+  const list = [...entries.values()].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+
+  return {
+    programs: list,
+    orphans,
+    programCount: list.filter((entry) => entry.programAttended).length,
+    seminarCount: list.reduce(
+      (total, entry) => total + entry.seminars.length,
+      0,
+    ),
+  };
 }
 
 /** Human-readable list for the review summary and reports. */
