@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Sidebar from "../components/Sidebar";
 import UserProfileBadge from "../components/UserProfileBadge";
 import { supabase } from "../lib/supabase";
@@ -115,13 +115,21 @@ const IconUser = () => (
 // utils/adminPassword.js), which does not disturb the active session.
 function AdminPasswordAuthModal({ actionTitle, actionDescription, onConfirm, onClose }) {
   const requestAdminPassword = useAdminPassword();
-  const startedRef = useRef(false);
 
+  // NOTE: deliberately no "run once" ref guard here.
+  //
+  // React 18 StrictMode mounts, unmounts, then remounts every component in dev.
+  // A `startedRef` guard made the first pass set the flag and the second pass
+  // bail out, but the first pass had already been marked cancelled by the
+  // simulated unmount - so the resolved password was always discarded and
+  // onConfirm never ran. The password prompt appeared, accepted the correct
+  // password, and silently did nothing.
+  //
+  // Re-requesting is safe: FeedbackProvider replaces its pending resolver on
+  // each call, so only the surviving request is settled.
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-
     let cancelled = false;
+
     requestAdminPassword({
       actionTitle: actionTitle || "Admin Password Required",
       actionDescription:
@@ -141,6 +149,41 @@ function AdminPasswordAuthModal({ actionTitle, actionDescription, onConfirm, onC
   }, []);
 
   return null;
+}
+
+/**
+ * Turns a Postgres/PostgREST error into something an encoder can act on.
+ *
+ * The archive feature soft-deletes rows instead of deleting them, but the
+ * `programs.name` / `seminars(program_id, title)` UNIQUE constraints still
+ * cover archived rows. So re-creating a name that exists in the Archived tab is
+ * rejected by the database even though the on-screen duplicate check passes —
+ * which used to fail with no message at all.
+ */
+function describeSaveError(err, entity = "program") {
+  const noun = entity === "seminar" ? "seminar" : "program";
+  const raw = err?.message || String(err || "");
+  const message = raw.toLowerCase();
+
+  if (message.includes("duplicate key") || message.includes("already exists")) {
+    if (message.includes("programs_name_unique")) {
+      return `Cannot save: an archived ${noun} already uses this name. Restore it from the Archived tab, or choose a different name.`;
+    }
+    if (message.includes("seminars_program_title_unique")) {
+      return `Cannot save: an archived seminar with this title already exists under this program. Restore it from the Archived tab, or choose a different title.`;
+    }
+    return `Cannot save: a ${noun} with this name or title already exists.`;
+  }
+
+  if (message.includes("row-level security") || message.includes("violates row-level")) {
+    return `Cannot save: your account is not allowed to write to ${noun}s.`;
+  }
+
+  if (message.includes("failed to fetch") || message.includes("network")) {
+    return `Cannot save: could not reach the database. Check your connection and try again.`;
+  }
+
+  return `Failed to save ${noun}: ${raw}`;
 }
 
 // ── Main Page Component ───────────────────────────────────────────────────
@@ -366,82 +409,88 @@ export default function Programs() {
     const { name, description, status, id } = formData;
     const trimmedName = name.trim();
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const adminName = getAdminFullName();
-    const adminId = user?.id || adminUser?.id || null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const adminName = getAdminFullName();
+      const adminId = user?.id || adminUser?.id || null;
 
-    if (programModal.mode === "add") {
-      let insertPayload = {
-        name: trimmedName,
-        description: description.trim() || null,
-        status,
-        is_archived: false,
-        created_by: adminId,
-        created_by_name: adminName,
-        updated_by: adminId,
-        updated_by_name: adminName,
-      };
-
-      let { error } = await supabase.from("programs").insert([insertPayload]);
-
-      if (error && (error.message || "").includes("created_by")) {
-        const fallbackPayload = {
+      if (programModal.mode === "add") {
+        let insertPayload = {
           name: trimmedName,
           description: description.trim() || null,
           status,
+          is_archived: false,
+          created_by: adminId,
+          created_by_name: adminName,
+          updated_by: adminId,
+          updated_by_name: adminName,
         };
-        const res = await supabase.from("programs").insert([fallbackPayload]);
-        error = res.error;
-      }
 
-      if (error) throw error;
+        let { error } = await supabase.from("programs").insert([insertPayload]);
 
-      await logTransaction({
-        action: "Created Program",
-        category: "Program Management",
-        details: `Admin "${adminName}" created program: "${trimmedName}" (Status: ${status}).`,
-        user: adminUser,
-      });
+        if (error && (error.message || "").includes("created_by")) {
+          const fallbackPayload = {
+            name: trimmedName,
+            description: description.trim() || null,
+            status,
+          };
+          const res = await supabase.from("programs").insert([fallbackPayload]);
+          error = res.error;
+        }
 
-      showToast(`Program "${trimmedName}" created successfully!`, "success");
-    } else {
-      let updatePayload = {
-        name: trimmedName,
-        description: description.trim() || null,
-        status,
-        updated_by: adminId,
-        updated_by_name: adminName,
-        updated_at: new Date().toISOString(),
-      };
+        if (error) throw error;
 
-      let { error } = await supabase.from("programs").update(updatePayload).eq("id", id);
+        await logTransaction({
+          action: "Created Program",
+          category: "Program Management",
+          details: `Admin "${adminName}" created program: "${trimmedName}" (Status: ${status}).`,
+          user: adminUser,
+        });
 
-      if (error && (error.message || "").includes("updated_by")) {
-        const fallbackPayload = {
+        showToast(`Program "${trimmedName}" created successfully!`, "success");
+      } else {
+        let updatePayload = {
           name: trimmedName,
           description: description.trim() || null,
           status,
+          updated_by: adminId,
+          updated_by_name: adminName,
           updated_at: new Date().toISOString(),
         };
-        const res = await supabase.from("programs").update(fallbackPayload).eq("id", id);
-        error = res.error;
+
+        let { error } = await supabase.from("programs").update(updatePayload).eq("id", id);
+
+        if (error && (error.message || "").includes("updated_by")) {
+          const fallbackPayload = {
+            name: trimmedName,
+            description: description.trim() || null,
+            status,
+            updated_at: new Date().toISOString(),
+          };
+          const res = await supabase.from("programs").update(fallbackPayload).eq("id", id);
+          error = res.error;
+        }
+
+        if (error) throw error;
+
+        await logTransaction({
+          action: "Updated Program",
+          category: "Program Management",
+          details: `Admin "${adminName}" updated program: "${trimmedName}" (Status: ${status}).`,
+          user: adminUser,
+        });
+
+        showToast(`Program "${trimmedName}" updated successfully!`, "success");
       }
 
-      if (error) throw error;
-
-      await logTransaction({
-        action: "Updated Program",
-        category: "Program Management",
-        details: `Admin "${adminName}" updated program: "${trimmedName}" (Status: ${status}).`,
-        user: adminUser,
-      });
-
-      showToast(`Program "${trimmedName}" updated successfully!`, "success");
+      setAuthModal({ isOpen: false, actionTitle: "", actionDescription: "", pendingHandler: null });
+      setProgramModal({ isOpen: false, mode: "add", data: null });
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to save program:", err);
+      setAuthModal({ isOpen: false, actionTitle: "", actionDescription: "", pendingHandler: null });
+      showToast(describeSaveError(err, "program"), "error");
     }
-
-    setAuthModal({ isOpen: false, actionTitle: "", actionDescription: "", pendingHandler: null });
-    setProgramModal({ isOpen: false, mode: "add", data: null });
-    await fetchData();
   };
 
   // ── Handlers: Seminar Save ───────────────────────────────────────────────
@@ -474,102 +523,108 @@ export default function Programs() {
     const { title, description, status, id, program_id } = formData;
     const trimmedTitle = title.trim();
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const adminName = getAdminFullName();
-    const adminId = user?.id || adminUser?.id || null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const adminName = getAdminFullName();
+      const adminId = user?.id || adminUser?.id || null;
 
-    if (seminarModal.mode === "add") {
-      // Try inserting with full payload; progressively strip unknown columns on error
-      const fullInsertPayload = {
-        program_id,
-        title: trimmedTitle,
-        description: description.trim() || null,
-        status,
-        is_archived: false,
-        created_by: adminId,
-        created_by_name: adminName,
-        updated_by: adminId,
-        updated_by_name: adminName,
-      };
-
-      let { error } = await supabase.from("seminars").insert([fullInsertPayload]);
-
-      // If is_archived column doesn't exist, retry without audit + is_archived columns
-      if (error && (error.message || "").toLowerCase().includes("is_archived")) {
-        const noArchivedPayload = {
+      if (seminarModal.mode === "add") {
+        // Try inserting with full payload; progressively strip unknown columns on error
+        const fullInsertPayload = {
           program_id,
           title: trimmedTitle,
           description: description.trim() || null,
           status,
+          is_archived: false,
           created_by: adminId,
           created_by_name: adminName,
           updated_by: adminId,
           updated_by_name: adminName,
         };
-        const res = await supabase.from("seminars").insert([noArchivedPayload]);
-        error = res.error;
-      }
 
-      // If audit columns don't exist, fall back to minimal payload
-      if (error && (error.message || "").toLowerCase().includes("created_by")) {
-        const minimalPayload = {
-          program_id,
+        let { error } = await supabase.from("seminars").insert([fullInsertPayload]);
+
+        // If is_archived column doesn't exist, retry without audit + is_archived columns
+        if (error && (error.message || "").toLowerCase().includes("is_archived")) {
+          const noArchivedPayload = {
+            program_id,
+            title: trimmedTitle,
+            description: description.trim() || null,
+            status,
+            created_by: adminId,
+            created_by_name: adminName,
+            updated_by: adminId,
+            updated_by_name: adminName,
+          };
+          const res = await supabase.from("seminars").insert([noArchivedPayload]);
+          error = res.error;
+        }
+
+        // If audit columns don't exist, fall back to minimal payload
+        if (error && (error.message || "").toLowerCase().includes("created_by")) {
+          const minimalPayload = {
+            program_id,
+            title: trimmedTitle,
+            description: description.trim() || null,
+            status,
+          };
+          const res = await supabase.from("seminars").insert([minimalPayload]);
+          error = res.error;
+        }
+
+        if (error) throw error;
+
+        await logTransaction({
+          action: "Created Seminar",
+          category: "Program Management",
+          details: `Admin "${adminName}" added seminar "${trimmedTitle}" under Program "${selectedProgram?.name}".`,
+          user: adminUser,
+        });
+
+        showToast(`Seminar "${trimmedTitle}" added successfully!`, "success");
+      } else {
+        let updatePayload = {
           title: trimmedTitle,
           description: description.trim() || null,
           status,
-        };
-        const res = await supabase.from("seminars").insert([minimalPayload]);
-        error = res.error;
-      }
-
-      if (error) throw error;
-
-      await logTransaction({
-        action: "Created Seminar",
-        category: "Program Management",
-        details: `Admin "${adminName}" added seminar "${trimmedTitle}" under Program "${selectedProgram?.name}".`,
-        user: adminUser,
-      });
-
-      showToast(`Seminar "${trimmedTitle}" added successfully!`, "success");
-    } else {
-      let updatePayload = {
-        title: trimmedTitle,
-        description: description.trim() || null,
-        status,
-        updated_by: adminId,
-        updated_by_name: adminName,
-        updated_at: new Date().toISOString(),
-      };
-
-      let { error } = await supabase.from("seminars").update(updatePayload).eq("id", id);
-
-      if (error && (error.message || "").includes("updated_by")) {
-        const fallbackPayload = {
-          title: trimmedTitle,
-          description: description.trim() || null,
-          status,
+          updated_by: adminId,
+          updated_by_name: adminName,
           updated_at: new Date().toISOString(),
         };
-        const res = await supabase.from("seminars").update(fallbackPayload).eq("id", id);
-        error = res.error;
+
+        let { error } = await supabase.from("seminars").update(updatePayload).eq("id", id);
+
+        if (error && (error.message || "").includes("updated_by")) {
+          const fallbackPayload = {
+            title: trimmedTitle,
+            description: description.trim() || null,
+            status,
+            updated_at: new Date().toISOString(),
+          };
+          const res = await supabase.from("seminars").update(fallbackPayload).eq("id", id);
+          error = res.error;
+        }
+
+        if (error) throw error;
+
+        await logTransaction({
+          action: "Updated Seminar",
+          category: "Program Management",
+          details: `Admin "${adminName}" updated seminar "${trimmedTitle}" under Program "${selectedProgram?.name}".`,
+          user: adminUser,
+        });
+
+        showToast(`Seminar "${trimmedTitle}" updated successfully!`, "success");
       }
 
-      if (error) throw error;
-
-      await logTransaction({
-        action: "Updated Seminar",
-        category: "Program Management",
-        details: `Admin "${adminName}" updated seminar "${trimmedTitle}" under Program "${selectedProgram?.name}".`,
-        user: adminUser,
-      });
-
-      showToast(`Seminar "${trimmedTitle}" updated successfully!`, "success");
+      setAuthModal({ isOpen: false, actionTitle: "", actionDescription: "", pendingHandler: null });
+      setSeminarModal({ isOpen: false, mode: "add", data: null });
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to save seminar:", err);
+      setAuthModal({ isOpen: false, actionTitle: "", actionDescription: "", pendingHandler: null });
+      showToast(describeSaveError(err, "seminar"), "error");
     }
-
-    setAuthModal({ isOpen: false, actionTitle: "", actionDescription: "", pendingHandler: null });
-    setSeminarModal({ isOpen: false, mode: "add", data: null });
-    await fetchData();
   };
 
   // ── Handlers: Archive Record ─────────────────────────────────────────────

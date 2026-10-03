@@ -1,13 +1,23 @@
-import { createClient } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 
 /**
  * Verify an admin password without disturbing the current session.
  *
- * Uses an isolated client (persistSession: false) so re-authenticating does not
- * mutate or refresh the signed-in user's own session. Previously this logic was
- * copy-pasted across BarangayList (x3), ArchiveResidents, Programs,
- * TransactionLogs and ManageAccounts.
+ * Calls GoTrue's password-grant endpoint directly instead of going through
+ * `supabase.auth.signInWithPassword`. That matters for two reasons:
+ *
+ *  1. Creating a second Supabase client registers a second GoTrueClient under
+ *     the same storage key, which logs "Multiple GoTrueClient instances
+ *     detected in the same browser context" and can behave unpredictably when
+ *     both touch storage concurrently. Only lib/supabase.js should own a client.
+ *
+ *  2. Reusing the app's own client would replace the signed-in user's session
+ *     with the admin's. A raw fetch has no session handling at all, so the
+ *     current session cannot be mutated, refreshed, or overwritten, and the
+ *     returned tokens are discarded rather than persisted.
+ *
+ * Previously this logic was copy-pasted across BarangayList (x3),
+ * ArchiveResidents, Programs, TransactionLogs and ManageAccounts.
  *
  * @param {string} password
  * @returns {Promise<boolean>} true when the password belongs to an admin account
@@ -16,19 +26,8 @@ export async function verifyAdminPassword(password) {
   const pwd = (password ?? "").trim();
   if (!pwd) return false;
 
-  const tempAuthClient = createClient(
-    import.meta.env.VITE_SUPABASE_URL,
-    import.meta.env.VITE_SUPABASE_ANON_KEY,
-    {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    },
-  );
+  const emailsToTry = [];
 
-  let emailsToTry = [];
   try {
     const {
       data: { user },
@@ -39,7 +38,8 @@ export async function verifyAdminPassword(password) {
   }
 
   const storedUserStr =
-    sessionStorage.getItem("popdev_user") || localStorage.getItem("popdev_user");
+    sessionStorage.getItem("popdev_user") ||
+    localStorage.getItem("popdev_user");
   if (storedUserStr) {
     try {
       const storedUser = JSON.parse(storedUserStr);
@@ -55,16 +55,40 @@ export async function verifyAdminPassword(password) {
   emailsToTry.push("admin@bustos.gov.ph");
 
   const uniqueEmails = [...new Set(emailsToTry.filter(Boolean))];
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    console.error("verifyAdminPassword: Supabase env vars are not set.");
+    return false;
+  }
 
   for (const email of uniqueEmails) {
     try {
-      const { error: authError } = await tempAuthClient.auth.signInWithPassword({
-        email,
-        password: pwd,
-      });
-      if (!authError) return true;
+      const response = await fetch(
+        `${url}/auth/v1/token?grant_type=password`,
+        {
+          method: "POST",
+          headers: {
+            apikey: anonKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password: pwd }),
+        },
+      );
+
+      // 200 means GoTrue accepted the credentials. The tokens in the body are
+      // intentionally discarded - we only needed proof the password is valid.
+      if (response.ok) return true;
+
+      // 429 = rate limited. Trying more accounts cannot help and would make the
+      // lockout worse, so stop here and report failure.
+      if (response.status === 429) {
+        console.error("verifyAdminPassword: rate limited by Supabase Auth.");
+        return false;
+      }
     } catch (e) {
-      /* try the next candidate */
+      /* network problem - try the next candidate */
     }
   }
 

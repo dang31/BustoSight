@@ -1,11 +1,18 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import UserProfileBadge from "../components/UserProfileBadge";
+import AttendanceCheckboxes from "../components/AttendanceCheckboxes";
 import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/AddResident.css";
 import { isValidName, getNameError } from "../lib/nameValidation";
+import {
+  buildGroups,
+  fetchAttendanceCatalog,
+  formatAttendance,
+  serializeAttendance,
+} from "../lib/attendance";
 import { logTransaction } from "../utils/logger";
 import { useToast, useConfirm } from "../components/Feedback/FeedbackProvider";
 
@@ -52,8 +59,44 @@ export default function AddResident() {
   const [expandedMemberIndex, setExpandedMemberIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
   const [formWarning, setFormWarning] = useState("");
+  const [attendanceCatalog, setAttendanceCatalog] = useState({
+    programs: [],
+    seminars: [],
+  });
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const [attendanceError, setAttendanceError] = useState("");
   const toast = useToast();
   const confirm = useConfirm();
+
+  const loadAttendanceCatalog = useCallback(async () => {
+    setAttendanceLoading(true);
+    setAttendanceError("");
+    const result = await fetchAttendanceCatalog();
+    setAttendanceCatalog({
+      programs: result.programs,
+      seminars: result.seminars,
+    });
+    setAttendanceError(result.error || "");
+    setAttendanceLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadAttendanceCatalog();
+  }, [loadAttendanceCatalog]);
+
+  const attendanceGroups = useMemo(
+    () => buildGroups(attendanceCatalog.programs, attendanceCatalog.seminars),
+    [attendanceCatalog],
+  );
+
+  const attendanceText = useCallback(
+    (items) =>
+      formatAttendance(
+        serializeAttendance(items, attendanceGroups),
+        attendanceGroups,
+      ),
+    [attendanceGroups],
+  );
 
   // Reusable default states so we can both initialize and reset the form
   const initialHousehold = {
@@ -93,7 +136,7 @@ export default function AddResident() {
     age_first_birth: "",
     teenage_pregnancy: false,
     teenage_mother: false,
-    services_attended: "",
+    attended_items: [],
   };
   const [household, setHousehold] = useState(initialHousehold);
   const [head, setHead] = useState(initialHead);
@@ -300,7 +343,7 @@ export default function AddResident() {
         age_first_birth: "",
         teenage_pregnancy: false,
         teenage_mother: false,
-        services_attended: "",
+        attended_items: [],
       },
     ]);
     setExpandedMemberIndex(members.length);
@@ -399,6 +442,10 @@ export default function AddResident() {
             head.sex === "Female" ? head.teenage_pregnancy : false,
           current_teenage_mother:
             head.sex === "Female" ? head.teenage_mother : false,
+          attended_items: serializeAttendance(
+            head.attended_items,
+            attendanceGroups,
+          ),
           is_archived: false,
         },
         ...members.map((m) => ({
@@ -433,6 +480,7 @@ export default function AddResident() {
           teenage_pregnancy_case:
             m.sex === "Female" ? m.teenage_pregnancy : false,
           current_teenage_mother: m.sex === "Female" ? m.teenage_mother : false,
+          attended_items: serializeAttendance(m.attended_items, attendanceGroups),
           is_archived: false,
         })),
       ];
@@ -530,6 +578,7 @@ export default function AddResident() {
         teenagePregnancy: r.teenage_pregnancy_case,
         teenageMother: r.current_teenage_mother,
         is4ps: r.is_4ps,
+        attendedItems: r.attended_items,
         dataYear: r.data_year,
       }));
 
@@ -1299,13 +1348,15 @@ export default function AddResident() {
 
                   <div className="field-group" style={{ marginTop: "18px" }}>
                     <label>Services/Program Attended:</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Family Planning, Medical Mission, Livelihood Seminar"
-                      value={head.services_attended || ""}
-                      onChange={(e) =>
-                        setHead({ ...head, services_attended: e.target.value })
+                    <AttendanceCheckboxes
+                      groups={attendanceGroups}
+                      selected={head.attended_items}
+                      onChange={(attended_items) =>
+                        setHead({ ...head, attended_items })
                       }
+                      loading={attendanceLoading}
+                      error={attendanceError}
+                      onRetry={loadAttendanceCatalog}
                     />
                   </div>
                 </div>
@@ -2030,13 +2081,15 @@ export default function AddResident() {
 
                                 <div className="field-group" style={{ marginTop: "18px" }}>
                                   <label>Services/Program Attended:</label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. Immunization, Feeding Program, Youth Summit, Skills Training"
-                                    value={m.services_attended || ""}
-                                    onChange={(e) =>
-                                      updateMember(i, "services_attended", e.target.value)
+                                  <AttendanceCheckboxes
+                                    groups={attendanceGroups}
+                                    selected={m.attended_items || []}
+                                    onChange={(attended_items) =>
+                                      updateMember(i, "attended_items", attended_items)
                                     }
+                                    loading={attendanceLoading}
+                                    error={attendanceError}
+                                    onRetry={loadAttendanceCatalog}
                                   />
                                 </div>
                               </div>
@@ -2137,9 +2190,10 @@ export default function AddResident() {
                             : "None"}
                         </span>
                       )}
-                      {head.services_attended && (
+                      {attendanceText(head.attended_items) && (
                         <span>
-                          <b>Services/Program Attended:</b> {head.services_attended}
+                          <b>Services/Program Attended:</b>{" "}
+                          {attendanceText(head.attended_items)}
                         </span>
                       )}
                     </div>
@@ -2196,7 +2250,9 @@ export default function AddResident() {
                                   <td>{m.rel}</td>
                                   <td>{basicDetails}</td>
                                   <td>{classList}</td>
-                                  <td>{m.services_attended || "—"}</td>
+                                  <td>
+                                    {attendanceText(m.attended_items) || "—"}
+                                  </td>
                                 </tr>
                               );
                             })}

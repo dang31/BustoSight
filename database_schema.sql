@@ -150,8 +150,31 @@ CREATE TABLE public.residents (
     archive_date TIMESTAMP WITH TIME ZONE NULL,
     created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NOW(),
     data_year INTEGER NULL,
+    attended_items JSONB NOT NULL DEFAULT '[]'::jsonb,
     CONSTRAINT residents_pkey PRIMARY KEY (id)
 ) TABLESPACE pg_default;
+
+-- --------------------------------------------------------
+-- attended_items
+--
+-- JSONB array of the programs/seminars a resident attended.
+-- Shape: [{
+--   "kind": "program" | "seminar",
+--   "id": "<uuid>",
+--   "name": "<label at the time it was recorded>",
+--   "program_id": "<uuid>"   -- seminars only, the parent program
+-- }]
+--
+-- `kind` is required because JSONB cannot be joined to programs/seminars,
+-- so the type of each uuid would otherwise be unknowable. `name` is
+-- denormalized so reports stay readable after a rename or archival.
+-- --------------------------------------------------------
+ALTER TABLE public.residents
+    ADD CONSTRAINT residents_attended_items_is_array_chk
+    CHECK (jsonb_typeof(attended_items) = 'array');
+
+CREATE INDEX IF NOT EXISTS idx_residents_attended_items
+    ON public.residents USING GIN (attended_items);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.residents ENABLE ROW LEVEL SECURITY;

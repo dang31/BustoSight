@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Sidebar from "../components/Sidebar";
 import UserProfileBadge from "../components/UserProfileBadge";
 import { getTransactionLogs, clearLocalTransactionLogs, logTransaction } from "../utils/logger";
@@ -12,13 +12,15 @@ import "../css/TransactionLogs.css";
 // existing onConfirm/onClose callback shape, so callers stay unchanged.
 function AdminPasswordModal({ actionLabel, onConfirm, onClose }) {
   const requestAdminPassword = useAdminPassword();
-  const startedRef = useRef(false);
 
+  // No "run once" ref guard: under React 18 StrictMode the simulated unmount
+  // cancels the first request and the guard would stop the second one from
+  // ever being made, so the verified password was discarded and onConfirm never
+  // ran. Re-requesting is safe because FeedbackProvider keeps one pending
+  // resolver and replaces it on each call.
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-
     let cancelled = false;
+
     requestAdminPassword({
       actionTitle: actionLabel || "Admin Password Required",
       actionDescription:

@@ -565,6 +565,284 @@ img {
   padding-right: 36px;
 }
 
+/* =========================================
+   PROGRAMS & SEMINARS ATTENDED
+   Collapsible program -> seminar picker.
+   Rendered by src/components/AttendanceCheckboxes.jsx
+   ========================================= */
+
+.attendance-picker {
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  background: white;
+  overflow: hidden;
+}
+
+.attendance-picker.is-disabled {
+  background: var(--gray-50);
+  opacity: 0.75;
+}
+
+.attendance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 11px 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f0f7ff 100%);
+  border-bottom: 1.5px solid var(--gray-200);
+}
+
+.attendance-header-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--gray-600);
+}
+
+.attendance-header-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  background: white;
+  border: 1px solid var(--primary-light);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+/* ---- Accordion rows ---- */
+
+.attendance-accordion {
+  display: flex;
+  flex-direction: column;
+}
+
+.attendance-row + .attendance-row {
+  border-top: 1px solid var(--gray-100);
+}
+
+.attendance-row-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  transition: background 0.18s ease;
+}
+
+.attendance-row-head:hover {
+  background: var(--gray-50);
+}
+
+.attendance-row.expanded .attendance-row-head {
+  background: #f0f7ff;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.attendance-row.checked .attendance-row-head {
+  background: #f6faff;
+}
+
+.attendance-row.checked.expanded .attendance-row-head {
+  background: #f0f7ff;
+}
+
+.attendance-row-program {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.attendance-row-program input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.attendance-row-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--gray-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attendance-row.checked .attendance-row-name {
+  color: var(--primary);
+}
+
+.attendance-row-count {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--gray-500);
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+.attendance-row-count.has-selection {
+  color: var(--primary);
+  background: white;
+  border-color: var(--primary-light);
+}
+
+.attendance-row-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  color: var(--gray-500);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.attendance-row-toggle:hover {
+  border-color: var(--primary-light);
+  color: var(--primary);
+}
+
+.attendance-row-toggle svg {
+  transition: transform 0.2s ease;
+}
+
+.attendance-row.expanded .attendance-row-toggle {
+  border-color: var(--primary-light);
+  color: var(--primary);
+}
+
+.attendance-row.expanded .attendance-row-toggle svg {
+  transform: rotate(90deg);
+}
+
+.attendance-row-body {
+  padding: 14px 16px 16px 44px;
+  background: #fcfdff;
+  animation: attendance-fade-in 0.2s ease;
+}
+
+.attendance-row-subhead {
+  margin: 0 0 9px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--gray-500);
+}
+
+.attendance-row-seminars {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 7px;
+}
+
+.attendance-seminar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  background: white;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-700);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.attendance-seminar:hover {
+  border-color: var(--primary-light);
+  background: var(--gray-50);
+}
+
+.attendance-seminar.checked {
+  border-color: var(--primary);
+  background: #f0f7ff;
+  color: var(--gray-800);
+  font-weight: 600;
+}
+
+.attendance-seminar input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+/* ---- Shared states ---- */
+
+.attendance-note {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px dashed var(--gray-300);
+  border-radius: 8px;
+  background: var(--gray-50);
+  font-size: 13px;
+  color: var(--gray-500);
+}
+
+.attendance-note-inline {
+  padding: 9px 12px;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.attendance-note-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-style: solid;
+  border-color: #feb2b2;
+  background: #fff5f5;
+  color: #c53030;
+  font-size: 12px;
+}
+
+.attendance-retry {
+  flex-shrink: 0;
+  background: white;
+  border: 1px solid #feb2b2;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c53030;
+  cursor: pointer;
+}
+
+.attendance-retry:hover {
+  background: #fff5f5;
+}
+
+@keyframes attendance-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Grid layouts */
 .grid-2-cols { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
