@@ -550,6 +550,22 @@
   box-shadow: 0 4px 15px rgba(74, 141, 240, 0.12);
 }
 
+.classification-card.disabled {
+  opacity: 0.6;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  cursor: not-allowed;
+}
+
+.classification-card.disabled:hover {
+  border-color: #e2e8f0;
+  box-shadow: none;
+}
+
+.classification-card.disabled .checkbox-container {
+  cursor: not-allowed;
+}
+
 .class-header {
   display: flex;
   align-items: center;
@@ -668,6 +684,50 @@
   margin-left: 10px;
 }
 
+/* Child Pregnancy Alert */
+.child-pregnancy-alert {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+  border: 1.5px solid #fca5a5;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: #7f1d1d;
+}
+
+.child-pregnancy-alert i {
+  color: #dc2626;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.child-pregnancy-alert strong {
+  font-size: 12px;
+  font-weight: 800;
+  color: #dc2626;
+  display: block;
+}
+
+/* Pregnancy N/A Notice */
+.pregnancy-na-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-sm);
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.pregnancy-na-notice i {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+
 /* Animations */
 .animate-fade-in {
   animation: fadeIn 0.3s ease forwards;
@@ -695,5 +755,323 @@
     grid-template-columns: 1fr;
     gap: 12px;
   }
+}
+
+/* Pre-Entry Household Verification */
+.verification-box {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  margin-bottom: 24px;
+}
+
+.verification-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  color: var(--primary-dark);
+}
+
+.verification-header i {
+  font-size: 20px;
+  color: var(--primary);
+}
+
+.verification-header h3 {
+  font-size: 14.5px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.verification-header p {
+  font-size: 11.5px;
+  color: var(--gray-500);
+  margin: 2px 0 0;
+}
+
+.btn-verify-household {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: 0 2px 8px rgba(44, 82, 130, 0.2);
+}
+
+.btn-verify-household:hover {
+  background: linear-gradient(135deg, #1e3f69 0%, #112542 100%);
+  transform: translateY(-1px);
+}
+
+.btn-verify-household:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Matched Card */
+.verification-matched-card {
+  background: linear-gradient(135deg, #f0fdf4 0%, #e8fbf0 100%);
+  border: 1.5px solid #86efac;
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin-top: 14px;
+  animation: fadeIn 0.3s ease;
+}
+
+.verification-matched-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.verification-matched-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 13.5px;
+  color: #15803d;
+}
+
+.badge-continuity {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.matched-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  background: white;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #dcfce7;
+  font-size: 12px;
+}
+
+.matched-detail-item label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.matched-detail-item span {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+/* Pre-Entry Verification Box */
+.verification-box {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1.5px solid #cbd5e1;
+  border-radius: var(--radius-md, 12px);
+  padding: 18px 20px;
+  margin-bottom: 24px;
+  animation: fadeIn 0.3s ease;
+}
+
+.verification-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.btn-verify-household {
+  background: linear-gradient(135deg, #1e40af, #1d4ed8);
+  color: white;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.25);
+}
+
+.btn-verify-household:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(30, 64, 175, 0.35);
+}
+
+.btn-verify-household:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Matched Household Card */
+.verification-matched-card {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border: 1.5px solid #86efac;
+  border-radius: var(--radius-sm, 10px);
+  padding: 16px 18px;
+  margin-top: 14px;
+  animation: fadeIn 0.3s ease;
+}
+
+.badge-continuity {
+  display: inline-block;
+  background: #166534;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 20px;
+  margin-left: 10px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.matched-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.matched-detail-item {
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.matched-detail-item small {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.matched-detail-item strong {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 13px;
+}
+
+/* New Household Card */
+.verification-new-card {
+  background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%);
+  border: 1.5px solid #93c5fd;
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: fadeIn 0.3s ease;
+}
+
+.verification-new-card i {
+  color: #2563eb;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.verification-new-card strong {
+  font-size: 13px;
+  color: #1e40af;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.verification-new-card p {
+  font-size: 11.5px;
+  color: #3b82f6;
+  margin: 0;
+}
+
+/* Population Increment Tracker */
+.increment-tracker-banner {
+  background: linear-gradient(135deg, #1e3a8a 0%, #172554 100%);
+  color: white;
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  box-shadow: 0 4px 14px rgba(30, 58, 138, 0.2);
+}
+
+.increment-tracker-stats {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.increment-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.increment-stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.increment-stat-val {
+  font-size: 16px;
+  font-weight: 800;
+  color: white;
+}
+
+.increment-badge-pill {
+  background: #22c55e;
+  color: #052e16;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 14px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
+.matched-head-banner {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 20px;
 }
 

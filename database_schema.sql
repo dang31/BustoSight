@@ -143,15 +143,25 @@ CREATE TABLE public.residents (
     age_at_first_birth INTEGER NULL,
     teenage_pregnancy_case BOOLEAN NULL DEFAULT FALSE,
     current_teenage_mother BOOLEAN NULL DEFAULT FALSE,
+    child_pregnancy_case BOOLEAN NULL DEFAULT FALSE,
     is_4ps BOOLEAN NULL DEFAULT FALSE,
     is_voter TEXT NULL,
     barangay TEXT NOT NULL,
     is_archived BOOLEAN NULL DEFAULT FALSE,
     archive_date TIMESTAMP WITH TIME ZONE NULL,
+    archive_reason TEXT NULL,          -- 'deceased' | 'relocated'
+    archive_reason_detail JSONB NULL,  -- { date_of_decease, death_cert_no } OR { new_address, migration_date }
     created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NOW(),
     data_year INTEGER NULL,
     CONSTRAINT residents_pkey PRIMARY KEY (id)
 ) TABLESPACE pg_default;
+
+-- --------------------------------------------------------
+-- For existing databases: run these ALTER statements to
+-- add the archive reason columns if they don't yet exist.
+-- --------------------------------------------------------
+-- ALTER TABLE public.residents ADD COLUMN IF NOT EXISTS archive_reason TEXT NULL;
+-- ALTER TABLE public.residents ADD COLUMN IF NOT EXISTS archive_reason_detail JSONB NULL;
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.residents ENABLE ROW LEVEL SECURITY;

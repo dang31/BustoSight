@@ -49,6 +49,16 @@ export default function BarangayList({ defaultMode = "household" }) {
   const [editForm, setEditForm] = useState({});
   const [editLoading, setEditLoading] = useState(false);
 
+  // Archive Reason Modal state
+  const [archiveModal, setArchiveModal] = useState({
+    open: false,
+    resident: null,
+    reason: "",          // "deceased" | "relocated"
+    adminPassword: "",
+    isLoading: false,
+    error: "",
+  });
+
   const getInitialMode = () => {
     if (location.pathname === '/resident') return 'resident';
     if (location.pathname === '/household') return 'household';
@@ -97,6 +107,12 @@ export default function BarangayList({ defaultMode = "household" }) {
     { length: currentYear - 2019 },
     (_, i) => currentYear - i,
   );
+  const isReadOnly = selectedYear !== "all" && Number(selectedYear) < currentYear;
+  const isRecordPastYear = (rec) => {
+    if (isReadOnly) return true;
+    if (rec?.dataYear && Number(rec.dataYear) < currentYear) return true;
+    return false;
+  };
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -176,6 +192,7 @@ export default function BarangayList({ defaultMode = "household" }) {
         ageFirstBirth: r.age_at_first_birth,
         teenagePregnancy: r.teenage_pregnancy_case,
         teenageMother: r.current_teenage_mother,
+        childPregnancy: r.child_pregnancy_case || false,
         is4ps: r.is_4ps,
         createdAt: r.created_at,
         dataYear: r.data_year,
@@ -193,7 +210,14 @@ export default function BarangayList({ defaultMode = "household" }) {
   const filteredRecords = allRecords;
 
   const openEditModal = (res) => {
+    if (isRecordPastYear(res)) {
+      alert(`Records from previous years (${res.dataYear || selectedYear}) cannot be edited. Past data is strictly read-only.`);
+      return;
+    }
     setEditingResident(res);
+    const resAge = res.age !== null && res.age !== undefined ? res.age : "";
+    const ageNum = parseInt(resAge, 10);
+    const isSenior = !isNaN(ageNum) && ageNum >= 60;
     setEditForm({
       h_no: res.h_no || "",
       last_name: res.last || "",
@@ -211,25 +235,62 @@ export default function BarangayList({ defaultMode = "household" }) {
       occupation: res.oc || "",
       relation_to_head: res.rel || "",
       is_voter: res.isVoter || "NO",
-      age: res.age !== null && res.age !== undefined ? res.age : "",
+      age: resAge,
       residence_type: res.residenceType || "",
       religion: res.religion || "",
       educational_attainment: res.edu || "",
       is_pwd: res.isPwd || false,
       has_pwd_id: res.hasPwdId || false,
-      is_senior: res.isSenior || false,
-      has_senior_id: res.hasSeniorId || false,
+      is_senior: isSenior,
+      has_senior_id: isSenior ? (res.hasSeniorId || false) : false,
       is_solo_parent: res.isSoloParent || false,
       has_solo_parent_id: res.hasSoloParentId || false,
       is_4ps: res.is4ps || false,
       teenage_pregnancy_case: res.teenagePregnancy || false,
       current_teenage_mother: res.teenageMother || false,
+      child_pregnancy_case: res.childPregnancy || false,
       age_at_first_birth: res.ageFirstBirth !== null && res.ageFirstBirth !== undefined ? res.ageFirstBirth : "",
     });
   };
 
+  const handleEditDobChange = (dobValue) => {
+    let calculatedAge = "";
+    if (dobValue) {
+      const today = new Date();
+      const birthDate = new Date(dobValue);
+      let a = today.getFullYear() - birthDate.getFullYear();
+      const mDiff = today.getMonth() - birthDate.getMonth();
+      if (mDiff < 0 || (mDiff === 0 && today.getDate() < birthDate.getDate())) a--;
+      calculatedAge = a >= 0 ? a : "";
+    }
+    const ageNum = parseInt(calculatedAge, 10);
+    const isSenior = !isNaN(ageNum) && ageNum >= 60;
+    setEditForm((f) => ({
+      ...f,
+      birth_date: dobValue,
+      age: calculatedAge,
+      is_senior: isSenior,
+      has_senior_id: isSenior ? f.has_senior_id : false,
+    }));
+  };
+
+  const handleEditAgeChange = (ageValue) => {
+    const ageNum = parseInt(ageValue, 10);
+    const isSenior = !isNaN(ageNum) && ageNum >= 60;
+    setEditForm((f) => ({
+      ...f,
+      age: ageValue,
+      is_senior: isSenior,
+      has_senior_id: isSenior ? f.has_senior_id : false,
+    }));
+  };
+
   const handleSaveEdit = async () => {
     if (!editingResident) return;
+    if (isRecordPastYear(editingResident)) {
+      alert("Editing is disabled for records from previous years. These records are read-only.");
+      return;
+    }
 
     const adminPassword = prompt(
       "Security Check: Enter Admin Password to save changes:"
@@ -286,6 +347,7 @@ export default function BarangayList({ defaultMode = "household" }) {
         is_4ps: editForm.is_4ps,
         teenage_pregnancy_case: editForm.teenage_pregnancy_case,
         current_teenage_mother: editForm.current_teenage_mother,
+        child_pregnancy_case: editForm.child_pregnancy_case,
         age_at_first_birth: editForm.age_at_first_birth !== "" ? Number(editForm.age_at_first_birth) : null,
       };
 
@@ -328,6 +390,7 @@ export default function BarangayList({ defaultMode = "household" }) {
         is4ps: editForm.is_4ps,
         teenagePregnancy: editForm.teenage_pregnancy_case,
         teenageMother: editForm.current_teenage_mother,
+        childPregnancy: editForm.child_pregnancy_case,
         ageFirstBirth: editForm.age_at_first_birth !== "" ? Number(editForm.age_at_first_birth) : null,
       };
 
@@ -362,30 +425,48 @@ export default function BarangayList({ defaultMode = "household" }) {
     }
   };
 
-  const handleArchive = async (res) => {
+  // Open archive reason modal (replaces old window.confirm+prompt flow)
+  const handleArchive = (res) => {
     if (userRole === "Staff") {
       alert("Access Denied: Staff users are not permitted to archive residents.");
       return;
     }
-
-    if (
-      !window.confirm(
-        `Are you sure you want to archive resident ${res.first} ${res.last}?`,
-      )
-    )
+    if (isRecordPastYear(res)) {
+      alert(`Records from previous years (${res.dataYear || selectedYear}) cannot be deleted or archived. Past data is strictly read-only.`);
       return;
+    }
+    setArchiveModal({
+      open: true,
+      resident: res,
+      reason: "",
+      adminPassword: "",
+      isLoading: false,
+      error: "",
+    });
+  };
 
-    const adminPassword = prompt(
-      "Security Check: Please enter Admin Password to archive this record:",
-    );
-    if (adminPassword === null) return;
+  const closeArchiveModal = () => {
+    setArchiveModal(prev => ({ ...prev, open: false, isLoading: false, error: "" }));
+  };
 
-    setIsLoading(true);
+  const handleConfirmArchive = async () => {
+    const { resident: res, reason, adminPassword } = archiveModal;
+
+    if (!reason) {
+      setArchiveModal(prev => ({ ...prev, error: "Please select an archive reason before proceeding." }));
+      return;
+    }
+    if (!adminPassword.trim()) {
+      setArchiveModal(prev => ({ ...prev, error: "Admin Password is required for security verification." }));
+      return;
+    }
+
+    setArchiveModal(prev => ({ ...prev, isLoading: true, error: "" }));
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || !user.email) {
-        setIsLoading(false);
-        alert("Session error. Could not verify your identity. Please log in again.");
+        setArchiveModal(prev => ({ ...prev, isLoading: false, error: "Session error. Please log in again." }));
         return;
       }
 
@@ -395,42 +476,58 @@ export default function BarangayList({ defaultMode = "household" }) {
       });
 
       if (authError) {
-        setIsLoading(false);
-        alert("Access Denied: Incorrect Admin Password.");
+        setArchiveModal(prev => ({ ...prev, isLoading: false, error: "Access Denied: Incorrect Admin Password." }));
         return;
       }
-      const { error } = await supabase
+
+      const updatePayload = {
+        is_archived: true,
+        archive_date: new Date().toISOString(),
+        archive_reason: reason,
+      };
+
+      // Try with archive_reason column; fall back if column doesn't exist yet
+      let { error } = await supabase
         .from("residents")
-        .update({
-          is_archived: true,
-          archive_date: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq("id", res.id);
 
-      if (error) throw error;
+      if (error && (error.message || "").toLowerCase().includes("archive_reason")) {
+        // Fallback: column not yet migrated
+        const fallback = await supabase
+          .from("residents")
+          .update({ is_archived: true, archive_date: new Date().toISOString() })
+          .eq("id", res.id);
+        if (fallback.error) throw fallback.error;
+      } else if (error) {
+        throw error;
+      }
 
-      // Update local state
-      const updatedRecords = allRecords.filter((r) => r.id !== res.id);
-      setAllRecords(updatedRecords);
-
+      // Remove from active list
+      setAllRecords(prev => prev.filter(r => r.id !== res.id));
       setSelectedHousehold(null);
+      setSelectedResident(null);
 
+      const reasonLabel = reason === "deceased" ? "Deceased" : "Relocated / Migrated";
       logTransaction({
         action: "Archive Resident",
         category: "Resident Management",
-        details: `Archived resident ${res.first} ${res.last} (HH# ${res.h_no || "N/A"}) from Barangay ${activeBrgy}.`,
+        details: `Archived resident ${res.first} ${res.last} (HH# ${res.h_no || "N/A"}) from Brgy. ${activeBrgy}. Reason: ${reasonLabel}.`,
       });
 
-      alert("Successfully archived!");
+      closeArchiveModal();
+      alert(`Successfully archived! Reason: ${reasonLabel}.`);
     } catch (err) {
       console.error("Error archiving:", err);
-      alert("Failed to archive: " + err.message);
-    } finally {
-      setIsLoading(false);
+      setArchiveModal(prev => ({ ...prev, isLoading: false, error: "Failed to archive: " + err.message }));
     }
   };
 
   const handleDeleteBrgyData = async () => {
+    if (isReadOnly) {
+      alert(`Cannot delete records: Data for previous year ${selectedYear} is archived and read-only.`);
+      return;
+    }
     if (
       !window.confirm(
         `WARNING: Are you sure you want to PERMANENTLY DELETE ALL records in Barangay ${activeBrgy}? This action cannot be undone.`,
@@ -813,7 +910,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                 <option value="all">All Years</option>
                 {availableYears.map((y) => (
                   <option key={y} value={y}>
-                    {y}
+                    {y} {y < currentYear ? "(Read-Only)" : ""}
                   </option>
                 ))}
               </select>
@@ -826,8 +923,16 @@ export default function BarangayList({ defaultMode = "household" }) {
                 onChange={handleImportCSV}
               />
               <button
-                className="btn btn-import"
-                onClick={() => document.getElementById("csvFileInput").click()}
+                className={`btn btn-import ${isReadOnly ? "disabled-btn" : ""}`}
+                disabled={isReadOnly}
+                onClick={() => {
+                  if (isReadOnly) {
+                    alert(`Importing data into previous year (${selectedYear}) is disabled to prevent accidental modifications.`);
+                    return;
+                  }
+                  document.getElementById("csvFileInput").click();
+                }}
+                title={isReadOnly ? "Importing to previous years is disabled (Read-Only)" : "Import Data"}
               >
                 <i className="fa-solid fa-file-import"></i> Import Data
               </button>
@@ -838,18 +943,32 @@ export default function BarangayList({ defaultMode = "household" }) {
                 <i className="fa-solid fa-box-archive"></i> View Archive
               </button>
               <button
-                className="btn btn-add"
-                onClick={() => navigate("/add-resident")}
+                className={`btn btn-add ${isReadOnly ? "disabled-btn" : ""}`}
+                disabled={isReadOnly}
+                onClick={() => {
+                  if (isReadOnly) {
+                    alert(`Cannot add resident to previous year (${selectedYear}). Please switch to current year (${currentYear}).`);
+                    return;
+                  }
+                  navigate("/add-resident");
+                }}
+                title={isReadOnly ? "Adding residents to previous years is disabled (Read-Only)" : "Add Resident"}
               >
                 <i className="fa-solid fa-user-plus"></i> Add Resident
               </button>
-              {/* <button className="btn btn-delete-all" onClick={handleDeleteBrgyData}>
-                <i className="fa-solid fa-trash-can"></i> Delete All {activeBrgy}
-              </button> */}
-              {/* <button className="btn btn-mock" onClick={generateMockData}>
-                <i className="fa-solid fa-database"></i> Add Mock Data
-              </button> */}
             </div>
+
+            {isReadOnly && (
+              <div className="read-only-banner animate-fade-in">
+                <div className="read-only-icon">
+                  <i className="fa-solid fa-lock"></i>
+                </div>
+                <div className="read-only-text">
+                  <strong>Read-Only Mode ({selectedYear})</strong>: Viewing historical census data. Editing and deleting/archiving records from previous years are strictly disabled to prevent accidental data loss.
+                </div>
+                <span className="read-only-pill">Locked Archive</span>
+              </div>
+            )}
 
             <div className="table-wrapper animate-fade-up">
               <table>
@@ -905,8 +1024,8 @@ export default function BarangayList({ defaultMode = "household" }) {
                     filteredRecords.map((res, i) => {
                       const middle = res.mid
                         ? (res.mid.trim().endsWith(".")
-                            ? res.mid.trim()
-                            : res.mid.trim()[0] + ".") + " "
+                          ? res.mid.trim()
+                          : res.mid.trim()[0] + ".") + " "
                         : "";
                       const fullName = `${res.first} ${middle}${res.last}`;
                       return (
@@ -1031,22 +1150,32 @@ export default function BarangayList({ defaultMode = "household" }) {
                                 <i className="fa-solid fa-eye"></i>
                               </button>
                               {!isStaff && (
-                                <button
-                                  className="action-btn edit-btn"
-                                  onClick={() => openEditModal(res)}
-                                  title="Edit Resident"
-                                >
-                                  <i className="fa-solid fa-pen-to-square"></i>
-                                </button>
-                              )}
-                              {!isStaff && (
-                                <button
-                                  className="action-btn archive-btn"
-                                  onClick={() => handleArchive(res)}
-                                  title="Archive Resident"
-                                >
-                                  <i className="fa-solid fa-box-archive"></i>
-                                </button>
+                                !isRecordPastYear(res) ? (
+                                  <>
+                                    <button
+                                      className="action-btn edit-btn"
+                                      onClick={() => openEditModal(res)}
+                                      title="Edit Resident"
+                                    >
+                                      <i className="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                    <button
+                                      className="action-btn archive-btn"
+                                      onClick={() => handleArchive(res)}
+                                      title="Archive Resident"
+                                    >
+                                      <i className="fa-solid fa-box-archive"></i>
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    className="action-btn disabled-btn"
+                                    disabled
+                                    title="Read-Only: Editing and deleting are disabled for past year records."
+                                  >
+                                    <i className="fa-solid fa-lock" style={{ fontSize: "11px", color: "#94a3b8" }}></i>
+                                  </button>
+                                )
                               )}
                             </div>
                           </td>
@@ -1078,9 +1207,9 @@ export default function BarangayList({ defaultMode = "household" }) {
                   Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalRecords)} of {totalRecords} records
                 </span>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <button 
-                    className="btn" 
-                    disabled={currentPage === 1 || isLoading} 
+                  <button
+                    className="btn"
+                    disabled={currentPage === 1 || isLoading}
                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                     style={{ padding: '6px 12px', opacity: (currentPage === 1 || isLoading) ? 0.5 : 1, cursor: (currentPage === 1 || isLoading) ? 'not-allowed' : 'pointer', background: '#e2e8f0', color: '#334155', border: 'none', borderRadius: '4px' }}
                   >
@@ -1089,9 +1218,9 @@ export default function BarangayList({ defaultMode = "household" }) {
                   <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.9rem', fontWeight: 'bold', color: '#333' }}>
                     Page {currentPage} of {Math.ceil(totalRecords / itemsPerPage)}
                   </span>
-                  <button 
-                    className="btn" 
-                    disabled={currentPage >= Math.ceil(totalRecords / itemsPerPage) || isLoading} 
+                  <button
+                    className="btn"
+                    disabled={currentPage >= Math.ceil(totalRecords / itemsPerPage) || isLoading}
                     onClick={() => setCurrentPage(prev => prev + 1)}
                     style={{ padding: '6px 12px', opacity: (currentPage >= Math.ceil(totalRecords / itemsPerPage) || isLoading) ? 0.5 : 1, cursor: (currentPage >= Math.ceil(totalRecords / itemsPerPage) || isLoading) ? 'not-allowed' : 'pointer', background: '#e2e8f0', color: '#334155', border: 'none', borderRadius: '4px' }}
                   >
@@ -1145,67 +1274,73 @@ export default function BarangayList({ defaultMode = "household" }) {
                       </div>
                     </div>
 
-                      {/* Card Info Grid */}
-                      <div className="hh-card-info-grid">
-                        {[
-                          { label: 'Age', value: m.age != null ? `${m.age} yrs` : '—' },
-                          { label: 'Gender', value: m.s || '—' },
-                          { label: 'Birthday', value: m.bd || '—' },
-                          { label: 'Civil Status', value: m.cs || '—' },
-                          { label: 'Occupation', value: m.oc || '—' },
-                          { label: 'Education', value: m.edu || '—' },
-                          { label: 'Religion', value: m.religion || '—' },
-                          { label: 'Voter', value: m.isVoter || '—' },
-                        ].map(({ label, value }) => (
-                          <div key={label} className="hh-card-field">
-                            <div className="hh-card-field-label">{label}</div>
-                            <div className="hh-card-field-value">{value}</div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Tags Row */}
-                      <div className="hh-card-tags">
-                        {m.isSenior && <span style={{ fontSize: '10px', background: '#3182ce', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>Senior</span>}
-                        {m.isPwd && <span style={{ fontSize: '10px', background: '#38a169', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>PWD</span>}
-                        {m.isSoloParent && <span style={{ fontSize: '10px', background: '#e53e3e', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>Solo Parent</span>}
-                        {m.is4ps && <span style={{ fontSize: '10px', background: '#d69e2e', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>4Ps</span>}
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="hh-card-actions">
-                        <button
-                          className="btn-view-indiv"
-                          onClick={() => setSelectedResident(m)}
-                        >
-                          <i className="fa-solid fa-eye" style={{ fontSize: '11px' }}></i> View Profile
-                        </button>
-                        {userRole !== 'Staff' && (
-                          <button
-                            className="btn-edit-card"
-                            onClick={() => openEditModal(m)}
-                            title="Edit Resident"
-                          >
-                            <i className="fa-solid fa-pen-to-square" style={{ fontSize: '11px' }}></i> Edit
-                          </button>
-                        )}
-                        {userRole !== 'Staff' && (
-                          <button
-                            className="btn-archive-card"
-                            onClick={() => handleArchive(m)}
-                            title="Archive Resident"
-                          >
-                            <i className="fa-solid fa-box-archive" style={{ fontSize: '11px' }}></i> Archive
-                          </button>
-                        )}
-                      </div>
+                    {/* Card Info Grid */}
+                    <div className="hh-card-info-grid">
+                      {[
+                        { label: 'Age', value: m.age != null ? `${m.age} yrs` : '—' },
+                        { label: 'Gender', value: m.s || '—' },
+                        { label: 'Birthday', value: m.bd || '—' },
+                        { label: 'Civil Status', value: m.cs || '—' },
+                        { label: 'Occupation', value: m.oc || '—' },
+                        { label: 'Education', value: m.edu || '—' },
+                        { label: 'Religion', value: m.religion || '—' },
+                        { label: 'Voter', value: m.isVoter || '—' },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="hh-card-field">
+                          <div className="hh-card-field-label">{label}</div>
+                          <div className="hh-card-field-value">{value}</div>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
-              </div>
+
+                    {/* Tags Row */}
+                    <div className="hh-card-tags">
+                      {m.isSenior && <span style={{ fontSize: '10px', background: '#3182ce', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>Senior</span>}
+                      {m.isPwd && <span style={{ fontSize: '10px', background: '#38a169', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>PWD</span>}
+                      {m.isSoloParent && <span style={{ fontSize: '10px', background: '#e53e3e', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>Solo Parent</span>}
+                      {m.is4ps && <span style={{ fontSize: '10px', background: '#d69e2e', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>4Ps</span>}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="hh-card-actions">
+                      <button
+                        className="btn-view-indiv"
+                        onClick={() => setSelectedResident(m)}
+                      >
+                        <i className="fa-solid fa-eye" style={{ fontSize: '11px' }}></i> View Profile
+                      </button>
+                      {userRole !== 'Staff' && (
+                        !isRecordPastYear(m) ? (
+                          <>
+                            <button
+                              className="btn-edit-card"
+                              onClick={() => openEditModal(m)}
+                              title="Edit Resident"
+                            >
+                              <i className="fa-solid fa-pen-to-square" style={{ fontSize: '11px' }}></i> Edit
+                            </button>
+                            <button
+                              className="btn-archive-card"
+                              onClick={() => handleArchive(m)}
+                              title="Archive Resident"
+                            >
+                              <i className="fa-solid fa-box-archive" style={{ fontSize: '11px' }}></i> Archive
+                            </button>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: "11px", color: "#94a3b8", display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 8px" }}>
+                            <i className="fa-solid fa-lock"></i> Read-Only
+                          </span>
+                        )
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
       {/* Individual Resident Profile Modal */}
       {selectedResident && (
@@ -1236,6 +1371,11 @@ export default function BarangayList({ defaultMode = "household" }) {
                 </h2>
                 <p>
                   Household ID: <strong>{selectedResident.h_no || "N/A"}</strong> &bull; Relation: <strong>{selectedResident.rel || "MEMBER"}</strong> &bull; Barangay: <strong>{selectedResident.brgy}</strong>
+                  {isRecordPastYear(selectedResident) && (
+                    <span style={{ marginLeft: "10px", fontSize: "11px", background: "#fef3c7", color: "#92400e", padding: "2px 8px", borderRadius: "10px", border: "1px solid #fde68a", display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: "600" }}>
+                      <i className="fa-solid fa-lock"></i> Read-Only ({selectedResident.dataYear || selectedYear})
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -1243,166 +1383,166 @@ export default function BarangayList({ defaultMode = "household" }) {
             {/* Grid Details - scrollable */}
             <div className="res-modal-scrollable-body">
               <div className="res-details-grid">
-              {/* Personal Info */}
-              <div className="res-card-section">
-                <h3><i className="fa-solid fa-id-card"></i> Personal Information</h3>
-                <div className="res-card-content">
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Full Name</span>
-                    <span className="res-detail-value">{selectedResident.first} {selectedResident.mid || ''} {selectedResident.last} {selectedResident.q || ''}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Age</span>
-                    <span className="res-detail-value">{selectedResident.age !== null && selectedResident.age !== undefined ? `${selectedResident.age} years old` : "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Gender</span>
-                    <span className="res-detail-value">{selectedResident.s || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Birth Date</span>
-                    <span className="res-detail-value">{selectedResident.bd || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Birth Place</span>
-                    <span className="res-detail-value">{selectedResident.bp || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Civil Status</span>
-                    <span className="res-detail-value">{selectedResident.cs || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Citizenship</span>
-                    <span className="res-detail-value">{selectedResident.cz || "FILIPINO"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Religion</span>
-                    <span className="res-detail-value">{selectedResident.religion || "N/A"}</span>
+                {/* Personal Info */}
+                <div className="res-card-section">
+                  <h3><i className="fa-solid fa-id-card"></i> Personal Information</h3>
+                  <div className="res-card-content">
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Full Name</span>
+                      <span className="res-detail-value">{selectedResident.first} {selectedResident.mid || ''} {selectedResident.last} {selectedResident.q || ''}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Age</span>
+                      <span className="res-detail-value">{selectedResident.age !== null && selectedResident.age !== undefined ? `${selectedResident.age} years old` : "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Gender</span>
+                      <span className="res-detail-value">{selectedResident.s || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Birth Date</span>
+                      <span className="res-detail-value">{selectedResident.bd || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Birth Place</span>
+                      <span className="res-detail-value">{selectedResident.bp || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Civil Status</span>
+                      <span className="res-detail-value">{selectedResident.cs || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Citizenship</span>
+                      <span className="res-detail-value">{selectedResident.cz || "FILIPINO"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Religion</span>
+                      <span className="res-detail-value">{selectedResident.religion || "N/A"}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Address & Housing */}
-              <div className="res-card-section">
-                <h3><i className="fa-solid fa-house-user"></i> Address & Household</h3>
-                <div className="res-card-content">
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Household No.</span>
-                    <span className="res-detail-value">{selectedResident.h_no || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">House No.</span>
-                    <span className="res-detail-value">{selectedResident.no || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Street</span>
-                    <span className="res-detail-value">{selectedResident.st || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Purok</span>
-                    <span className="res-detail-value">{selectedResident.p || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Barangay</span>
-                    <span className="res-detail-value">{selectedResident.brgy || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Relation to Head</span>
-                    <span className="res-detail-value">{selectedResident.rel || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Residence Type</span>
-                    <span className="res-detail-value">{selectedResident.residenceType || "N/A"}</span>
+                {/* Address & Housing */}
+                <div className="res-card-section">
+                  <h3><i className="fa-solid fa-house-user"></i> Address & Household</h3>
+                  <div className="res-card-content">
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Household No.</span>
+                      <span className="res-detail-value">{selectedResident.h_no || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">House No.</span>
+                      <span className="res-detail-value">{selectedResident.no || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Street</span>
+                      <span className="res-detail-value">{selectedResident.st || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Purok</span>
+                      <span className="res-detail-value">{selectedResident.p || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Barangay</span>
+                      <span className="res-detail-value">{selectedResident.brgy || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Relation to Head</span>
+                      <span className="res-detail-value">{selectedResident.rel || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Residence Type</span>
+                      <span className="res-detail-value">{selectedResident.residenceType || "N/A"}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Education & Occupation */}
-              <div className="res-card-section">
-                <h3><i className="fa-solid fa-briefcase"></i> Work & Education</h3>
-                <div className="res-card-content">
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Occupation</span>
-                    <span className="res-detail-value">{selectedResident.oc || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Educational Attainment</span>
-                    <span className="res-detail-value">{selectedResident.edu || "N/A"}</span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Registered Voter</span>
-                    <span className="res-detail-value">
-                      <span className={`boolean-badge ${(selectedResident.isVoter || '').toUpperCase() === 'YES' ? 'yes' : 'no'}`}>
-                        {selectedResident.isVoter || 'No'}
+                {/* Education & Occupation */}
+                <div className="res-card-section">
+                  <h3><i className="fa-solid fa-briefcase"></i> Work & Education</h3>
+                  <div className="res-card-content">
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Occupation</span>
+                      <span className="res-detail-value">{selectedResident.oc || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Educational Attainment</span>
+                      <span className="res-detail-value">{selectedResident.edu || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Registered Voter</span>
+                      <span className="res-detail-value">
+                        <span className={`boolean-badge ${(selectedResident.isVoter || '').toUpperCase() === 'YES' ? 'yes' : 'no'}`}>
+                          {selectedResident.isVoter || 'No'}
+                        </span>
                       </span>
-                    </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Special Sectors & Programs */}
-              <div className="res-card-section">
-                <h3><i className="fa-solid fa-layer-group"></i> Special Sectors & Programs</h3>
-                <div className="res-card-content">
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Senior Citizen</span>
-                    <span className="res-detail-value">
-                      <span className={`boolean-badge ${selectedResident.isSenior ? 'yes' : 'no'}`}>
-                        {selectedResident.isSenior ? `Yes ${selectedResident.hasSeniorId ? '(With ID)' : ''}` : 'No'}
+                {/* Special Sectors & Programs */}
+                <div className="res-card-section">
+                  <h3><i className="fa-solid fa-layer-group"></i> Special Sectors & Programs</h3>
+                  <div className="res-card-content">
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Senior Citizen</span>
+                      <span className="res-detail-value">
+                        <span className={`boolean-badge ${selectedResident.isSenior ? 'yes' : 'no'}`}>
+                          {selectedResident.isSenior ? `Yes ${selectedResident.hasSeniorId ? '(With ID)' : ''}` : 'No'}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">PWD</span>
-                    <span className="res-detail-value">
-                      <span className={`boolean-badge ${selectedResident.isPwd ? 'yes' : 'no'}`}>
-                        {selectedResident.isPwd ? `Yes ${selectedResident.hasPwdId ? '(With ID)' : ''}` : 'No'}
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">PWD</span>
+                      <span className="res-detail-value">
+                        <span className={`boolean-badge ${selectedResident.isPwd ? 'yes' : 'no'}`}>
+                          {selectedResident.isPwd ? `Yes ${selectedResident.hasPwdId ? '(With ID)' : ''}` : 'No'}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Solo Parent</span>
-                    <span className="res-detail-value">
-                      <span className={`boolean-badge ${selectedResident.isSoloParent ? 'yes' : 'no'}`}>
-                        {selectedResident.isSoloParent ? `Yes ${selectedResident.hasSoloParentId ? '(With ID)' : ''}` : 'No'}
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Solo Parent</span>
+                      <span className="res-detail-value">
+                        <span className={`boolean-badge ${selectedResident.isSoloParent ? 'yes' : 'no'}`}>
+                          {selectedResident.isSoloParent ? `Yes ${selectedResident.hasSoloParentId ? '(With ID)' : ''}` : 'No'}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">4Ps Beneficiary</span>
-                    <span className="res-detail-value">
-                      <span className={`boolean-badge ${selectedResident.is4ps ? 'yes' : 'no'}`}>
-                        {selectedResident.is4ps ? 'Yes' : 'No'}
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">4Ps Beneficiary</span>
+                      <span className="res-detail-value">
+                        <span className={`boolean-badge ${selectedResident.is4ps ? 'yes' : 'no'}`}>
+                          {selectedResident.is4ps ? 'Yes' : 'No'}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Teenage Pregnancy Case</span>
-                    <span className="res-detail-value">
-                      <span className={`boolean-badge ${selectedResident.teenagePregnancy ? 'yes' : 'no'}`}>
-                        {selectedResident.teenagePregnancy ? 'Yes' : 'No'}
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Teenage Pregnancy Case</span>
+                      <span className="res-detail-value">
+                        <span className={`boolean-badge ${selectedResident.teenagePregnancy ? 'yes' : 'no'}`}>
+                          {selectedResident.teenagePregnancy ? 'Yes' : 'No'}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Current Teenage Mother</span>
-                    <span className="res-detail-value">
-                      <span className={`boolean-badge ${selectedResident.teenageMother ? 'yes' : 'no'}`}>
-                        {selectedResident.teenageMother ? `Yes ${selectedResident.ageFirstBirth ? `(Age ${selectedResident.ageFirstBirth})` : ''}` : 'No'}
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Current Teenage Mother</span>
+                      <span className="res-detail-value">
+                        <span className={`boolean-badge ${selectedResident.teenageMother ? 'yes' : 'no'}`}>
+                          {selectedResident.teenageMother ? `Yes ${selectedResident.ageFirstBirth ? `(Age ${selectedResident.ageFirstBirth})` : ''}` : 'No'}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                  <div className="res-detail-row">
-                    <span className="res-detail-label">Data Year</span>
-                    <span className="res-detail-value">{selectedResident.dataYear || "N/A"}</span>
+                    </div>
+                    <div className="res-detail-row">
+                      <span className="res-detail-label">Data Year</span>
+                      <span className="res-detail-value">{selectedResident.dataYear || "N/A"}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>{/* end res-details-grid */}
+              </div>{/* end res-details-grid */}
             </div>{/* end res-modal-scrollable-body */}
 
             <div className="res-modal-footer">
-              {!isStaff && (
+              {!isStaff && !isRecordPastYear(selectedResident) && (
                 <button
                   className="btn-edit-modal"
                   onClick={() => {
@@ -1414,7 +1554,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                   <i className="fa-solid fa-pen-to-square"></i> Edit Resident
                 </button>
               )}
-              {!isStaff && (
+              {!isStaff && !isRecordPastYear(selectedResident) && (
                 <button
                   className="btn-archive-modal"
                   onClick={() => {
@@ -1493,7 +1633,7 @@ export default function BarangayList({ defaultMode = "household" }) {
               <div className="edit-form-grid">
                 <div className="edit-field">
                   <label>Birth Date</label>
-                  <input type="date" value={editForm.birth_date} onChange={e => setEditForm(f => ({ ...f, birth_date: e.target.value }))} />
+                  <input type="date" value={editForm.birth_date} onChange={e => handleEditDobChange(e.target.value)} />
                 </div>
                 <div className="edit-field">
                   <label>Birth Place</label>
@@ -1501,7 +1641,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                 </div>
                 <div className="edit-field">
                   <label>Age</label>
-                  <input type="number" min="0" value={editForm.age} onChange={e => setEditForm(f => ({ ...f, age: e.target.value }))} />
+                  <input type="number" min="0" value={editForm.age} onChange={e => handleEditAgeChange(e.target.value)} />
                 </div>
                 <div className="edit-field">
                   <label>Sex</label>
@@ -1591,14 +1731,46 @@ export default function BarangayList({ defaultMode = "household" }) {
               {/* --- Section: Special Sectors --- */}
               <div className="edit-section-title"><i className="fa-solid fa-layer-group"></i> Special Sectors &amp; Programs</div>
               <div className="edit-toggles-grid">
-                <label className="edit-toggle-item">
-                  <input type="checkbox" checked={editForm.is_senior} onChange={e => setEditForm(f => ({ ...f, is_senior: e.target.checked }))} />
-                  <span>Senior Citizen</span>
-                </label>
-                <label className="edit-toggle-item">
-                  <input type="checkbox" checked={editForm.has_senior_id} onChange={e => setEditForm(f => ({ ...f, has_senior_id: e.target.checked }))} />
-                  <span>Has Senior ID</span>
-                </label>
+                {(() => {
+                  const isEligible = parseInt(editForm.age, 10) >= 60;
+                  return (
+                    <>
+                      <label className={`edit-toggle-item ${!isEligible ? "disabled" : ""}`} style={!isEligible ? { opacity: 0.55, cursor: "not-allowed" } : {}}>
+                        <input
+                          type="checkbox"
+                          checked={editForm.is_senior && isEligible}
+                          disabled={!isEligible}
+                          onChange={e => setEditForm(f => ({ ...f, is_senior: e.target.checked }))}
+                        />
+                        <span>Senior Citizen {!isEligible && "(Age 60+ only)"}</span>
+                      </label>
+
+                      {isEligible && editForm.is_senior && (
+                        <div style={{ display: "flex", gap: "14px", alignItems: "center", gridColumn: "span 2", padding: "6px 12px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                          <span style={{ fontSize: "12px", fontWeight: "600", color: "#475569" }}>Senior ID:</span>
+                          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", cursor: "pointer" }}>
+                            <input
+                              type="radio"
+                              name="edit_senior_id"
+                              checked={editForm.has_senior_id === true}
+                              onChange={() => setEditForm(f => ({ ...f, has_senior_id: true }))}
+                            />
+                            <span>With Senior ID</span>
+                          </label>
+                          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", cursor: "pointer" }}>
+                            <input
+                              type="radio"
+                              name="edit_senior_id"
+                              checked={editForm.has_senior_id === false}
+                              onChange={() => setEditForm(f => ({ ...f, has_senior_id: false }))}
+                            />
+                            <span>Without Senior ID</span>
+                          </label>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 <label className="edit-toggle-item">
                   <input type="checkbox" checked={editForm.is_pwd} onChange={e => setEditForm(f => ({ ...f, is_pwd: e.target.checked }))} />
                   <span>PWD</span>
@@ -1619,23 +1791,75 @@ export default function BarangayList({ defaultMode = "household" }) {
                   <input type="checkbox" checked={editForm.is_4ps} onChange={e => setEditForm(f => ({ ...f, is_4ps: e.target.checked }))} />
                   <span>4Ps Beneficiary</span>
                 </label>
-                <label className="edit-toggle-item">
-                  <input type="checkbox" checked={editForm.teenage_pregnancy_case} onChange={e => setEditForm(f => ({ ...f, teenage_pregnancy_case: e.target.checked }))} />
-                  <span>Teenage Pregnancy Case</span>
-                </label>
-                <label className="edit-toggle-item">
-                  <input type="checkbox" checked={editForm.current_teenage_mother} onChange={e => setEditForm(f => ({ ...f, current_teenage_mother: e.target.checked }))} />
-                  <span>Current Teenage Mother</span>
-                </label>
-              </div>
-              {editForm.current_teenage_mother && (
-                <div className="edit-form-grid" style={{ marginTop: '12px' }}>
-                  <div className="edit-field">
-                    <label>Age at First Birth</label>
-                    <input type="number" min="0" value={editForm.age_at_first_birth} onChange={e => setEditForm(f => ({ ...f, age_at_first_birth: e.target.value }))} />
-                  </div>
-                </div>
-              )}
+
+                {/* Pregnancy Classification - 3-tier */}
+                {(() => {
+                  const editAge = parseInt(editForm.age, 10);
+                  const isFemale = editForm.sex === "Female";
+                  const isChildAge = !isNaN(editAge) && editAge <= 9;
+                  const isTeenAge = !isNaN(editAge) && editAge >= 10 && editAge <= 19;
+                  const isAdultPlus = !isNaN(editAge) && editAge >= 20;
+
+                  if (!isFemale) return (
+                    <div style={{ gridColumn: 'span 2', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <i className="fa-solid fa-circle-minus"></i>
+                      <span>Pregnancy Classification — Not Applicable (Male / LGBTQ+)</span>
+                    </div>
+                  );
+
+                  if (isChildAge) return (
+                    <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <label className="edit-toggle-item" style={{ gridColumn: 'span 2' }}>
+                        <input
+                          type="checkbox"
+                          checked={editForm.child_pregnancy_case || false}
+                          onChange={e => setEditForm(f => ({
+                            ...f,
+                            child_pregnancy_case: e.target.checked,
+                            teenage_pregnancy_case: false // strictly excluded
+                          }))}
+                        />
+                        <span style={{ fontWeight: editForm.child_pregnancy_case ? '700' : 'normal', color: editForm.child_pregnancy_case ? '#dc2626' : 'inherit' }}>
+                          Pregnant / Child Pregnancy Case (Age ≤ 9)
+                        </span>
+                      </label>
+                      {editForm.child_pregnancy_case && (
+                        <div style={{ padding: '10px 14px', background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)', border: '1.5px solid #fca5a5', borderRadius: '8px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <i className="fa-solid fa-triangle-exclamation" style={{ color: '#dc2626', fontSize: '14px' }}></i>
+                          <div style={{ fontWeight: '700', fontSize: '12px', color: '#dc2626' }}>Child Pregnancy — Highly Sensitive Case</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+
+                  if (isAdultPlus) return (
+                    <div style={{ gridColumn: 'span 2', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <i className="fa-solid fa-circle-minus"></i>
+                      <span>Pregnancy Classification — Not Applicable (Age ≥ 20)</span>
+                    </div>
+                  );
+
+                  // isTeenAge (10-19, female): show editable fields
+                  return (
+                    <>
+                      <label className="edit-toggle-item" style={{ gridColumn: 'span 1' }}>
+                        <input type="checkbox" checked={editForm.teenage_pregnancy_case} onChange={e => setEditForm(f => ({ ...f, teenage_pregnancy_case: e.target.checked }))} />
+                        <span>Teenage Pregnancy Case</span>
+                      </label>
+                      <label className="edit-toggle-item" style={{ gridColumn: 'span 1' }}>
+                        <input type="checkbox" checked={editForm.current_teenage_mother} onChange={e => setEditForm(f => ({ ...f, current_teenage_mother: e.target.checked }))} />
+                        <span>Current Teenage Mother</span>
+                      </label>
+                      {editForm.current_teenage_mother && (
+                        <div style={{ gridColumn: 'span 2', display: 'flex', gap: '12px', alignItems: 'center', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                          <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569', whiteSpace: 'nowrap' }}>Age at First Birth:</label>
+                          <input type="number" min="10" max="19" value={editForm.age_at_first_birth} onChange={e => setEditForm(f => ({ ...f, age_at_first_birth: e.target.value }))} style={{ width: '80px', padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px' }} />
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>{/* end edit-toggles-grid */}
 
             </div>{/* end edit-modal-body */}
 
@@ -1645,6 +1869,139 @@ export default function BarangayList({ defaultMode = "household" }) {
               </button>
               <button className="btn-save-edit" onClick={handleSaveEdit} disabled={editLoading}>
                 {editLoading ? <><i className="fa-solid fa-spinner fa-spin"></i> Saving...</> : <><i className="fa-solid fa-floppy-disk"></i> Save Changes</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================
+        ARCHIVE REASON MODAL
+        ================================================================ */}
+      {archiveModal.open && (
+        <div className="modal-overlay archive-reason-overlay" onClick={closeArchiveModal}>
+          <div
+            className="archive-reason-modal"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="archive-reason-header">
+              <div className="archive-reason-icon-wrap">
+                <i className="fa-solid fa-box-archive"></i>
+              </div>
+              <div style={{ flex: 1 }}>
+                <h2 className="archive-reason-title">Archive Resident</h2>
+                <p className="archive-reason-sub">
+                  <strong>{archiveModal.resident?.first} {archiveModal.resident?.mid ? archiveModal.resident.mid.charAt(0) + ". " : ""}{archiveModal.resident?.last}</strong>
+                  {archiveModal.resident?.q ? " " + archiveModal.resident.q : ""}
+                  &nbsp;&bull;&nbsp;HH# {archiveModal.resident?.h_no || "N/A"}
+                </p>
+              </div>
+              <button className="archive-reason-close" onClick={closeArchiveModal}>
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            {/* Notice banner */}
+            <div className="archive-notice-banner">
+              <i className="fa-solid fa-triangle-exclamation"></i>
+              <span>The archived resident will be <strong>automatically removed</strong> from active population counts for year <strong>{archiveModal.resident?.dataYear || selectedYear}</strong>. Prior-year records <strong>remain strictly Read-Only</strong> for auditing purposes.</span>
+            </div>
+
+            <div className="archive-reason-body">
+              {/* Reason selection — MANDATORY */}
+              <p className="archive-reason-label-required">
+                <i className="fa-solid fa-asterisk" style={{ fontSize: "8px", verticalAlign: "middle", color: "#ef4444" }}></i>{" "}Select Reason for Archiving <span className="required-tag">(Required)</span>
+              </p>
+
+              <div className="archive-reason-cards">
+                {/* DECEASED */}
+                <label
+                  className={`archive-reason-card ${archiveModal.reason === "deceased" ? "selected" : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="archiveReason"
+                    value="deceased"
+                    checked={archiveModal.reason === "deceased"}
+                    onChange={() => setArchiveModal(prev => ({ ...prev, reason: "deceased", error: "" }))}
+                  />
+                  <div className="archive-card-icon deceased">
+                    <i className="fa-solid fa-heart-crack"></i>
+                  </div>
+                  <div className="archive-card-text">
+                    <strong>Deceased</strong>
+                    <span>Resident has passed away</span>
+                  </div>
+                  {archiveModal.reason === "deceased" && <i className="fa-solid fa-circle-check archive-check"></i>}
+                </label>
+
+                {/* RELOCATED */}
+                <label
+                  className={`archive-reason-card ${archiveModal.reason === "relocated" ? "selected" : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="archiveReason"
+                    value="relocated"
+                    checked={archiveModal.reason === "relocated"}
+                    onChange={() => setArchiveModal(prev => ({ ...prev, reason: "relocated", error: "" }))}
+                  />
+                  <div className="archive-card-icon relocated">
+                    <i className="fa-solid fa-truck-moving"></i>
+                  </div>
+                  <div className="archive-card-text">
+                    <strong>Relocated / Migrated</strong>
+                    <span>Moved to another barangay, municipality, or province</span>
+                  </div>
+                  {archiveModal.reason === "relocated" && <i className="fa-solid fa-circle-check archive-check"></i>}
+                </label>
+              </div>
+
+              {/* Security Check — Admin Password */}
+              <div className="archive-security-section">
+                <p className="archive-detail-section-title">
+                  <i className="fa-solid fa-shield-halved"></i> Security Verification
+                </p>
+                <div className="archive-detail-field">
+                  <label>Admin Password <span style={{ color: "#ef4444" }}>*</span></label>
+                  <input
+                    type="password"
+                    placeholder="Enter Admin Password"
+                    value={archiveModal.adminPassword}
+                    onChange={e => setArchiveModal(prev => ({ ...prev, adminPassword: e.target.value, error: "" }))}
+                    onKeyDown={e => { if (e.key === "Enter") handleConfirmArchive(); }}
+                    autoComplete="current-password"
+                  />
+                </div>
+              </div>
+
+              {/* Error message */}
+              {archiveModal.error && (
+                <div className="archive-error-msg">
+                  <i className="fa-solid fa-circle-exclamation"></i>
+                  {archiveModal.error}
+                </div>
+              )}
+            </div>
+
+            {/* Footer actions */}
+            <div className="archive-reason-footer">
+              <button
+                className="btn-archive-cancel"
+                onClick={closeArchiveModal}
+                disabled={archiveModal.isLoading}
+              >
+                Cancel
+              </button>
+              <button
+                className={`btn-archive-confirm${!archiveModal.reason ? " disabled" : ""}`}
+                onClick={handleConfirmArchive}
+                disabled={archiveModal.isLoading || !archiveModal.reason}
+              >
+                {archiveModal.isLoading
+                  ? <><i className="fa-solid fa-spinner fa-spin"></i> Archiving...</>
+                  : <><i className="fa-solid fa-box-archive"></i> Confirm Archive</>}
               </button>
             </div>
           </div>

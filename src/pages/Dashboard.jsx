@@ -31,6 +31,193 @@ ChartJS.register(
   Filler,
 );
 
+function getContrastColor(hexColor) {
+  if (!hexColor || typeof hexColor !== "string") return "#ffffff";
+  let hex = hexColor.trim().replace("#", "");
+  if (hex.length === 3) {
+    hex = hex.split("").map((c) => c + c).join("");
+  }
+  if (hex.length !== 6) return "#ffffff";
+  const r = parseInt(hex.substring(0, 2), 16) || 0;
+  const g = parseInt(hex.substring(2, 4), 16) || 0;
+  const b = parseInt(hex.substring(4, 6), 16) || 0;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.68 ? "#1e293b" : "#ffffff";
+}
+
+const piePercentagePlugin = {
+  id: "piePercentage",
+  afterDatasetsDraw(chart) {
+    if (chart.config.type !== "pie") return;
+    const { ctx } = chart;
+
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (meta.hidden) return;
+
+      const total = dataset.data.reduce((acc, val, idx) => {
+        if (chart.getDataVisibility && !chart.getDataVisibility(idx)) return acc;
+        return acc + (Number(val) || 0);
+      }, 0);
+      if (total <= 0) return;
+
+      meta.data.forEach((element, index) => {
+        if (!element || (chart.getDataVisibility && !chart.getDataVisibility(index))) return;
+        const value = Number(dataset.data[index]) || 0;
+        if (value <= 0) return;
+
+        const percentage = (value / total) * 100;
+        if (percentage < 5) return; // Skip slices too small for legible text
+
+        const pctStr =
+          percentage % 1 === 0
+            ? `${percentage.toFixed(0)}%`
+            : `${percentage.toFixed(1)}%`;
+
+        const props = element.getProps(
+          ["x", "y", "startAngle", "endAngle", "innerRadius", "outerRadius"],
+          true
+        );
+        if (!props || props.outerRadius === undefined) return;
+
+        const midAngle =
+          props.startAngle + (props.endAngle - props.startAngle) / 2;
+        const midRadius =
+          props.innerRadius + (props.outerRadius - props.innerRadius) * 0.62;
+        const posX = props.x + Math.cos(midAngle) * midRadius;
+        const posY = props.y + Math.sin(midAngle) * midRadius;
+
+        const bgColors = dataset.backgroundColor;
+        const sliceBg = Array.isArray(bgColors) ? bgColors[index] : bgColors;
+        const textColor = getContrastColor(sliceBg);
+
+        ctx.save();
+        ctx.font = "bold 11px 'Inter', sans-serif, system-ui";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        if (textColor === "#ffffff") {
+          ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+          ctx.shadowBlur = 4;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 1;
+        } else {
+          ctx.shadowColor = "rgba(255, 255, 255, 0.85)";
+          ctx.shadowBlur = 3;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 1;
+        }
+
+        ctx.fillStyle = textColor;
+        ctx.fillText(pctStr, posX, posY);
+        ctx.restore();
+      });
+    });
+  },
+};
+
+const barPercentagePlugin = {
+  id: "barPercentage",
+  afterDatasetsDraw(chart) {
+    if (chart.config.type !== "bar") return;
+    const { ctx } = chart;
+    const isHorizontal = chart.config.options?.indexAxis === "y";
+
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (meta.hidden) return;
+
+      const total = dataset.data.reduce((acc, v) => acc + (Number(v) || 0), 0);
+      if (total <= 0) return;
+
+      const isMultiDataset = chart.data.datasets.length > 1;
+
+      meta.data.forEach((bar, index) => {
+        if (!bar) return;
+        const val = Number(dataset.data[index]) || 0;
+        if (val <= 0) return;
+
+        const pct = (val / total) * 100;
+        if (pct < 1) return; // Don't draw if less than 1% to avoid clutter
+
+        const pctStr =
+          pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+
+        ctx.save();
+        ctx.font = isMultiDataset
+          ? "bold 8.5px 'Inter', sans-serif, system-ui"
+          : "bold 9.5px 'Inter', sans-serif, system-ui";
+        ctx.fillStyle = isHorizontal ? "#475569" : "#64748b";
+
+        if (isHorizontal) {
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          const posX = Math.min(bar.x + 5, chart.chartArea.right - 28);
+          ctx.fillText(pctStr, posX, bar.y);
+        } else {
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          const posY = Math.max(bar.y - 3, chart.chartArea.top + 8);
+          ctx.fillText(pctStr, bar.x, posY);
+        }
+        ctx.restore();
+      });
+    });
+  },
+};
+
+const linePercentagePlugin = {
+  id: "linePercentage",
+  afterDatasetsDraw(chart) {
+    if (chart.config.type !== "line") return;
+    const { ctx } = chart;
+
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (meta.hidden) return;
+
+      meta.data.forEach((point, index) => {
+        if (!point) return;
+        const val = dataset.data[index];
+        if (val === null || val === undefined || isNaN(val)) return;
+
+        let prev = null;
+        for (let i = index - 1; i >= 0; i--) {
+          if (
+            dataset.data[i] !== null &&
+            dataset.data[i] !== undefined &&
+            !isNaN(dataset.data[i])
+          ) {
+            prev = Number(dataset.data[i]);
+            break;
+          }
+        }
+
+        let pctStr = "";
+        if (prev !== null && prev > 0) {
+          const diff = Number(val) - prev;
+          const pct = (diff / prev) * 100;
+          const sign = pct >= 0 ? "+" : "";
+          pctStr = `${sign}${pct.toFixed(1)}%`;
+        }
+
+        if (!pctStr) return;
+
+        ctx.save();
+        ctx.font = "bold 9px 'Inter', sans-serif, system-ui";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillStyle = dataset.borderColor || "#2563eb";
+        const posY = Math.max(point.y - 5, chart.chartArea.top + 8);
+        ctx.fillText(pctStr, point.x, posY);
+        ctx.restore();
+      });
+    });
+  },
+};
+
+ChartJS.register(piePercentagePlugin, barPercentagePlugin, linePercentagePlugin);
+
 const BARANGAY_ORDER = [
   "Bonga Mayor",
   "Bonga Menor",
@@ -48,11 +235,147 @@ const BARANGAY_ORDER = [
   "Tibagan",
 ];
 
-const chartOpts = { responsive: true, maintainAspectRatio: false };
+const chartOpts = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    tooltip: {
+      callbacks: {
+        label: function (context) {
+          const dataset = context.dataset;
+          const label = dataset.label || context.label || "Count";
+          const value = Number(context.raw);
+          if (isNaN(value)) return ` ${label}: -`;
+
+          // If line chart, show YoY growth percentage
+          if (context.chart.config.type === "line") {
+            const dataIndex = context.dataIndex;
+            let prev = null;
+            for (let i = dataIndex - 1; i >= 0; i--) {
+              if (
+                dataset.data[i] !== null &&
+                dataset.data[i] !== undefined &&
+                !isNaN(dataset.data[i])
+              ) {
+                prev = Number(dataset.data[i]);
+                break;
+              }
+            }
+            if (prev !== null && prev > 0) {
+              const diff = value - prev;
+              const pct = (diff / prev) * 100;
+              const sign = pct >= 0 ? "+" : "";
+              return ` ${label}: ${value.toLocaleString()} (${sign}${pct.toFixed(1)}% vs prev)`;
+            }
+            return ` ${label}: ${value.toLocaleString()} (Baseline)`;
+          }
+
+          // If bar chart, show percentage of total in dataset
+          const total = dataset.data.reduce(
+            (acc, curr) => acc + (Number(curr) || 0),
+            0,
+          );
+          if (total > 0) {
+            const pct = (value / total) * 100;
+            const pctStr =
+              pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+            return ` ${label}: ${value.toLocaleString()} (${pctStr} of total)`;
+          }
+
+          return ` ${label}: ${value.toLocaleString()}`;
+        },
+      },
+    },
+  },
+  scales: {
+    y: {
+      ticks: { font: { size: 9 } },
+      grid: { color: "#edf2f7" },
+      grace: "10%",
+    },
+    x: {
+      ticks: { font: { size: 9 } },
+      grid: { display: false },
+    },
+  },
+};
+
+const pieOpts = {
+  ...chartOpts,
+  scales: undefined, // Pie charts do not use scales
+  plugins: {
+    legend: {
+      display: true,
+      position: "top",
+      align: "center",
+      labels: {
+        boxWidth: 12,
+        font: { size: 10.5 },
+        padding: 10,
+        generateLabels(chart) {
+          const data = chart.data;
+          if (!data?.labels?.length || !data?.datasets?.length) return [];
+          const dataset = data.datasets[0];
+          const meta = chart.getDatasetMeta(0);
+          const total = dataset.data.reduce((acc, v, idx) => {
+            if (chart.getDataVisibility && !chart.getDataVisibility(idx)) return acc;
+            return acc + (Number(v) || 0);
+          }, 0);
+
+          return data.labels.map((label, i) => {
+            const val = Number(dataset.data[i]) || 0;
+            const pct = total > 0 ? (val / total * 100) : 0;
+            const pctStr =
+              pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+            const style =
+              meta?.controller?.getStyle ? meta.controller.getStyle(i) : null;
+            const bgColors = dataset.backgroundColor;
+            const fillStyle =
+              style?.backgroundColor ||
+              (Array.isArray(bgColors) ? bgColors[i] : bgColors) ||
+              "#5d87ff";
+            const borderColors = dataset.borderColor;
+            const strokeStyle =
+              style?.borderColor ||
+              (Array.isArray(borderColors) ? borderColors[i] : (borderColors || "#ffffff"));
+
+            return {
+              text: `${label} (${pctStr})`,
+              fillStyle: fillStyle,
+              strokeStyle: strokeStyle,
+              lineWidth: style?.borderWidth ?? (dataset.borderWidth || 0),
+              hidden: chart.getDataVisibility ? !chart.getDataVisibility(i) : false,
+              index: i,
+            };
+          });
+        },
+      },
+    },
+    tooltip: {
+      callbacks: {
+        label: function (context) {
+          const label = context.label || "";
+          const value = Number(context.raw) || 0;
+          const dataset = context.dataset;
+          const total = dataset.data.reduce((acc, curr, idx) => {
+            if (context.chart?.getDataVisibility && !context.chart.getDataVisibility(idx)) return acc;
+            return acc + (Number(curr) || 0);
+          }, 0);
+          const pct = total > 0 ? (value / total * 100) : 0;
+          const pctStr =
+            pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+          return ` ${label}: ${value.toLocaleString()} (${pctStr})`;
+        },
+      },
+    },
+  },
+};
+
 const barOpts = {
   ...chartOpts,
   indexAxis: "y",
   plugins: {
+    ...chartOpts.plugins,
     legend: {
       display: true,
       position: "top",
@@ -62,7 +385,11 @@ const barOpts = {
   },
   scales: {
     y: { ticks: { font: { size: 9 } }, grid: { display: false } },
-    x: { ticks: { font: { size: 9 } }, grid: { display: false } },
+    x: {
+      ticks: { font: { size: 9 } },
+      grid: { display: false },
+      grace: "10%",
+    },
   },
 };
 
@@ -78,7 +405,7 @@ const barOpts = {
  *             allLabels: string[], allData: number[],
  *             slope: number, intercept: number }}
  */
-function linearRegression(points, projectYears = 6) {
+function linearRegression(points, projectYears = 5) {
   const empty = {
     historicalLabels: [],
     historicalData: [],
@@ -657,7 +984,7 @@ export default function Dashboard() {
         <div className="chart-item">
           <h4>Gender Distribution</h4>
           <div className="chart-container pie-box">
-            {!isLoading && <Pie data={pieChartData} options={chartOpts} />}
+            {!isLoading && <Pie data={pieChartData} options={pieOpts} />}
           </div>
         </div>
 
@@ -683,9 +1010,16 @@ export default function Dashboard() {
                 }}
                 options={{
                   ...chartOpts,
-                  plugins: { legend: { position: "top" } },
+                  plugins: {
+                    ...chartOpts.plugins,
+                    legend: { position: "top" },
+                  },
                   scales: {
-                    y: { beginAtZero: true, grid: { color: "#edf2f7" } },
+                    y: {
+                      beginAtZero: true,
+                      grid: { color: "#edf2f7" },
+                      grace: "10%",
+                    },
                     x: { grid: { display: false } },
                   },
                 }}
@@ -713,14 +1047,14 @@ export default function Dashboard() {
 
   const renderBarangayAnalysis = () => {
     const headers = [
-      { label: "Barangay", key: "name", align: "left", width: "16%" },
+      { label: "Barangay", key: "name", align: "left", width: "18%" },
       { label: "Population", key: "count", align: "right", width: "12%" },
       { label: "Households", key: "households", align: "right", width: "12%" },
       { label: "Senior Citizens", key: "seniors", align: "right", width: "12%" },
       { label: "PWD", key: "pwd", align: "right", width: "10%" },
-      { label: "4Ps Beneficiaries", key: "fourPs", align: "right", width: "13%" },
+      { label: "4Ps", key: "fourPs", align: "right", width: "10%" },
       { label: "Solo Parents", key: "soloParents", align: "right", width: "12%" },
-      { label: "Registered Voters", key: "voters", align: "right", width: "13%" },
+      { label: "Registered Voters", key: "voters", align: "right", width: "14%" },
     ];
 
     return (
@@ -1055,7 +1389,7 @@ export default function Dashboard() {
           <div className="chart-item">
             <h4>Senior Citizen ID Status</h4>
             <div className="chart-container pie-box">
-              {!isLoading && <Pie data={seniorPieData} options={chartOpts} />}
+              {!isLoading && <Pie data={seniorPieData} options={pieOpts} />}
             </div>
           </div>
           <div className="chart-item">
@@ -1071,7 +1405,7 @@ export default function Dashboard() {
           <div className="chart-item">
             <h4>PWD ID Card Status</h4>
             <div className="chart-container pie-box">
-              {!isLoading && <Pie data={pwdPieData} options={chartOpts} />}
+              {!isLoading && <Pie data={pwdPieData} options={pieOpts} />}
             </div>
           </div>
           <div className="chart-item">
@@ -1087,7 +1421,7 @@ export default function Dashboard() {
           <div className="chart-item">
             <h4>4Ps Beneficiaries Ratio</h4>
             <div className="chart-container pie-box">
-              {!isLoading && <Pie data={fourPsPieData} options={chartOpts} />}
+              {!isLoading && <Pie data={fourPsPieData} options={pieOpts} />}
             </div>
             <div
               style={{
@@ -1117,7 +1451,7 @@ export default function Dashboard() {
           <div className="chart-item">
             <h4>Solo Parent ID Status</h4>
             <div className="chart-container pie-box">
-              {!isLoading && <Pie data={soloParentPieData} options={chartOpts} />}
+              {!isLoading && <Pie data={soloParentPieData} options={pieOpts} />}
             </div>
             <div
               style={{
@@ -1146,7 +1480,7 @@ export default function Dashboard() {
           <div className="chart-item">
             <h4>Voter Registration Status</h4>
             <div className="chart-container pie-box">
-              {!isLoading && <Pie data={voterPieData} options={chartOpts} />}
+              {!isLoading && <Pie data={voterPieData} options={pieOpts} />}
             </div>
           </div>
           <div className="chart-item">
@@ -1163,7 +1497,7 @@ export default function Dashboard() {
             <h4>Employment Status Breakdown</h4>
             <div className="chart-container pie-box">
               {!isLoading && (
-                <Pie data={employmentPieData} options={chartOpts} />
+                <Pie data={employmentPieData} options={pieOpts} />
               )}
             </div>
             <div

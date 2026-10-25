@@ -51,6 +51,9 @@ export default function AddResident() {
   const [expandedMemberIndex, setExpandedMemberIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
   const [formWarning, setFormWarning] = useState("");
+  const [verificationStatus, setVerificationStatus] = useState("idle"); // 'idle' | 'searching' | 'matched' | 'new_household'
+  const [matchedHousehold, setMatchedHousehold] = useState(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // Reusable default states so we can both initialize and reset the form
   const initialHousehold = {
@@ -536,10 +539,16 @@ export default function AddResident() {
         JSON.stringify([...allRecords, ...newRecordsLocal]),
       );
 
+      const incrementInfo = verificationStatus === "matched" && matchedHousehold
+        ? " | Prior-year match: " + matchedHousehold.totalMembers + " member(s) in " + matchedHousehold.priorYear + ", Net increment: " + ((residentsToSave.length) - matchedHousehold.totalMembers >= 0 ? "+" : "") + ((residentsToSave.length) - matchedHousehold.totalMembers)
+        : verificationStatus === "new_household"
+          ? " | New household (no prior-year record)"
+          : "";
+
       logTransaction({
         action: "Add Resident",
         category: "Resident Management",
-        details: `Registered household ${residentsToSave[0]?.h_no || ""} in ${residentsToSave[0]?.barangay || ""} with ${residentsToSave.length} member(s) for year ${residentsToSave[0]?.data_year || ""}.`,
+        details: "Registered household " + (residentsToSave[0]?.h_no || "") + " in " + (residentsToSave[0]?.barangay || "") + " with " + residentsToSave.length + " member(s) for year " + (residentsToSave[0]?.data_year || "") + "." + incrementInfo,
       });
 
       alert("Resident successfully saved to Supabase!");
@@ -552,6 +561,103 @@ export default function AddResident() {
       alert("Failed to save to Supabase: " + err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // ── Pre-Entry Household Verification (Prior-Year Lookup) ──
+  const handleVerifyHousehold = async () => {
+    if (!household.house_no || !household.brgy) {
+      alert("Please enter House Number and select a Barangay before verifying.");
+      return;
+    }
+    setIsVerifying(true);
+    setVerificationStatus("searching");
+    setMatchedHousehold(null);
+    try {
+      const currentYearNum = household.data_year
+        ? parseInt(household.data_year, 10)
+        : new Date().getFullYear();
+      const priorYear = currentYearNum - 1;
+
+      // 1. Check Supabase for prior-year records
+      const { data: supaMatches, error: supaErr } = await supabase
+        .from("residents")
+        .select("*")
+        .eq("house_no", household.house_no.trim())
+        .ilike("barangay", household.brgy.trim())
+        .eq("data_year", priorYear)
+        .order("is_household_head", { ascending: false });
+
+      if (supaErr) console.warn("Supabase lookup warn:", supaErr);
+
+      // 2. Also check localStorage
+      const allLocal = JSON.parse(localStorage.getItem("tanawanData")) || [];
+      const localMatches = allLocal.filter((rec) => {
+        const sameNo = (rec.no || "").trim() === household.house_no.trim();
+        const sameBrgy = (rec.brgy || "").toLowerCase().trim() === household.brgy.toLowerCase().trim();
+        const recYear = rec.dataYear ? parseInt(rec.dataYear, 10) : null;
+        return sameNo && sameBrgy && recYear === priorYear;
+      });
+
+      const combined = [...(supaMatches || []), ...localMatches];
+
+      if (combined.length > 0) {
+        // ── MATCH FOUND ──
+        const headRecord = supaMatches?.find((r) => r.is_household_head) || combined[0];
+        setMatchedHousehold({
+          h_no: headRecord.h_no || headRecord.h_no || "",
+          house_no: headRecord.house_no || headRecord.no || household.house_no,
+          street: headRecord.street || headRecord.st || "",
+          purok: headRecord.purok || headRecord.p || "",
+          brgy: headRecord.barangay || headRecord.brgy || household.brgy,
+          headName: headRecord.last_name
+            ? (headRecord.last_name + ", " + headRecord.first_name)
+            : (headRecord.last || "") + ", " + (headRecord.first || ""),
+          priorYear: priorYear,
+          totalMembers: combined.length,
+        });
+        // Retain the established HH identifier
+        setHousehold((prev) => ({
+          ...prev,
+          hh_num: headRecord.h_no || headRecord.h_no || prev.hh_num,
+          street: headRecord.street || headRecord.st || prev.street,
+          purok: headRecord.purok || headRecord.p || prev.purok,
+        }));
+        setVerificationStatus("matched");
+      } else {
+        // ── NO MATCH — New Household ──
+        setVerificationStatus("new_household");
+        // Auto-generate HH number for the new household
+        try {
+          const selectedBrgy = household.brgy;
+          const prefix = selectedBrgy.substring(0, 3).toUpperCase();
+          const { data } = await supabase
+            .from("residents")
+            .select("h_no")
+            .ilike("h_no", prefix + "%");
+          let maxNum = 0;
+          if (data && data.length > 0) {
+            data.forEach((row) => {
+              const numMatch = row.h_no?.match(new RegExp("^" + prefix + "(\\d+)$", "i"));
+              if (numMatch) {
+                const num = parseInt(numMatch[1], 10);
+                if (num > maxNum) maxNum = num;
+              }
+            });
+          }
+          setHousehold((prev) => ({
+            ...prev,
+            hh_num: prefix + (maxNum + 1),
+          }));
+        } catch {
+          // fallback — keep existing hh_num
+        }
+      }
+    } catch (err) {
+      console.error("Verification lookup error:", err);
+      alert("Error checking prior-year records: " + err.message);
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -608,6 +714,8 @@ export default function AddResident() {
     setMembers([]);
     setExpandedMemberIndex(-1);
     setFormWarning("");
+    setVerificationStatus("idle");
+    setMatchedHousehold(null);
     setCurrentStep(1);
   };
 
@@ -699,6 +807,82 @@ export default function AddResident() {
 
               {currentStep === 1 && (
                 <div className="form-step animate-fade-up">
+                  {/* ── Pre-Entry Household Verification Box ── */}
+                  <div className="verification-box">
+                    <div className="verification-header">
+                      <i className="fa-solid fa-magnifying-glass" style={{ color: "#2563eb", fontSize: "15px" }}></i>
+                      <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#1e293b" }}>
+                        Pre-Entry Household Verification
+                      </h3>
+                      <span style={{ fontSize: "11px", color: "#64748b", fontStyle: "italic" }}>
+                        Verify prior-year records before encoding
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "12.5px", color: "#475569", margin: "8px 0 14px", lineHeight: 1.5 }}>
+                      Enter the <b>House Number</b> and select a <b>Barangay</b>, then click <b>Verify</b> to check
+                      if this household already exists in the previous Data Year ({household.data_year ? parseInt(household.data_year, 10) - 1 : new Date().getFullYear() - 1}).
+                    </p>
+                    <button
+                      type="button"
+                      className="btn-verify-household"
+                      onClick={handleVerifyHousehold}
+                      disabled={isVerifying || !household.house_no || !household.brgy}
+                    >
+                      {isVerifying ? (
+                        <><i className="fa-solid fa-spinner fa-spin"></i> Searching...</>
+                      ) : (
+                        <><i className="fa-solid fa-magnifying-glass"></i> Verify Household</>
+                      )}
+                    </button>
+
+                    {verificationStatus === "matched" && matchedHousehold && (
+                      <div className="verification-matched-card">
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                          <i className="fa-solid fa-circle-check" style={{ color: "#16a34a", fontSize: "18px" }}></i>
+                          <div>
+                            <strong style={{ color: "#166534" }}>Household Match Found!</strong>
+                            <span className="badge-continuity">Identifier Retained</span>
+                          </div>
+                        </div>
+                        <div className="matched-details-grid">
+                          <div className="matched-detail-item">
+                            <small>Household #</small>
+                            <strong>{matchedHousehold.h_no}</strong>
+                          </div>
+                          <div className="matched-detail-item">
+                            <small>Head of Household</small>
+                            <strong>{matchedHousehold.headName}</strong>
+                          </div>
+                          <div className="matched-detail-item">
+                            <small>Prior Year</small>
+                            <strong>{matchedHousehold.priorYear}</strong>
+                          </div>
+                          <div className="matched-detail-item">
+                            <small>Prior Members</small>
+                            <strong>{matchedHousehold.totalMembers}</strong>
+                          </div>
+                        </div>
+                        <p style={{ fontSize: "11.5px", color: "#166534", marginTop: "10px", fontStyle: "italic" }}>
+                          The household identifier has been retained. You may now proceed to encode additional members.
+                        </p>
+                      </div>
+                    )}
+
+                    {verificationStatus === "new_household" && (
+                      <div className="verification-new-card">
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <i className="fa-solid fa-house-chimney-medical" style={{ color: "#d97706", fontSize: "18px" }}></i>
+                          <div>
+                            <strong style={{ color: "#92400e" }}>No Prior-Year Record Found</strong>
+                            <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#78716c" }}>
+                              This will be registered as a new household for Data Year {household.data_year}.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <h2 className="form-section-title">Household Information</h2>
                   <div className="grid-4-cols">
                     <div className="field-group">
@@ -707,10 +891,17 @@ export default function AddResident() {
                         type="text"
                         placeholder="2024-XXXX"
                         value={household.hh_num}
+                        readOnly={verificationStatus === "matched"}
                         onChange={(e) =>
                           setHousehold({ ...household, hh_num: e.target.value })
                         }
+                        style={verificationStatus === "matched" ? { backgroundColor: "#f0fdf4", border: "1px solid #86efac", cursor: "not-allowed" } : {}}
                       />
+                      {verificationStatus === "matched" && (
+                        <span style={{ fontSize: "10.5px", color: "#16a34a", fontWeight: 600 }}>
+                          <i className="fa-solid fa-lock"></i> Locked — Continuity ID
+                        </span>
+                      )}
                     </div>
                     <div className="field-group">
                       <label>House Number</label>
@@ -842,6 +1033,15 @@ export default function AddResident() {
 
               {currentStep === 2 && (
                 <div className="form-step animate-fade-up">
+                  {verificationStatus === "matched" && matchedHousehold && (
+                    <div className="matched-head-banner">
+                      <i className="fa-solid fa-house" style={{ color: "#2563eb", fontSize: "15px" }}></i>
+                      <span>
+                        Encoding for established household <strong>{matchedHousehold.h_no}</strong> —
+                        Prior head: <strong>{matchedHousehold.headName}</strong> ({matchedHousehold.priorYear})
+                      </span>
+                    </div>
+                  )}
                   <h2 className="form-section-title">
                     Household Head Information
                   </h2>
@@ -2051,11 +2251,52 @@ export default function AddResident() {
 
               {currentStep === 4 && (
                 <div className="summary-area animate-fade-up">
+                  {/* ── Incremental Population Tracker Banner ── */}
+                  {verificationStatus === "matched" && matchedHousehold && (
+                    <div className="increment-tracker-banner">
+                      <h4 style={{ margin: "0 0 10px", fontSize: "14px", color: "#1e40af", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <i className="fa-solid fa-chart-column"></i> Incremental Population Tracker
+                      </h4>
+                      <div className="increment-tracker-stats">
+                        <div className="increment-stat">
+                          <small>Prior Year ({matchedHousehold.priorYear})</small>
+                          <strong>{matchedHousehold.totalMembers} member{matchedHousehold.totalMembers !== 1 ? "s" : ""}</strong>
+                        </div>
+                        <div className="increment-stat">
+                          <small>Current Year ({household.data_year})</small>
+                          <strong>{1 + members.length} member{(1 + members.length) !== 1 ? "s" : ""}</strong>
+                        </div>
+                        <div className="increment-stat">
+                          <small>Net Increment</small>
+                          <span className="increment-badge-pill">
+                            {(1 + members.length) - matchedHousehold.totalMembers >= 0 ? "+" : ""}
+                            {(1 + members.length) - matchedHousehold.totalMembers}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {verificationStatus === "new_household" && (
+                    <div className="increment-tracker-banner" style={{ background: "linear-gradient(135deg, #fffbeb, #fef3c7)", borderColor: "#fbbf24" }}>
+                      <h4 style={{ margin: "0 0 6px", fontSize: "14px", color: "#92400e", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <i className="fa-solid fa-house-chimney-medical"></i> New Household Entry
+                      </h4>
+                      <p style={{ margin: 0, fontSize: "12.5px", color: "#78716c" }}>
+                        This household has no prior-year records. Registering <strong>{1 + members.length}</strong> new member{(1 + members.length) !== 1 ? "s" : ""} for Data Year {household.data_year}.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="summary-section">
                     <h3>Household Location & Residence</h3>
                     <div className="summary-grid">
                       <span>
                         <b>HH #:</b> {household.hh_num}
+                        {verificationStatus === "matched" && (
+                          <span style={{ marginLeft: "8px", fontSize: "10.5px", color: "#16a34a", fontWeight: 600 }}>
+                            <i className="fa-solid fa-lock"></i> Continuity
+                          </span>
+                        )}
                       </span>
                       <span>
                         <b>Brgy:</b> {household.brgy}
@@ -2069,6 +2310,13 @@ export default function AddResident() {
                         {household.residence_type === "Other"
                           ? household.residence_type_other
                           : household.residence_type}
+                      </span>
+                      <span>
+                        <b>Data Year:</b> {household.data_year}
+                      </span>
+                      <span>
+                        <b>Verification:</b>{" "}
+                        {verificationStatus === "matched" ? "Matched (Prior-Year)" : verificationStatus === "new_household" ? "New Household" : "Not Verified"}
                       </span>
                     </div>
                   </div>
