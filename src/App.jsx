@@ -17,6 +17,7 @@ import Programs from './pages/Programs';
 import ArchiveResidents from './pages/ArchiveResidents';
 import UploadData from './pages/UploadData';
 import TransactionLogs from './pages/TransactionLogs';
+import SensitiveCases from './pages/SensitiveCases';
 import ForcePasswordChange from './pages/ForcePasswordChange';
 import ProtectedRoute from './ProtectedRoutes/ProtectedRoute';
 import './css/global.css';
@@ -152,6 +153,10 @@ function AppInner() {
         <Route path="/transaction-logs" element={
           <ProtectedRoute allowedRoles={['Admin', 'Administrator']}>
             <TransactionLogs />
+          </ProtectedRoute>} />
+        <Route path="/sensitive-cases" element={
+          <ProtectedRoute allowedRoles={['Admin', 'Administrator']}>
+            <SensitiveCases />
           </ProtectedRoute>} />
         <Route path="/archive" element={<ProtectedRoute><ArchiveResidents /></ProtectedRoute>} />
         <Route path="/upload" element={

@@ -144,6 +144,10 @@ CREATE TABLE public.residents (
     teenage_pregnancy_case BOOLEAN NULL DEFAULT FALSE,
     current_teenage_mother BOOLEAN NULL DEFAULT FALSE,
     child_pregnancy_case BOOLEAN NULL DEFAULT FALSE,
+    -- Confidential DSWD referral tracking for child-pregnancy cases.
+    dswd_referral_status TEXT NOT NULL DEFAULT 'Pending',
+    dswd_referred_at TIMESTAMP WITH TIME ZONE NULL,
+    dswd_referral_notes TEXT NULL,
     is_4ps BOOLEAN NULL DEFAULT FALSE,
     is_voter TEXT NULL,
     barangay TEXT NOT NULL,
@@ -154,6 +158,8 @@ CREATE TABLE public.residents (
     created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NOW(),
     data_year INTEGER NULL,
     attended_items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    CONSTRAINT residents_dswd_referral_status_chk
+        CHECK (dswd_referral_status IN ('Pending', 'Referred', 'Closed')),
     CONSTRAINT residents_pkey PRIMARY KEY (id)
 ) TABLESPACE pg_default;
 
@@ -178,6 +184,13 @@ ALTER TABLE public.residents
 
 CREATE INDEX IF NOT EXISTS idx_residents_attended_items
     ON public.residents USING GIN (attended_items);
+
+-- Supports the restricted Sensitive Cases listing without exposing those
+-- rows in the public resident/report queries. Archived cases stay in the
+-- registry so DSWD referral history is not lost.
+CREATE INDEX IF NOT EXISTS idx_residents_sensitive_child_pregnancy
+    ON public.residents (data_year, barangay, dswd_referral_status)
+    WHERE child_pregnancy_case IS TRUE;
 -- For existing databases: run these ALTER statements to
 -- add the archive reason columns if they don't yet exist.
 -- --------------------------------------------------------
@@ -229,6 +242,124 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_prevent_duplicate_resident
     BEFORE INSERT ON public.residents
     FOR EACH ROW EXECUTE FUNCTION public.check_duplicate_resident();
+
+-- --------------------------------------------------------
+-- Sensitive child-pregnancy classification
+--
+-- Kept in the database as a second line of defence behind the
+-- app-level Sensitive Cases password gate. The migration for
+-- existing databases is supabase/sensitive_child_pregnancy.sql.
+-- --------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.resident_pregnancy_age(
+    p_birth_date DATE,
+    p_age INTEGER,
+    p_data_year INTEGER
+)
+RETURNS INTEGER
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_reference_date DATE;
+BEGIN
+    IF p_birth_date IS NULL THEN
+        RETURN p_age;
+    END IF;
+
+    IF p_data_year IS NULL
+       OR p_data_year = EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER THEN
+        v_reference_date := CURRENT_DATE;
+    ELSE
+        v_reference_date := make_date(p_data_year, 12, 31);
+    END IF;
+
+    RETURN EXTRACT(YEAR FROM AGE(v_reference_date, p_birth_date))::INTEGER;
+EXCEPTION
+    WHEN others THEN
+        RETURN p_age;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enforce_child_pregnancy_classification()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_is_female BOOLEAN;
+    v_age INTEGER;
+    v_first_birth INTEGER := COALESCE(NEW.age_at_first_birth, 0);
+BEGIN
+    v_is_female := LOWER(TRIM(COALESCE(NEW.sex, ''))) IN
+        ('female', 'f', 'woman', 'girl');
+
+    v_age := public.resident_pregnancy_age(
+        NEW.birth_date,
+        NEW.age,
+        NEW.data_year
+    );
+
+    IF NEW.birth_date IS NOT NULL AND v_age IS NOT NULL THEN
+        NEW.age := v_age;
+    END IF;
+
+    NEW.child_pregnancy_case := COALESCE(NEW.child_pregnancy_case, FALSE);
+    NEW.teenage_pregnancy_case := COALESCE(NEW.teenage_pregnancy_case, FALSE);
+    NEW.current_teenage_mother := COALESCE(NEW.current_teenage_mother, FALSE);
+
+    IF NOT v_is_female THEN
+        NEW.child_pregnancy_case := FALSE;
+        NEW.teenage_pregnancy_case := FALSE;
+        NEW.current_teenage_mother := FALSE;
+        RETURN NEW;
+    END IF;
+
+    IF NEW.child_pregnancy_case IS TRUE
+       OR (v_first_birth BETWEEN 1 AND 9)
+       OR (
+           v_age IS NOT NULL
+           AND v_age <= 9
+           AND (
+               NEW.teenage_pregnancy_case IS TRUE
+               OR NEW.current_teenage_mother IS TRUE
+               OR v_first_birth > 0
+           )
+       )
+    THEN
+        NEW.child_pregnancy_case := TRUE;
+        -- A child case always wins. It must never also be counted as an
+        -- official teenage pregnancy or as a current teenage mother, even
+        -- after the resident becomes a teenager.
+        NEW.teenage_pregnancy_case := FALSE;
+        NEW.current_teenage_mother := FALSE;
+
+        RETURN NEW;
+    END IF;
+
+    IF v_first_birth > 0 THEN
+        NEW.teenage_pregnancy_case := (v_first_birth <= 19);
+    END IF;
+
+    IF v_age IS NULL OR v_age < 10 OR v_age > 19 THEN
+        NEW.current_teenage_mother := FALSE;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_enforce_child_pregnancy_classification
+    BEFORE INSERT OR UPDATE OF
+        birth_date,
+        age,
+        sex,
+        data_year,
+        teenage_pregnancy_case,
+        current_teenage_mother,
+        child_pregnancy_case,
+        age_at_first_birth
+    ON public.residents
+    FOR EACH ROW
+    EXECUTE FUNCTION public.enforce_child_pregnancy_classification();
 
 
 -- ============================================================

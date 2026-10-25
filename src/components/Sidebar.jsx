@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { label: 'Upload Files', path: '/upload' },
   { label: 'Manage Account', path: '/manage-accounts' },
   { label: 'Transaction Logs', path: '/transaction-logs' },
+  { label: 'Sensitive Cases', path: '/sensitive-cases', confidential: true },
 ];
 
 export default function Sidebar() {
@@ -55,7 +56,11 @@ export default function Sidebar() {
   const userRole = userProfile?.role || 'Staff';
 
   const filteredNavItems = NAV_ITEMS.filter((item) => {
-    if (item.path === '/transaction-logs' || item.path === '/programs') {
+    if (
+      item.path === '/transaction-logs' ||
+      item.path === '/programs' ||
+      item.path === '/sensitive-cases'
+    ) {
       return userRole === 'Admin' || userRole === 'Administrator';
     }
     if (userRole === 'Staff') {

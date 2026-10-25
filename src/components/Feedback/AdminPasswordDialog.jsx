@@ -14,6 +14,9 @@ export default function AdminPasswordDialog({ options, onCancel, onResolved }) {
     actionTitle = "Admin Password Required",
     actionDescription = "Please enter your administrator password to authorize this action.",
     confirmLabel = "Verify",
+    passwordLabel = "Admin Password",
+    invalidMessage = "Incorrect admin password. Please try again.",
+    verifyPassword = verifyAdminPassword,
   } = options;
 
   const [password, setPassword] = useState("");
@@ -45,13 +48,13 @@ export default function AdminPasswordDialog({ options, onCancel, onResolved }) {
     }
 
     setLoading(true);
-    const ok = await verifyAdminPassword(password);
+    const ok = await verifyPassword(password);
 
     // The dialog may have unmounted while the check was in flight.
     if (!aliveRef.current) return;
 
     if (!ok) {
-      setError("Incorrect admin password. Please try again.");
+      setError(invalidMessage);
       setPassword("");
       setLoading(false);
       return;
@@ -86,7 +89,7 @@ export default function AdminPasswordDialog({ options, onCancel, onResolved }) {
 
             <div className="fb-field">
               <label className="fb-field-label" htmlFor="fb-admin-password">
-                Admin Password <span className="req">*</span>
+                {passwordLabel} <span className="req">*</span>
               </label>
               <PasswordInput
                 id="fb-admin-password"

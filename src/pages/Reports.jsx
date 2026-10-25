@@ -16,13 +16,12 @@ import { logTransaction } from '../utils/logger';
 import { formatResidentName } from '../lib/residentName';
 import { useToast } from '../components/Feedback/FeedbackProvider';
 import '../css/Reports.css';
+import { getDataYearOptions, currentYear } from '../lib/ageEngine';
 
-const START_YEAR = 2020;
-const CURRENT_YEAR = new Date().getFullYear();
-const DATA_YEAR_OPTIONS = Array.from(
-  { length: CURRENT_YEAR - START_YEAR + 1 },
-  (_, i) => CURRENT_YEAR - i
-);
+// Data years offered by the report selector: the upcoming year (so an annual
+// roll-over can be reviewed before it lands) through a ten-year look-back.
+const CURRENT_YEAR = currentYear();
+const DATA_YEAR_OPTIONS = getDataYearOptions();
 
 const REPORT_SECTIONS = [
   { id: 'age-gender', label: 'Age and Gender Distribution' },
@@ -788,6 +787,11 @@ export default function Reports() {
                       }}
                     >
                       {y}
+                      {y > CURRENT_YEAR && (
+                        <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: '700', color: '#b45309' }}>
+                          (Upcoming)
+                        </span>
+                      )}
                       {selectedYear === y && <i className="fas fa-check" style={{ fontSize: '12px' }}></i>}
                     </div>
                   ))}
