@@ -1,17 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
 import UserProfileBadge from '../components/UserProfileBadge';
 import { supabase } from '../lib/supabase';
 import { barangayNames } from '../data/brgyData';
+import {
+  PROGRAM,
+  SEMINAR,
+  attendanceOptionValue,
+  buildGroups,
+  fetchAttendanceCatalog,
+  matchAttendanceTarget,
+  resolveAttendanceTargets,
+} from '../lib/attendance';
 import { logTransaction } from '../utils/logger';
+import { formatResidentName } from '../lib/residentName';
+import { useToast } from '../components/Feedback/FeedbackProvider';
 import '../css/Reports.css';
+import { getDataYearOptions, currentYear } from '../lib/ageEngine';
 
-const START_YEAR = 2020;
-const CURRENT_YEAR = new Date().getFullYear();
-const DATA_YEAR_OPTIONS = Array.from(
-  { length: CURRENT_YEAR - START_YEAR + 1 },
-  (_, i) => CURRENT_YEAR - i
-);
+// Data years offered by the report selector: the upcoming year (so an annual
+// roll-over can be reviewed before it lands) through a ten-year look-back.
+const CURRENT_YEAR = currentYear();
+const DATA_YEAR_OPTIONS = getDataYearOptions();
 
 const REPORT_SECTIONS = [
   { id: 'age-gender', label: 'Age and Gender Distribution' },
@@ -22,6 +32,7 @@ const REPORT_SECTIONS = [
   { id: 'solo-parent-report', label: 'Solo Parents Detailed Report' },
   { id: 'voters-report', label: 'Total Voters per Barangay' },
   { id: 'generations', label: 'Generations Report' },
+  { id: 'programs-seminars', label: 'Programs & Seminars Attendance Report' },
 ];
 
 function ReportHeader({ selectedYear, currentDate }) {
@@ -66,10 +77,63 @@ export default function Reports() {
   const [genderFilter, setGenderFilter] = useState('both');
   const [generationFilter, setGenerationFilter] = useState('all');
   const [customStartYear, setCustomStartYear] = useState(1990);
+  const toast = useToast();
   const [customEndYear, setCustomEndYear] = useState(2005);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+
+  // Programs/seminars to print attendance rosters for.
+  const [attendanceTargets, setAttendanceTargets] = useState([]);
+  const [attendanceCatalog, setAttendanceCatalog] = useState({ programs: [], seminars: [] });
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const [attendanceError, setAttendanceError] = useState('');
   const currentDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  const loadAttendanceCatalog = useCallback(async () => {
+    setAttendanceLoading(true);
+    setAttendanceError('');
+    const result = await fetchAttendanceCatalog();
+    setAttendanceCatalog({ programs: result.programs, seminars: result.seminars });
+    setAttendanceError(result.error || '');
+    setAttendanceLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadAttendanceCatalog();
+  }, [loadAttendanceCatalog]);
+
+  const attendanceGroups = useMemo(
+    () => buildGroups(attendanceCatalog.programs, attendanceCatalog.seminars),
+    [attendanceCatalog],
+  );
+
+  const attendanceTargetList = useMemo(
+    () => resolveAttendanceTargets(attendanceTargets, attendanceGroups),
+    [attendanceTargets, attendanceGroups],
+  );
+
+  // Drop selections whose program/seminar disappeared (e.g. archived elsewhere)
+  // so the print guard cannot be blocked by a stale value.
+  useEffect(() => {
+    if (attendanceLoading) return;
+    setAttendanceTargets(prev => {
+      const available = new Set();
+      for (const { program, seminars } of attendanceGroups) {
+        available.add(attendanceOptionValue(PROGRAM, program.id));
+        for (const seminar of seminars) {
+          available.add(attendanceOptionValue(SEMINAR, seminar.id));
+        }
+      }
+      const next = prev.filter(value => available.has(value));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [attendanceGroups, attendanceLoading]);
+
+  const toggleAttendanceTarget = (value) => {
+    setAttendanceTargets(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value],
+    );
+  };
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -95,7 +159,7 @@ export default function Reports() {
           const to = from + PAGE_SIZE - 1;
           const { data, error } = await supabase
             .from('residents')
-            .select('barangay, sex, age, birth_date, is_pwd, is_senior, is_solo_parent, is_4ps, is_voter, h_no, is_household_head, has_senior_id, has_pwd_id, has_solo_parent_id')
+            .select('barangay, sex, age, birth_date, is_pwd, is_senior, is_solo_parent, is_4ps, is_voter, h_no, is_household_head, has_senior_id, has_pwd_id, has_solo_parent_id, last_name, first_name, middle_name, qualifier, attended_items')
             .eq('is_archived', false)
             .eq('data_year', selectedYear)
             .range(from, to);
@@ -124,7 +188,12 @@ export default function Reports() {
           is_4ps: c.is4ps,
           is_voter: c.isVoter,
           h_no: c.h_no,
-          is_household_head: c.isHead
+          is_household_head: c.isHead,
+          last_name: c.last,
+          first_name: c.first,
+          middle_name: c.mid,
+          qualifier: c.q,
+          attended_items: c.attendedItems
         }));
         setResidents(mapped);
       } finally {
@@ -150,7 +219,7 @@ export default function Reports() {
 
   const handlePrint = () => {
     if (selectedSections.length === 0) {
-      alert('Please select at least one report!');
+      toast.warning('Please select at least one report section to print.');
       return;
     }
 
@@ -158,13 +227,18 @@ export default function Reports() {
       const s = parseInt(customStartYear, 10);
       const e = parseInt(customEndYear, 10);
       if (!customStartYear || !customEndYear || isNaN(s) || isNaN(e)) {
-        alert('Invalid Year Range: Please enter both Start Year and End Year.');
+        toast.error('Invalid year range: please enter both a start year and an end year.');
         return;
       }
       if (s > e) {
-        alert(`Invalid Year Range: Start Year (${s}) cannot be greater than End Year (${e}).`);
+        toast.error(`Invalid year range: start year (${s}) cannot be greater than end year (${e}).`);
         return;
       }
+    }
+
+    if (selectedSections.includes('programs-seminars') && attendanceTargets.length === 0) {
+      toast.error('Programs & Seminars report: please select at least one program or seminar to print.');
+      return;
     }
 
     logTransaction({
@@ -713,6 +787,11 @@ export default function Reports() {
                       }}
                     >
                       {y}
+                      {y > CURRENT_YEAR && (
+                        <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: '700', color: '#b45309' }}>
+                          (Upcoming)
+                        </span>
+                      )}
                       {selectedYear === y && <i className="fas fa-check" style={{ fontSize: '12px' }}></i>}
                     </div>
                   ))}
@@ -841,6 +920,75 @@ export default function Reports() {
                                 </span>
                               )}
                             </div>
+                          )}
+                        </div>
+                      )}
+                      {section.id === 'programs-seminars' && selectedSections.includes('programs-seminars') && (
+                        <div style={{ marginLeft: '32px', marginTop: '6px', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '10px', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--primary-dark)' }}>
+                            Select Programs / Seminars to Print:
+                          </span>
+
+                          {attendanceLoading && (
+                            <span style={{ fontSize: '12px', color: '#64748b' }}>Loading programs and seminars...</span>
+                          )}
+
+                          {!attendanceLoading && attendanceError && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                              <span style={{ fontSize: '12px', color: '#c53030' }}>⚠ Could not load programs: {attendanceError}</span>
+                              <button
+                                type="button"
+                                onClick={loadAttendanceCatalog}
+                                style={{ background: 'white', border: '1px solid #feb2b2', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: '700', color: '#c53030', cursor: 'pointer' }}
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          )}
+
+                          {!attendanceLoading && !attendanceError && attendanceGroups.length === 0 && (
+                            <span style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
+                              No programs available yet. Add them on the <b>Programs</b> page first.
+                            </span>
+                          )}
+
+                          {!attendanceLoading && !attendanceError && attendanceGroups.map(({ program, seminars }) => (
+                            <div key={program.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', fontWeight: '700', color: '#1e293b' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={attendanceTargets.includes(attendanceOptionValue(PROGRAM, program.id))}
+                                  onChange={() => toggleAttendanceTarget(attendanceOptionValue(PROGRAM, program.id))}
+                                  style={{ accentColor: 'var(--primary)', cursor: 'pointer', width: '15px', height: '15px' }}
+                                />
+                                {program.name}
+                                <span style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '0.3px', textTransform: 'uppercase', color: '#64748b', background: '#e2e8f0', borderRadius: '999px', padding: '1px 7px' }}>Program</span>
+                              </label>
+
+                              {seminars.length > 0 ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '6px', paddingLeft: '26px' }}>
+                                  {seminars.map((seminar) => (
+                                    <label key={seminar.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: '#334155' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={attendanceTargets.includes(attendanceOptionValue(SEMINAR, seminar.id))}
+                                        onChange={() => toggleAttendanceTarget(attendanceOptionValue(SEMINAR, seminar.id))}
+                                        style={{ accentColor: 'var(--primary)', cursor: 'pointer', width: '14px', height: '14px' }}
+                                      />
+                                      {seminar.title}
+                                    </label>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: '11.5px', color: '#94a3b8', fontStyle: 'italic', paddingLeft: '26px' }}>No seminars</span>
+                              )}
+                            </div>
+                          ))}
+
+                          {!attendanceLoading && attendanceTargets.length > 0 && (
+                            <span style={{ fontSize: '11.5px', color: '#2b6cb0', fontWeight: '600' }}>
+                              {attendanceTargets.length} selected — a separate roster table will be printed for each.
+                            </span>
                           )}
                         </div>
                       )}
@@ -1314,6 +1462,87 @@ export default function Reports() {
                 </tbody>
               </table>
             )}
+            <ReportFooter />
+          </div>
+        )}
+
+        {selectedSections.includes('programs-seminars') && (
+          <div id="programs-seminars" className="report-section show-print">
+            <ReportHeader selectedYear={selectedYear} currentDate={currentDate} />
+            <h3>IX. Programs &amp; Seminars Attendance Report ({selectedYear})</h3>
+
+            {attendanceTargetList.length === 0 ? (
+              <p style={{ fontSize: '11px', fontStyle: 'italic', color: '#718096' }}>
+                No program or seminar was selected.
+              </p>
+            ) : (
+              attendanceTargetList.map((target, targetIndex) => {
+                const rows = residents
+                  .map((resident) => ({
+                    resident,
+                    via: matchAttendanceTarget(resident.attended_items, target),
+                  }))
+                  .filter((row) => row.via !== null)
+                  .sort((a, b) => {
+                    const nameA = `${a.resident.last_name || ''} ${a.resident.first_name || ''}`.toUpperCase();
+                    const nameB = `${b.resident.last_name || ''} ${b.resident.first_name || ''}`.toUpperCase();
+                    return nameA.localeCompare(nameB);
+                  });
+
+                // A, B, C... for IX-A, IX-B. Starting at 73 gave "IX-I", which reads as "IX-1".
+const letter = String.fromCharCode(65 + targetIndex);
+
+                return (
+                  <div key={`${target.kind}:${target.id}`} style={{ marginBottom: '26px', pageBreakInside: 'avoid' }}>
+                    <h4 style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: '800', color: '#2b6cb0', textTransform: 'uppercase', letterSpacing: '0.4px', pageBreakAfter: 'avoid' }}>
+                      IX-{letter}. {target.name} — {target.kind === PROGRAM ? 'Program' : 'Seminar'}
+                    </h4>
+                    {target.kind === SEMINAR && target.programName && (
+                      <p style={{ margin: '0 0 8px 0', fontSize: '10px', color: '#718096' }}>
+                        Under Program: {target.programName}
+                      </p>
+                    )}
+
+                    {rows.length === 0 ? (
+                      <p style={{ fontSize: '11px', fontStyle: 'italic', color: '#718096', margin: '0' }}>
+                        No residents recorded as attending &ldquo;{target.name}&rdquo;.
+                      </p>
+                    ) : (
+                      <>
+                        <table style={{ fontSize: '11px' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign: 'center', width: '34px' }}>#</th>
+                              <th style={{ textAlign: 'left' }}>NAME</th>
+                              <th style={{ textAlign: 'left' }}>BARANGAY</th>
+                              <th style={{ textAlign: 'center' }}>ATTENDED VIA</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map(({ resident, via }, rowIndex) => (
+                              <tr key={resident.h_no ? `${resident.h_no}-${rowIndex}` : rowIndex}>
+                                <td style={{ textAlign: 'center' }}>{rowIndex + 1}</td>
+                                <td>{formatResidentName(resident)}</td>
+                                <td>{resident.barangay || '—'}</td>
+                                <td style={{ textAlign: 'center' }}>
+                                  {via === 'both' ? 'Program & Seminar' : via === 'program' ? 'Program' : 'Seminar'}
+                                </td>
+                              </tr>
+                            ))}
+                            <tr>
+                              <td colSpan="4" style={{ textAlign: 'right' }}>
+                                <strong>TOTAL: {rows.length} resident{rows.length === 1 ? '' : 's'}</strong>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </>
+                    )}
+                  </div>
+                );
+              })
+            )}
+
             <ReportFooter />
           </div>
         )}

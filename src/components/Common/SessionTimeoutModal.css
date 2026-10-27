@@ -93,6 +93,15 @@
   line-height: 1.6;
 }
 
+/* Footnote */
+.stm-footnote {
+  font-size: 0.74rem;
+  color: var(--gray-500, #718096);
+  margin: 0;
+  line-height: 1.5;
+  text-align: center;
+}
+
 /* Countdown */
 .stm-countdown {
   display: flex;

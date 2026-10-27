@@ -136,6 +136,7 @@ CREATE TABLE public.residents (
     educational_attainment TEXT NULL,
     is_pwd BOOLEAN NULL DEFAULT FALSE,
     has_pwd_id BOOLEAN NULL DEFAULT FALSE,
+    disability_details TEXT NULL,
     is_senior BOOLEAN NULL DEFAULT FALSE,
     has_senior_id BOOLEAN NULL DEFAULT FALSE,
     is_solo_parent BOOLEAN NULL DEFAULT FALSE,
@@ -144,6 +145,10 @@ CREATE TABLE public.residents (
     teenage_pregnancy_case BOOLEAN NULL DEFAULT FALSE,
     current_teenage_mother BOOLEAN NULL DEFAULT FALSE,
     child_pregnancy_case BOOLEAN NULL DEFAULT FALSE,
+    -- Confidential DSWD referral tracking for child-pregnancy cases.
+    dswd_referral_status TEXT NOT NULL DEFAULT 'Pending',
+    dswd_referred_at TIMESTAMP WITH TIME ZONE NULL,
+    dswd_referral_notes TEXT NULL,
     is_4ps BOOLEAN NULL DEFAULT FALSE,
     is_voter TEXT NULL,
     barangay TEXT NOT NULL,
@@ -153,10 +158,40 @@ CREATE TABLE public.residents (
     archive_reason_detail JSONB NULL,  -- { date_of_decease, death_cert_no } OR { new_address, migration_date }
     created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NOW(),
     data_year INTEGER NULL,
+    attended_items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    CONSTRAINT residents_dswd_referral_status_chk
+        CHECK (dswd_referral_status IN ('Pending', 'Referred', 'Closed')),
     CONSTRAINT residents_pkey PRIMARY KEY (id)
 ) TABLESPACE pg_default;
 
 -- --------------------------------------------------------
+-- attended_items
+--
+-- JSONB array of the programs/seminars a resident attended.
+-- Shape: [{
+--   "kind": "program" | "seminar",
+--   "id": "<uuid>",
+--   "name": "<label at the time it was recorded>",
+--   "program_id": "<uuid>"   -- seminars only, the parent program
+-- }]
+--
+-- `kind` is required because JSONB cannot be joined to programs/seminars,
+-- so the type of each uuid would otherwise be unknowable. `name` is
+-- denormalized so reports stay readable after a rename or archival.
+-- --------------------------------------------------------
+ALTER TABLE public.residents
+    ADD CONSTRAINT residents_attended_items_is_array_chk
+    CHECK (jsonb_typeof(attended_items) = 'array');
+
+CREATE INDEX IF NOT EXISTS idx_residents_attended_items
+    ON public.residents USING GIN (attended_items);
+
+-- Supports the restricted Sensitive Cases listing without exposing those
+-- rows in the public resident/report queries. Archived cases stay in the
+-- registry so DSWD referral history is not lost.
+CREATE INDEX IF NOT EXISTS idx_residents_sensitive_child_pregnancy
+    ON public.residents (data_year, barangay, dswd_referral_status)
+    WHERE child_pregnancy_case IS TRUE;
 -- For existing databases: run these ALTER statements to
 -- add the archive reason columns if they don't yet exist.
 -- --------------------------------------------------------
@@ -208,6 +243,130 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_prevent_duplicate_resident
     BEFORE INSERT ON public.residents
     FOR EACH ROW EXECUTE FUNCTION public.check_duplicate_resident();
+
+-- --------------------------------------------------------
+-- Sensitive child-pregnancy classification
+--
+-- Kept in the database as a second line of defence behind the
+-- app-level Sensitive Cases password gate. The migration for
+-- existing databases is supabase/sensitive_child_pregnancy.sql.
+-- --------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.resident_pregnancy_age(
+    p_birth_date DATE,
+    p_age INTEGER,
+    p_data_year INTEGER
+)
+RETURNS INTEGER
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_reference_date DATE;
+BEGIN
+    IF p_birth_date IS NULL THEN
+        RETURN p_age;
+    END IF;
+
+    IF p_data_year IS NULL
+       OR p_data_year = EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER THEN
+        v_reference_date := CURRENT_DATE;
+    ELSE
+        v_reference_date := make_date(p_data_year, 12, 31);
+    END IF;
+
+    RETURN EXTRACT(YEAR FROM AGE(v_reference_date, p_birth_date))::INTEGER;
+EXCEPTION
+    WHEN others THEN
+        RETURN p_age;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enforce_child_pregnancy_classification()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_is_female BOOLEAN;
+    v_age INTEGER;
+    v_first_birth INTEGER := COALESCE(NEW.age_at_first_birth, 0);
+BEGIN
+    v_is_female := LOWER(TRIM(COALESCE(NEW.sex, ''))) IN
+        ('female', 'f', 'woman', 'girl');
+
+    v_age := public.resident_pregnancy_age(
+        NEW.birth_date,
+        NEW.age,
+        NEW.data_year
+    );
+
+    IF NEW.birth_date IS NOT NULL AND v_age IS NOT NULL THEN
+        NEW.age := v_age;
+    END IF;
+
+    NEW.child_pregnancy_case := COALESCE(NEW.child_pregnancy_case, FALSE);
+    NEW.teenage_pregnancy_case := COALESCE(NEW.teenage_pregnancy_case, FALSE);
+    NEW.current_teenage_mother := COALESCE(NEW.current_teenage_mother, FALSE);
+
+    IF NOT v_is_female THEN
+        NEW.child_pregnancy_case := FALSE;
+        NEW.teenage_pregnancy_case := FALSE;
+        NEW.current_teenage_mother := FALSE;
+        RETURN NEW;
+    END IF;
+
+    -- A child case is explicit, historical (first birth <= 9 while <= current age),
+    -- or automatic because the recorded age is <= 9 and pregnancy evidence exists.
+    IF NEW.child_pregnancy_case IS TRUE
+       OR (v_first_birth BETWEEN 1 AND 9 AND (v_age IS NULL OR v_first_birth <= v_age))
+       OR (
+           v_age IS NOT NULL
+           AND v_age <= 9
+           AND (
+               NEW.teenage_pregnancy_case IS TRUE
+               OR NEW.current_teenage_mother IS TRUE
+               OR (v_first_birth BETWEEN 1 AND v_age)
+           )
+       )
+    THEN
+        NEW.child_pregnancy_case := TRUE;
+        -- A child case always wins. It must never also be counted as an
+        -- official teenage pregnancy or as a current teenage mother, even
+        -- after the resident becomes a teenager.
+        NEW.teenage_pregnancy_case := FALSE;
+        NEW.current_teenage_mother := FALSE;
+
+        RETURN NEW;
+    END IF;
+
+    -- Not a child case. Derive the historical teenage-pregnancy flag from
+    -- the first-birth age when it is available and valid for the current age.
+    IF v_first_birth > 0 AND (v_age IS NULL OR v_first_birth <= v_age) THEN
+        NEW.teenage_pregnancy_case := (v_first_birth <= 19);
+    ELSIF v_first_birth > 0 AND v_age IS NOT NULL AND v_first_birth > v_age THEN
+        NEW.teenage_pregnancy_case := FALSE;
+    END IF;
+
+    IF v_age IS NULL OR v_age < 10 OR v_age > 19 THEN
+        NEW.current_teenage_mother := FALSE;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_enforce_child_pregnancy_classification
+    BEFORE INSERT OR UPDATE OF
+        birth_date,
+        age,
+        sex,
+        data_year,
+        teenage_pregnancy_case,
+        current_teenage_mother,
+        child_pregnancy_case,
+        age_at_first_birth
+    ON public.residents
+    FOR EACH ROW
+    EXECUTE FUNCTION public.enforce_child_pregnancy_classification();
 
 
 -- ============================================================
@@ -274,6 +433,79 @@ WITH CHECK (true);
 
 
 -- ============================================================
+-- SECTION 5: TRANSACTION LOGS TABLE
+-- Application audit trail written by src/utils/logger.js.
+-- Columns must match the payload logger.js inserts.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.transaction_logs (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    timestamp  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    user_name  TEXT NULL,
+    user_role  TEXT NULL,
+    action     TEXT NOT NULL,
+    category   TEXT NOT NULL DEFAULT 'General',
+    details    TEXT NULL
+) TABLESPACE pg_default;
+
+CREATE INDEX IF NOT EXISTS idx_transaction_logs_timestamp
+    ON public.transaction_logs (timestamp DESC);
+
+ALTER TABLE public.transaction_logs ENABLE ROW LEVEL SECURITY;
+
+-- Authenticated users may append entries.
+DROP POLICY IF EXISTS "Authenticated users can insert logs" ON public.transaction_logs;
+CREATE POLICY "Authenticated users can insert logs"
+ON public.transaction_logs FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+-- Only admins may read the trail. No UPDATE/DELETE policies exist on purpose,
+-- which keeps the log append-only.
+DROP POLICY IF EXISTS "Admins can view all logs" ON public.transaction_logs;
+CREATE POLICY "Admins can view all logs"
+ON public.transaction_logs FOR SELECT
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND p.role IN ('Admin', 'Administrator')
+          AND p.archived = FALSE
+    )
+);
+
+
+-- ============================================================
+-- SECTION 6: USER SESSIONS TABLE
+-- One row per user = the device that currently owns the session.
+-- Written only by the enforce-single-session edge function (service role);
+-- clients may read their own row so they can detect being signed out.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.user_sessions (
+    user_id    UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    session_id UUID NULL,
+    device_id  TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+) TABLESPACE pg_default;
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_device_id
+    ON public.user_sessions (device_id);
+
+ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own session record" ON public.user_sessions;
+CREATE POLICY "Users can view own session record"
+ON public.user_sessions FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
+
+-- Intentionally NO insert/update/delete policies: ownership may only be changed
+-- by the edge function using the service role key.
+
+
+-- ============================================================
 -- DONE. Summary of what was created:
 --
 --  Tables:
@@ -282,6 +514,8 @@ WITH CHECK (true);
 --    - public.residents          (barangay census data)
 --    - public.programs           (community & development programs)
 --    - public.seminars           (seminars under each program)
+--    - public.transaction_logs   (application audit trail)
+--    - public.user_sessions      (current session owner, single-session enforcement)
 --
 --  Triggers & Functions:
 --    - on_auth_user_created      -> handle_new_user()
@@ -292,6 +526,13 @@ WITH CHECK (true);
 --    - residents: "Allow all actions for all roles"
 --    - programs: "Allow all actions on programs"
 --    - seminars: "Allow all actions on seminars"
+--    - transaction_logs: "Authenticated users can insert logs",
+--                        "Admins can view all logs"
+--    - user_sessions: "Users can view own session record"
+--
+--  Edge Functions:
+--    - admin-reset-password      (admin re-auth to reset a staff password)
+--    - enforce-single-session    (one active session per account)
 -- ============================================================
 
 

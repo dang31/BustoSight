@@ -1,16 +1,24 @@
-import { useState, useEffect } from "react";
 import "./SessionTimeoutModal.css";
 
 /**
  * SessionTimeoutModal
  *
  * Props
- *   show         – boolean to show/hide
- *   countdown    – remaining seconds to display in the modal
- *   onExtend     – called when user clicks "Stay Logged In"
- *   onLogout     – called when user clicks "Logout Now" or timer hits 0
+ *   show              – boolean to show/hide
+ *   countdown         – remaining seconds to display in the modal
+ *   warningSeconds    – length of the warning window (drives the progress bar)
+ *   inactivityMinutes – total inactivity budget, for the copy
+ *   onExtend          – called when user clicks "Stay Logged In"
+ *   onLogout          – called when user clicks "Logout Now" or timer hits 0
  */
-export default function SessionTimeoutModal({ show, countdown, onExtend, onLogout }) {
+export default function SessionTimeoutModal({
+  show,
+  countdown,
+  warningSeconds = 60,
+  inactivityMinutes = 5,
+  onExtend,
+  onLogout,
+}) {
   if (!show) return null;
 
   const minutes = Math.floor(countdown / 60);
@@ -19,7 +27,10 @@ export default function SessionTimeoutModal({ show, countdown, onExtend, onLogou
     ? `${minutes}:${String(seconds).padStart(2, "0")}`
     : `${seconds}s`;
 
-  const isUrgent = countdown <= 60;
+  // Escalate over the final third of the warning window, so the styling still
+  // signals urgency regardless of how long the window is.
+  const isUrgent = countdown <= Math.max(1, Math.round(warningSeconds / 3));
+  const progress = Math.min((countdown / warningSeconds) * 100, 100);
 
   return (
     <div className="stm-overlay" role="dialog" aria-modal="true" aria-labelledby="stm-title">
@@ -49,7 +60,7 @@ export default function SessionTimeoutModal({ show, countdown, onExtend, onLogou
         <div className="stm-progress-track">
           <div
             className={`stm-progress-bar ${isUrgent ? "urgent" : ""}`}
-            style={{ width: `${Math.min((countdown / 120) * 100, 100)}%` }}
+            style={{ width: `${progress}%` }}
           />
         </div>
 
@@ -62,6 +73,11 @@ export default function SessionTimeoutModal({ show, countdown, onExtend, onLogou
             Stay Logged In
           </button>
         </div>
+
+        <p className="stm-footnote">
+          For your security, you will be logged out after {inactivityMinutes} minutes of
+          inactivity. Moving the mouse will not extend this session — use the button above.
+        </p>
       </div>
     </div>
   );

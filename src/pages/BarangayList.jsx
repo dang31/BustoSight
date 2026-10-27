@@ -1,15 +1,103 @@
-import { useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import UserProfileBadge from "../components/UserProfileBadge";
+import AttendanceCheckboxes from "../components/AttendanceCheckboxes";
+import DisabilityDetailsField from "../components/DisabilityDetailsField";
+import { disabilityDetailsForSave, getDisabilityError } from "../lib/disability";
 import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/BarangayList.css";
+import {
+  buildGroups,
+  deserializeAttendance,
+  fetchAttendanceCatalog,
+  mergeAttendance,
+  summarizeAttendance,
+} from "../lib/attendance";
 import { logTransaction } from "../utils/logger";
+import { formatResidentName } from "../lib/residentName";
+import {
+  useToast,
+  useConfirm,
+  useAdminPassword,
+} from "../components/Feedback/FeedbackProvider";
+import { verifyAdminPassword } from "../utils/adminPassword";
+import { verifyCurrentUserPassword } from "../utils/sensitiveAccess";
+import {
+  getDataYearOptions,
+  currentYear as calendarYear,
+  toAgeInt,
+  isSeniorAge,
+  isChildAge,
+  isAdultAge,
+  isFemaleSex,
+  calculateAgeForYear,
+  applyPersonYear,
+  normalizePersonForSave,
+} from "../lib/ageEngine";
+
+/**
+ * Maps a `residents` row to the short-key shape the UI uses (res.last rather
+ * than res.last_name).
+ *
+ * This lived as two byte-identical copies inside fetchResidents and
+ * openHousehold, which meant a newly added column had to be remembered twice -
+ * and `attended_items` was in fact missed by both. Single definition now, so
+ * every resident the page can edit carries the same fields.
+ */
+function mapResidentRow(r) {
+  return {
+    id: r.id,
+    h_no: r.h_no,
+    last: r.last_name,
+    first: r.first_name,
+    mid: r.middle_name,
+    q: r.qualifier,
+    no: r.house_no,
+    st: r.street,
+    p: r.purok,
+    bp: r.birth_place,
+    bd: r.birth_date,
+    s: r.sex,
+    cs: r.civil_status,
+    cz: r.citizenship,
+    oc: r.occupation,
+    rel: r.relation_to_head,
+    isVoter: r.is_voter,
+    brgy: r.barangay,
+    age: r.age,
+    residenceType: r.residence_type,
+    isHead: r.is_household_head,
+    religion: r.religion,
+    edu: r.educational_attainment,
+    isPwd: r.is_pwd,
+    hasPwdId: r.has_pwd_id,
+    disabilityDetails: r.disability_details,
+    isSenior: r.is_senior,
+    hasSeniorId: r.has_senior_id,
+    isSoloParent: r.is_solo_parent,
+    hasSoloParentId: r.has_solo_parent_id,
+    ageFirstBirth: r.age_at_first_birth,
+    teenagePregnancy: r.teenage_pregnancy_case,
+    teenageMother: r.current_teenage_mother,
+    childPregnancy: r.child_pregnancy_case,
+    dswdReferralStatus: r.dswd_referral_status,
+    dswdReferredAt: r.dswd_referred_at,
+    dswdReferralNotes: r.dswd_referral_notes,
+    is4ps: r.is_4ps,
+    attendedItems: r.attended_items,
+    createdAt: r.created_at,
+    dataYear: r.data_year,
+  };
+}
 
 export default function BarangayList({ defaultMode = "household" }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const requestAdminPassword = useAdminPassword();
   const [searchParams, setSearchParams] = useSearchParams();
   const storedUser = sessionStorage.getItem("popdev_user") || localStorage.getItem("popdev_user");
   const userProfile = storedUser ? JSON.parse(storedUser) : null;
@@ -48,16 +136,59 @@ export default function BarangayList({ defaultMode = "household" }) {
   const [editingResident, setEditingResident] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [editLoading, setEditLoading] = useState(false);
+  // The child-pregnancy classification is a sensitive field. It stays hidden
+  // until an administrator re-authenticates, and the ordinary edit save must
+  // never expose whether the resident is a case before that unlock happens.
+  const [sensitiveEditUnlocked, setSensitiveEditUnlocked] = useState(false);
+
+  useEffect(() => {
+    setSensitiveEditUnlocked(false);
+  }, [editingResident?.id]);
 
   // Archive Reason Modal state
   const [archiveModal, setArchiveModal] = useState({
     open: false,
     resident: null,
-    reason: "",          // "deceased" | "relocated"
+    reason: "",
     adminPassword: "",
     isLoading: false,
     error: "",
   });
+
+  // Programs/seminars available for the attendance picker. Fetched once per
+  // page visit rather than per modal open.
+  const [attendanceCatalog, setAttendanceCatalog] = useState({
+    programs: [],
+    seminars: [],
+  });
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const [attendanceError, setAttendanceError] = useState("");
+
+  const loadAttendanceCatalog = useCallback(async () => {
+    setAttendanceLoading(true);
+    setAttendanceError("");
+    const result = await fetchAttendanceCatalog();
+    setAttendanceCatalog({
+      programs: result.programs,
+      seminars: result.seminars,
+    });
+    setAttendanceError(result.error || "");
+    setAttendanceLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadAttendanceCatalog();
+  }, [loadAttendanceCatalog]);
+
+  const attendanceGroups = useMemo(
+    () => buildGroups(attendanceCatalog.programs, attendanceCatalog.seminars),
+    [attendanceCatalog],
+  );
+
+  const selectedResidentAttendance = useMemo(
+    () => summarizeAttendance(selectedResident?.attendedItems, attendanceGroups),
+    [selectedResident, attendanceGroups],
+  );
 
   const getInitialMode = () => {
     if (location.pathname === '/resident') return 'resident';
@@ -101,12 +232,11 @@ export default function BarangayList({ defaultMode = "household" }) {
   const [totalRecords, setTotalRecords] = useState(0);
   const itemsPerPage = 50;
 
-  // Statically generated years for filter
+  // Years offered by the filter. Includes the upcoming year so an annual
+  // roll-over can be prepared early; anything before the current year is
+  // read-only.
   const currentYear = new Date().getFullYear();
-  const availableYears = Array.from(
-    { length: currentYear - 2019 },
-    (_, i) => currentYear - i,
-  );
+  const availableYears = getDataYearOptions();
   const isReadOnly = selectedYear !== "all" && Number(selectedYear) < currentYear;
   const isRecordPastYear = (rec) => {
     if (isReadOnly) return true;
@@ -159,44 +289,7 @@ export default function BarangayList({ defaultMode = "household" }) {
       if (error) throw error;
 
       // Map Supabase columns to UI state structure
-      const mappedData = (data || []).map((r) => ({
-        id: r.id,
-        h_no: r.h_no,
-        last: r.last_name,
-        first: r.first_name,
-        mid: r.middle_name,
-        q: r.qualifier,
-        no: r.house_no,
-        st: r.street,
-        p: r.purok,
-        bp: r.birth_place,
-        bd: r.birth_date,
-        s: r.sex,
-        cs: r.civil_status,
-        cz: r.citizenship,
-        oc: r.occupation,
-        rel: r.relation_to_head,
-        isVoter: r.is_voter,
-        brgy: r.barangay,
-        age: r.age,
-        residenceType: r.residence_type,
-        isHead: r.is_household_head,
-        religion: r.religion,
-        edu: r.educational_attainment,
-        isPwd: r.is_pwd,
-        hasPwdId: r.has_pwd_id,
-        isSenior: r.is_senior,
-        hasSeniorId: r.has_senior_id,
-        isSoloParent: r.is_solo_parent,
-        hasSoloParentId: r.has_solo_parent_id,
-        ageFirstBirth: r.age_at_first_birth,
-        teenagePregnancy: r.teenage_pregnancy_case,
-        teenageMother: r.current_teenage_mother,
-        childPregnancy: r.child_pregnancy_case || false,
-        is4ps: r.is_4ps,
-        createdAt: r.created_at,
-        dataYear: r.data_year,
-      }));
+      const mappedData = (data || []).map(mapResidentRow);
 
       setAllRecords(mappedData);
       setTotalRecords(count || 0);
@@ -214,10 +307,36 @@ export default function BarangayList({ defaultMode = "household" }) {
       alert(`Records from previous years (${res.dataYear || selectedYear}) cannot be edited. Past data is strictly read-only.`);
       return;
     }
+    setSensitiveEditUnlocked(false);
     setEditingResident(res);
-    const resAge = res.age !== null && res.age !== undefined ? res.age : "";
-    const ageNum = parseInt(resAge, 10);
-    const isSenior = !isNaN(ageNum) && ageNum >= 60;
+
+    // Anything the resident attended that is no longer in the catalog (archived
+    // or renamed away) is kept aside rather than dropped, so saving an
+    // unrelated field cannot silently erase their history.
+    const { values, orphans } = deserializeAttendance(
+      res.attendedItems,
+      attendanceGroups,
+    );
+
+    // Age is re-derived from the birth date against the record's OWN data
+    // year (December 31 for a past/future year, today for the current one),
+    // and every age-derived flag is recomputed rather than trusted - this is
+    // what also repairs a row whose stored `is_senior` drifted from its age.
+    const recordYear = Number(res.dataYear) || calendarYear();
+    const derived = applyPersonYear(
+      {
+        birth_date: res.bd || "",
+        age: res.age,
+        sex: res.s,
+        has_senior_id: res.hasSeniorId || false,
+        teen_mother_reported: res.teenageMother || false,
+        teenage_pregnancy_case: res.teenagePregnancy || false,
+        child_pregnancy_case: res.childPregnancy || false,
+        age_at_first_birth: res.ageFirstBirth ?? "",
+      },
+      recordYear,
+    );
+
     setEditForm({
       h_no: res.h_no || "",
       last_name: res.last || "",
@@ -235,54 +354,104 @@ export default function BarangayList({ defaultMode = "household" }) {
       occupation: res.oc || "",
       relation_to_head: res.rel || "",
       is_voter: res.isVoter || "NO",
-      age: resAge,
+      age: derived.age,
       residence_type: res.residenceType || "",
       religion: res.religion || "",
       educational_attainment: res.edu || "",
       is_pwd: res.isPwd || false,
       has_pwd_id: res.hasPwdId || false,
-      is_senior: isSenior,
-      has_senior_id: isSenior ? (res.hasSeniorId || false) : false,
+      disability_details: res.disabilityDetails || "",
+      is_senior: derived.is_senior,
+      senior_id_reported: res.hasSeniorId || false,
+      has_senior_id: derived.has_senior_id,
       is_solo_parent: res.isSoloParent || false,
       has_solo_parent_id: res.hasSoloParentId || false,
       is_4ps: res.is4ps || false,
-      teenage_pregnancy_case: res.teenagePregnancy || false,
-      current_teenage_mother: res.teenageMother || false,
-      child_pregnancy_case: res.childPregnancy || false,
+      teenage_pregnancy_case: derived.teenage_pregnancy_case,
+      teen_mother_reported: res.teenageMother || false,
+      current_teenage_mother: derived.teenage_mother,
+      child_pregnancy_case: derived.child_pregnancy_case,
       age_at_first_birth: res.ageFirstBirth !== null && res.ageFirstBirth !== undefined ? res.ageFirstBirth : "",
+      attended_items: values,
+      attended_orphans: orphans,
     });
   };
 
-  const handleEditDobChange = (dobValue) => {
-    let calculatedAge = "";
-    if (dobValue) {
-      const today = new Date();
-      const birthDate = new Date(dobValue);
-      let a = today.getFullYear() - birthDate.getFullYear();
-      const mDiff = today.getMonth() - birthDate.getMonth();
-      if (mDiff < 0 || (mDiff === 0 && today.getDate() < birthDate.getDate())) a--;
-      calculatedAge = a >= 0 ? a : "";
-    }
-    const ageNum = parseInt(calculatedAge, 10);
-    const isSenior = !isNaN(ageNum) && ageNum >= 60;
-    setEditForm((f) => ({
-      ...f,
-      birth_date: dobValue,
-      age: calculatedAge,
-      is_senior: isSenior,
-      has_senior_id: isSenior ? f.has_senior_id : false,
-    }));
+  /** Data year the currently-open edit record belongs to. */
+  const editRecordYear = () => {
+    const year = Number(editingResident?.dataYear);
+    return Number.isFinite(year) && year ? year : calendarYear();
   };
 
+  /** Birth date is the master baseline: it drives the age and all flags. */
+  const handleEditDobChange = (dobValue) => {
+    const year = editRecordYear();
+    setEditForm((f) => {
+      const next = { ...f, birth_date: dobValue };
+      if (dobValue) next.age = calculateAgeForYear(dobValue, year);
+      return applyPersonYear(next, year);
+    });
+  };
+
+  /** Age stays editable only while there is no birth date on file. */
   const handleEditAgeChange = (ageValue) => {
-    const ageNum = parseInt(ageValue, 10);
-    const isSenior = !isNaN(ageNum) && ageNum >= 60;
-    setEditForm((f) => ({
-      ...f,
-      age: ageValue,
-      is_senior: isSenior,
-      has_senior_id: isSenior ? f.has_senior_id : false,
-    }));
+    setEditForm((f) => {
+      if (f.birth_date) return f; // derived - not editable
+      return applyPersonYear(
+        { ...f, age: ageValue === "" ? "" : ageValue },
+        editRecordYear(),
+      );
+    });
+  };
+
+  /** Sex drives the female-adolescent rules, so re-derive on change. */
+  const handleEditSexChange = (sexValue) => {
+    setEditForm((f) =>
+      applyPersonYear({ ...f, sex: sexValue }, editRecordYear()),
+    );
+  };
+
+  /**
+   * "Current teenage mother" is reported by the encoder (it needs evidence of
+   * a child) but only applied while female and aged 10-19, so the baseline is
+   * stored separately and the applied flag stays derived.
+   */
+  const handleEditTeenMotherChange = (checked) => {
+    setEditForm((f) =>
+      applyPersonYear(
+        { ...f, teen_mother_reported: checked },
+        editRecordYear(),
+      ),
+    );
+  };
+
+  /** Reveals the child-pregnancy field only after a successful re-auth. */
+  const handleUnlockSensitiveClassification = async () => {
+    if (isStaff) {
+      toast.error(
+        "Only Admin or Administrator accounts may view the sensitive pregnancy classification.",
+      );
+      return;
+    }
+
+    const password = await requestAdminPassword({
+      actionTitle: "Sensitive Case Access",
+      actionDescription:
+        "Enter your own administrator password to reveal the pregnancy classification for this child. This access is recorded in the transaction log.",
+      confirmLabel: "Unlock",
+      passwordLabel: "Your password",
+      invalidMessage:
+        "Incorrect password. The sensitive classification remains locked.",
+      verifyPassword: verifyCurrentUserPassword,
+    });
+    if (password === null) return;
+
+    setSensitiveEditUnlocked(true);
+    logTransaction({
+      action: "Sensitive Classification Viewed",
+      category: "Data Privacy",
+      details: `Unlocked the child-pregnancy classification for HH# ${editingResident?.h_no || "N/A"} (Data Year ${editingResident?.dataYear || editRecordYear()}).`,
+    });
   };
 
   const handleSaveEdit = async () => {
@@ -292,30 +461,31 @@ export default function BarangayList({ defaultMode = "household" }) {
       return;
     }
 
-    const adminPassword = prompt(
-      "Security Check: Enter Admin Password to save changes:"
-    );
+    const disabilityError = getDisabilityError(editForm);
+    if (disabilityError) {
+      toast.error(disabilityError);
+      return;
+    }
+
+    const adminPassword = await requestAdminPassword({
+      actionTitle: 'Save Changes',
+      actionDescription: `Enter your admin password to save the edits to ${formatResidentName(editingResident)}.`,
+    });
     if (adminPassword === null) return;
 
     setEditLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !user.email) {
-        alert("Session error. Please log in again.");
-        setEditLoading(false);
-        return;
-      }
+      const attendedItems = mergeAttendance(
+        editForm.attended_items || [],
+        attendanceGroups,
+        editForm.attended_orphans || [],
+      );
 
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: adminPassword,
-      });
-
-      if (authError) {
-        alert("Access Denied: Incorrect Admin Password.");
-        setEditLoading(false);
-        return;
-      }
+      // Re-derive every age and age-dependent flag from the birth date (or
+      // the entered age) for the record's data year immediately before
+      // writing, so a stale `is_senior` / `current_teenage_mother` can never
+      // be persisted.
+      const norm = normalizePersonForSave(editForm, editRecordYear());
 
       const updatePayload = {
         h_no: editForm.h_no,
@@ -334,21 +504,23 @@ export default function BarangayList({ defaultMode = "household" }) {
         occupation: editForm.occupation,
         relation_to_head: editForm.relation_to_head,
         is_voter: editForm.is_voter,
-        age: editForm.age !== "" ? Number(editForm.age) : null,
+        age: norm.age,
         residence_type: editForm.residence_type,
         religion: editForm.religion,
         educational_attainment: editForm.educational_attainment,
         is_pwd: editForm.is_pwd,
-        has_pwd_id: editForm.has_pwd_id,
-        is_senior: editForm.is_senior,
-        has_senior_id: editForm.has_senior_id,
+        has_pwd_id: editForm.is_pwd ? editForm.has_pwd_id : false,
+        disability_details: disabilityDetailsForSave(editForm),
+        is_senior: norm.is_senior,
+        has_senior_id: norm.has_senior_id,
         is_solo_parent: editForm.is_solo_parent,
         has_solo_parent_id: editForm.has_solo_parent_id,
         is_4ps: editForm.is_4ps,
-        teenage_pregnancy_case: editForm.teenage_pregnancy_case,
-        current_teenage_mother: editForm.current_teenage_mother,
-        child_pregnancy_case: editForm.child_pregnancy_case,
-        age_at_first_birth: editForm.age_at_first_birth !== "" ? Number(editForm.age_at_first_birth) : null,
+        teenage_pregnancy_case: norm.teenage_pregnancy_case,
+        current_teenage_mother: norm.current_teenage_mother,
+        child_pregnancy_case: norm.child_pregnancy_case,
+        age_at_first_birth: norm.age_at_first_birth,
+        attended_items: attendedItems,
       };
 
       const { error } = await supabase
@@ -377,21 +549,23 @@ export default function BarangayList({ defaultMode = "household" }) {
         oc: editForm.occupation,
         rel: editForm.relation_to_head,
         isVoter: editForm.is_voter,
-        age: editForm.age !== "" ? Number(editForm.age) : null,
+        age: norm.age,
         residenceType: editForm.residence_type,
         religion: editForm.religion,
         edu: editForm.educational_attainment,
         isPwd: editForm.is_pwd,
-        hasPwdId: editForm.has_pwd_id,
-        isSenior: editForm.is_senior,
-        hasSeniorId: editForm.has_senior_id,
+        hasPwdId: editForm.is_pwd ? editForm.has_pwd_id : false,
+        disabilityDetails: disabilityDetailsForSave(editForm),
+        isSenior: norm.is_senior,
+        hasSeniorId: norm.has_senior_id,
         isSoloParent: editForm.is_solo_parent,
         hasSoloParentId: editForm.has_solo_parent_id,
         is4ps: editForm.is_4ps,
-        teenagePregnancy: editForm.teenage_pregnancy_case,
-        teenageMother: editForm.current_teenage_mother,
-        childPregnancy: editForm.child_pregnancy_case,
-        ageFirstBirth: editForm.age_at_first_birth !== "" ? Number(editForm.age_at_first_birth) : null,
+        teenagePregnancy: norm.teenage_pregnancy_case,
+        teenageMother: norm.current_teenage_mother,
+        childPregnancy: norm.child_pregnancy_case,
+        ageFirstBirth: norm.age_at_first_birth,
+        attendedItems,
       };
 
       setAllRecords(prev => prev.map(r => r.id === editingResident.id ? updatedMapped : r));
@@ -416,10 +590,15 @@ export default function BarangayList({ defaultMode = "household" }) {
       });
 
       setEditingResident(null);
-      alert("Resident updated successfully!");
+      toast.success("Resident updated successfully!");
     } catch (err) {
       console.error("Error updating resident:", err);
-      alert("Failed to update: " + err.message);
+      const message = String(err?.message || "Unknown error");
+      const migrationHint =
+        message.includes("child_pregnancy_case") || message.includes("dswd_")
+          ? " Run supabase/sensitive_child_pregnancy.sql in the Supabase SQL editor first."
+          : "";
+      toast.error(`Failed to update: ${message}${migrationHint}`);
     } finally {
       setEditLoading(false);
     }
@@ -428,11 +607,11 @@ export default function BarangayList({ defaultMode = "household" }) {
   // Open archive reason modal (replaces old window.confirm+prompt flow)
   const handleArchive = (res) => {
     if (userRole === "Staff") {
-      alert("Access Denied: Staff users are not permitted to archive residents.");
+      toast.error("Access denied: Staff accounts cannot archive residents.");
       return;
     }
     if (isRecordPastYear(res)) {
-      alert(`Records from previous years (${res.dataYear || selectedYear}) cannot be deleted or archived. Past data is strictly read-only.`);
+      toast.error(`Records from previous years (${res.dataYear || selectedYear}) cannot be deleted or archived. Past data is strictly read-only.`);
       return;
     }
     setArchiveModal({
@@ -464,18 +643,8 @@ export default function BarangayList({ defaultMode = "household" }) {
     setArchiveModal(prev => ({ ...prev, isLoading: true, error: "" }));
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !user.email) {
-        setArchiveModal(prev => ({ ...prev, isLoading: false, error: "Session error. Please log in again." }));
-        return;
-      }
-
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: adminPassword,
-      });
-
-      if (authError) {
+      const isValid = await verifyAdminPassword(adminPassword);
+      if (!isValid) {
         setArchiveModal(prev => ({ ...prev, isLoading: false, error: "Access Denied: Incorrect Admin Password." }));
         return;
       }
@@ -512,11 +681,11 @@ export default function BarangayList({ defaultMode = "household" }) {
       logTransaction({
         action: "Archive Resident",
         category: "Resident Management",
-        details: `Archived resident ${res.first} ${res.last} (HH# ${res.h_no || "N/A"}) from Brgy. ${activeBrgy}. Reason: ${reasonLabel}.`,
+        details: `Archived resident ${formatResidentName(res)} (HH# ${res.h_no || "N/A"}) from Barangay ${activeBrgy}. Reason: ${reasonLabel}.`,
       });
 
       closeArchiveModal();
-      alert(`Successfully archived! Reason: ${reasonLabel}.`);
+      toast.success(`${formatResidentName(res)} has been archived. (${reasonLabel})`);
     } catch (err) {
       console.error("Error archiving:", err);
       setArchiveModal(prev => ({ ...prev, isLoading: false, error: "Failed to archive: " + err.message }));
@@ -524,41 +693,28 @@ export default function BarangayList({ defaultMode = "household" }) {
   };
 
   const handleDeleteBrgyData = async () => {
-    if (isReadOnly) {
-      alert(`Cannot delete records: Data for previous year ${selectedYear} is archived and read-only.`);
-      return;
-    }
-    if (
-      !window.confirm(
-        `WARNING: Are you sure you want to PERMANENTLY DELETE ALL records in Barangay ${activeBrgy}? This action cannot be undone.`,
-      )
-    )
-      return;
+    const confirmed = await confirm({
+      title: `Delete all records in ${activeBrgy}?`,
+      message: `This will permanently delete every resident record in Barangay ${activeBrgy}.`,
+      details: [
+        "This action cannot be undone",
+        "Archived records for this barangay are also removed",
+        "This is not the same as archiving — the data is destroyed",
+      ],
+      confirmLabel: "Delete everything",
+      cancelLabel: "Cancel",
+      variant: "danger",
+    });
+    if (!confirmed) return;
 
-    const adminPassword = prompt(
-      "Security Check: Please enter Admin Password to delete these records:",
-    );
+    const adminPassword = await requestAdminPassword({
+      actionTitle: "Confirm Permanent Deletion",
+      actionDescription: `Enter your admin password to permanently delete all records in Barangay ${activeBrgy}.`,
+    });
     if (adminPassword === null) return;
 
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !user.email) {
-        setIsLoading(false);
-        alert("Session error. Could not verify your identity. Please log in again.");
-        return;
-      }
-
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: adminPassword,
-      });
-
-      if (authError) {
-        setIsLoading(false);
-        alert("Access Denied: Incorrect Admin Password.");
-        return;
-      }
       const { error } = await supabase
         .from("residents")
         .delete()
@@ -574,10 +730,10 @@ export default function BarangayList({ defaultMode = "household" }) {
         details: `Permanently deleted ALL resident records for Barangay ${activeBrgy} (Year: ${selectedYear}).`,
       });
 
-      alert(`Successfully deleted all records in Barangay ${activeBrgy}!`);
+      toast.success(`All records in Barangay ${activeBrgy} have been permanently deleted.`, 6000);
     } catch (err) {
       console.error("Error deleting records:", err);
-      alert("Failed to delete records: " + err.message);
+      toast.error("Failed to delete records: " + err.message);
     } finally {
       setIsLoading(false);
     }
@@ -699,7 +855,7 @@ export default function BarangayList({ defaultMode = "household" }) {
 
     const newRecords = [...allRecords, ...mockResidents];
     setAllRecords(newRecords);
-    alert("Mock data generated successfully!");
+    toast.success(`Mock data generated: ${mockResidents.length} resident(s) added.`);
   };
 
   const openHousehold = async (hhNo, dataYear) => {
@@ -719,43 +875,7 @@ export default function BarangayList({ defaultMode = "household" }) {
 
       if (error) throw error;
 
-      const members = (data || []).map((r) => ({
-        id: r.id,
-        h_no: r.h_no,
-        last: r.last_name,
-        first: r.first_name,
-        mid: r.middle_name,
-        q: r.qualifier,
-        no: r.house_no,
-        st: r.street,
-        p: r.purok,
-        bp: r.birth_place,
-        bd: r.birth_date,
-        s: r.sex,
-        cs: r.civil_status,
-        cz: r.citizenship,
-        oc: r.occupation,
-        rel: r.relation_to_head,
-        isVoter: r.is_voter,
-        brgy: r.barangay,
-        age: r.age,
-        residenceType: r.residence_type,
-        isHead: r.is_household_head,
-        religion: r.religion,
-        edu: r.educational_attainment,
-        isPwd: r.is_pwd,
-        hasPwdId: r.has_pwd_id,
-        isSenior: r.is_senior,
-        hasSeniorId: r.has_senior_id,
-        isSoloParent: r.is_solo_parent,
-        hasSoloParentId: r.has_solo_parent_id,
-        ageFirstBirth: r.age_at_first_birth,
-        teenagePregnancy: r.teenage_pregnancy_case,
-        teenageMother: r.current_teenage_mother,
-        is4ps: r.is_4ps,
-        createdAt: r.created_at,
-        dataYear: r.data_year,
-      }));
+      const members = (data || []).map(mapResidentRow);
 
       members.sort((a, b) => ((a.rel || "").toUpperCase() === "HEAD" ? -1 : 1));
       setSelectedHousehold({ hhNo, members });
@@ -822,7 +942,7 @@ export default function BarangayList({ defaultMode = "household" }) {
       });
       const newAllRecords = [...allRecords, ...importedData];
       setAllRecords(newAllRecords);
-      alert("Import Successful!");
+      toast.success(`Import successful: ${importedData.length} resident(s) imported.`);
     };
     reader.readAsText(file);
   };
@@ -910,7 +1030,12 @@ export default function BarangayList({ defaultMode = "household" }) {
                 <option value="all">All Years</option>
                 {availableYears.map((y) => (
                   <option key={y} value={y}>
-                    {y} {y < currentYear ? "(Read-Only)" : ""}
+                    {y}{" "}
+                    {y > currentYear
+                      ? "(Upcoming)"
+                      : y < currentYear
+                        ? "(Read-Only)"
+                        : ""}
                   </option>
                 ))}
               </select>
@@ -1022,12 +1147,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                     </tr>
                   ) : filteredRecords.length > 0 ? (
                     filteredRecords.map((res, i) => {
-                      const middle = res.mid
-                        ? (res.mid.trim().endsWith(".")
-                          ? res.mid.trim()
-                          : res.mid.trim()[0] + ".") + " "
-                        : "";
-                      const fullName = `${res.first} ${middle}${res.last}`;
+                      const fullName = formatResidentName(res);
                       return (
                         <tr
                           key={res.id || i}
@@ -1253,7 +1373,7 @@ export default function BarangayList({ defaultMode = "household" }) {
             <div className="hh-members-grid">
               {selectedHousehold.members.map((m, i) => {
                 const isHead = (m.rel || '').toUpperCase() === 'HEAD';
-                const fullName = `${m.first || ''} ${m.mid ? (m.mid.endsWith('.') ? m.mid : m.mid[0] + '.') + ' ' : ''}${m.last || ''} ${m.q || ''}`.trim();
+                const fullName = formatResidentName(m);
                 const initials = `${(m.first?.[0] || '').toUpperCase()}${(m.last?.[0] || '').toUpperCase()}`;
                 return (
                   <div
@@ -1366,9 +1486,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                 {(selectedResident.last?.[0] || "").toUpperCase()}
               </div>
               <div className="res-modal-title">
-                <h2>
-                  {selectedResident.first} {selectedResident.mid ? (selectedResident.mid.endsWith('.') ? selectedResident.mid + ' ' : selectedResident.mid[0] + '. ') : ''}{selectedResident.last} {selectedResident.q || ''}
-                </h2>
+                <h2>{formatResidentName(selectedResident)}</h2>
                 <p>
                   Household ID: <strong>{selectedResident.h_no || "N/A"}</strong> &bull; Relation: <strong>{selectedResident.rel || "MEMBER"}</strong> &bull; Barangay: <strong>{selectedResident.brgy}</strong>
                   {isRecordPastYear(selectedResident) && (
@@ -1383,42 +1501,41 @@ export default function BarangayList({ defaultMode = "household" }) {
             {/* Grid Details - scrollable */}
             <div className="res-modal-scrollable-body">
               <div className="res-details-grid">
-                {/* Personal Info */}
-                <div className="res-card-section">
-                  <h3><i className="fa-solid fa-id-card"></i> Personal Information</h3>
-                  <div className="res-card-content">
-                    <div className="res-detail-row">
-                      <span className="res-detail-label">Full Name</span>
-                      <span className="res-detail-value">{selectedResident.first} {selectedResident.mid || ''} {selectedResident.last} {selectedResident.q || ''}</span>
-                    </div>
-                    <div className="res-detail-row">
-                      <span className="res-detail-label">Age</span>
-                      <span className="res-detail-value">{selectedResident.age !== null && selectedResident.age !== undefined ? `${selectedResident.age} years old` : "N/A"}</span>
-                    </div>
-                    <div className="res-detail-row">
-                      <span className="res-detail-label">Gender</span>
-                      <span className="res-detail-value">{selectedResident.s || "N/A"}</span>
-                    </div>
-                    <div className="res-detail-row">
-                      <span className="res-detail-label">Birth Date</span>
-                      <span className="res-detail-value">{selectedResident.bd || "N/A"}</span>
-                    </div>
-                    <div className="res-detail-row">
-                      <span className="res-detail-label">Birth Place</span>
-                      <span className="res-detail-value">{selectedResident.bp || "N/A"}</span>
-                    </div>
-                    <div className="res-detail-row">
-                      <span className="res-detail-label">Civil Status</span>
-                      <span className="res-detail-value">{selectedResident.cs || "N/A"}</span>
-                    </div>
-                    <div className="res-detail-row">
-                      <span className="res-detail-label">Citizenship</span>
-                      <span className="res-detail-value">{selectedResident.cz || "FILIPINO"}</span>
-                    </div>
-                    <div className="res-detail-row">
-                      <span className="res-detail-label">Religion</span>
-                      <span className="res-detail-value">{selectedResident.religion || "N/A"}</span>
-                    </div>
+              {/* Personal Info */}
+              <div className="res-card-section">
+                <h3><i className="fa-solid fa-id-card"></i> Personal Information</h3>
+                <div className="res-card-content">
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Full Name</span>
+                    <span className="res-detail-value">{formatResidentName(selectedResident)}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Age</span>
+                    <span className="res-detail-value">{selectedResident.age !== null && selectedResident.age !== undefined ? `${selectedResident.age} years old` : "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Gender</span>
+                    <span className="res-detail-value">{selectedResident.s || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Birth Date</span>
+                    <span className="res-detail-value">{selectedResident.bd || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Birth Place</span>
+                    <span className="res-detail-value">{selectedResident.bp || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Civil Status</span>
+                    <span className="res-detail-value">{selectedResident.cs || "N/A"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Citizenship</span>
+                    <span className="res-detail-value">{selectedResident.cz || "FILIPINO"}</span>
+                  </div>
+                  <div className="res-detail-row">
+                    <span className="res-detail-label">Religion</span>
+                    <span className="res-detail-value">{selectedResident.religion || "N/A"}</span>
                   </div>
                 </div>
 
@@ -1500,6 +1617,14 @@ export default function BarangayList({ defaultMode = "household" }) {
                         </span>
                       </span>
                     </div>
+                    {selectedResident.isPwd && (
+                      <div className="res-detail-row">
+                        <span className="res-detail-label">Disability</span>
+                        <span className="res-detail-value">
+                          {selectedResident.disabilityDetails || "Not recorded"}
+                        </span>
+                      </div>
+                    )}
                     <div className="res-detail-row">
                       <span className="res-detail-label">Solo Parent</span>
                       <span className="res-detail-value">
@@ -1538,7 +1663,112 @@ export default function BarangayList({ defaultMode = "household" }) {
                     </div>
                   </div>
                 </div>
-              </div>{/* end res-details-grid */}
+              </div>
+
+              {/* Programs & Seminars Attended */}
+              <div className="res-card-section res-attendance-card">
+                <h3>
+                  <i className="fa-solid fa-calendar-check"></i>
+                  Programs &amp; Seminars Attended
+                </h3>
+
+                <div className="res-attendance-body">
+                  {selectedResidentAttendance.programs.length === 0 &&
+                  selectedResidentAttendance.orphans.length === 0 ? (
+                    <p className="res-attendance-empty">
+                      No programs or seminars recorded for this resident.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="res-attendance-summary">
+                        <span className="res-attendance-stat">
+                          <b>{selectedResidentAttendance.programCount}</b>
+                          {selectedResidentAttendance.programCount === 1
+                            ? " program"
+                            : " programs"}
+                        </span>
+                        <span className="res-attendance-stat-divider" />
+                        <span className="res-attendance-stat">
+                          <b>{selectedResidentAttendance.seminarCount}</b>
+                          {selectedResidentAttendance.seminarCount === 1
+                            ? " seminar"
+                            : " seminars"}
+                        </span>
+                      </div>
+
+                      {selectedResidentAttendance.programs.length > 0 && (
+                        <ul className="res-attendance-list">
+                          {selectedResidentAttendance.programs.map((entry) => (
+                            <li
+                              key={entry.id}
+                              className={`res-attendance-item${
+                                entry.programAttended ? " attended" : " derived"
+                              }`}
+                            >
+                              <div className="res-attendance-item-head">
+                                <i
+                                  className={`fa-solid ${
+                                    entry.programAttended
+                                      ? "fa-circle-check"
+                                      : "fa-circle-exclamation"
+                                  }`}
+                                />
+                                <span className="res-attendance-program">
+                                  {entry.name}
+                                </span>
+                                <span className="res-attendance-badge">
+                                  {entry.programAttended
+                                    ? "Attended"
+                                    : "Via seminars"}
+                                </span>
+                              </div>
+
+                              {entry.seminars.length > 0 && (
+                                <div className="res-attendance-chips">
+                                  {entry.seminars.map((seminar) => (
+                                    <span
+                                      key={seminar.id}
+                                      className={`res-attendance-chip${
+                                        seminar.archived ? " archived" : ""
+                                      }`}
+                                      title={
+                                        seminar.archived
+                                          ? "This seminar has been archived"
+                                          : undefined
+                                      }
+                                    >
+                                      {seminar.archived && (
+                                        <i className="fa-solid fa-box-archive" />
+                                      )}
+                                      {seminar.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {selectedResidentAttendance.orphans.length > 0 && (
+                        <div className="res-attendance-orphans">
+                          <i className="fa-solid fa-triangle-exclamation" />
+                          <span>
+                            <b>No longer listed:</b>{" "}
+                            {selectedResidentAttendance.orphans
+                              .map(
+                                (orphan) =>
+                                  `${orphan.name || orphan.id} (${orphan.kind})`,
+                              )
+                              .join(", ")}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>{/* end res-details-grid */}
             </div>{/* end res-modal-scrollable-body */}
 
             <div className="res-modal-footer">
@@ -1641,14 +1871,37 @@ export default function BarangayList({ defaultMode = "household" }) {
                 </div>
                 <div className="edit-field">
                   <label>Age</label>
-                  <input type="number" min="0" value={editForm.age} onChange={e => handleEditAgeChange(e.target.value)} />
+                  <input
+                    type="number"
+                    min="0"
+                    value={editForm.age}
+                    readOnly={Boolean(editForm.birth_date)}
+                    className={editForm.birth_date ? "age-auto-input" : ""}
+                    title={
+                      editForm.birth_date
+                        ? "Derived from the birth date — change the birth date instead."
+                        : "Estimated age (no birth date on file)"
+                    }
+                    onChange={e => handleEditAgeChange(e.target.value)}
+                  />
+                  <span style={{ fontSize: "10.5px", color: editForm.birth_date ? "#64748b" : "#b45309" }}>
+                    {editForm.birth_date
+                      ? "Derived from birth date."
+                      : "Estimated — no birth date on file."}
+                  </span>
                 </div>
                 <div className="edit-field">
                   <label>Sex</label>
-                  <select value={editForm.sex} onChange={e => setEditForm(f => ({ ...f, sex: e.target.value }))}>
+                  <select value={editForm.sex} onChange={e => handleEditSexChange(e.target.value)}>
                     <option value="M">Male (M)</option>
                     <option value="F">Female (F)</option>
                     <option value="LGBTQ+">LGBTQ+</option>
+                    {/* Records written by the registration form store the
+                        spelled-out value; keep it selectable rather than
+                        letting the dropdown silently go blank. */}
+                    {editForm.sex && !["M", "F", "LGBTQ+"].includes(editForm.sex) && (
+                      <option value={editForm.sex}>{editForm.sex}</option>
+                    )}
                   </select>
                 </div>
                 <div className="edit-field">
@@ -1732,20 +1985,33 @@ export default function BarangayList({ defaultMode = "household" }) {
               <div className="edit-section-title"><i className="fa-solid fa-layer-group"></i> Special Sectors &amp; Programs</div>
               <div className="edit-toggles-grid">
                 {(() => {
-                  const isEligible = parseInt(editForm.age, 10) >= 60;
+                  // Senior Citizen is fully automatic: derived from the
+                  // calculated age (60+), so the toggle is display-only.
+                  const ageKnown = toAgeInt(editForm.age) !== null;
+                  const isEligible = isSeniorAge(editForm.age);
                   return (
                     <>
-                      <label className={`edit-toggle-item ${!isEligible ? "disabled" : ""}`} style={!isEligible ? { opacity: 0.55, cursor: "not-allowed" } : {}}>
+                      <label
+                        className={`edit-toggle-item ${!ageKnown ? "disabled" : ""}`}
+                        style={!ageKnown ? { opacity: 0.55, cursor: "not-allowed" } : { cursor: "not-allowed" }}
+                        title="Set automatically from the calculated age."
+                      >
                         <input
                           type="checkbox"
-                          checked={editForm.is_senior && isEligible}
-                          disabled={!isEligible}
-                          onChange={e => setEditForm(f => ({ ...f, is_senior: e.target.checked }))}
+                          checked={Boolean(editForm.is_senior)}
+                          disabled
                         />
-                        <span>Senior Citizen {!isEligible && "(Age 60+ only)"}</span>
+                        <span>
+                          Senior Citizen{" "}
+                          {!ageKnown
+                            ? "(Enter birth date or age)"
+                            : isEligible
+                              ? "(Auto — age 60+)"
+                              : `(Auto — age ${editForm.age})`}
+                        </span>
                       </label>
 
-                      {isEligible && editForm.is_senior && (
+                      {editForm.is_senior && (
                         <div style={{ display: "flex", gap: "14px", alignItems: "center", gridColumn: "span 2", padding: "6px 12px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
                           <span style={{ fontSize: "12px", fontWeight: "600", color: "#475569" }}>Senior ID:</span>
                           <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", cursor: "pointer" }}>
@@ -1753,7 +2019,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                               type="radio"
                               name="edit_senior_id"
                               checked={editForm.has_senior_id === true}
-                              onChange={() => setEditForm(f => ({ ...f, has_senior_id: true }))}
+                              onChange={() => setEditForm(f => ({ ...f, senior_id_reported: true, has_senior_id: true }))}
                             />
                             <span>With Senior ID</span>
                           </label>
@@ -1762,7 +2028,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                               type="radio"
                               name="edit_senior_id"
                               checked={editForm.has_senior_id === false}
-                              onChange={() => setEditForm(f => ({ ...f, has_senior_id: false }))}
+                              onChange={() => setEditForm(f => ({ ...f, senior_id_reported: false, has_senior_id: false }))}
                             />
                             <span>Without Senior ID</span>
                           </label>
@@ -1772,11 +2038,24 @@ export default function BarangayList({ defaultMode = "household" }) {
                   );
                 })()}
                 <label className="edit-toggle-item">
-                  <input type="checkbox" checked={editForm.is_pwd} onChange={e => setEditForm(f => ({ ...f, is_pwd: e.target.checked }))} />
+                  <input type="checkbox" checked={editForm.is_pwd} onChange={e => {
+                    const checked = e.target.checked;
+                    setEditForm(f => ({
+                      ...f,
+                      is_pwd: checked,
+                      has_pwd_id: checked ? f.has_pwd_id : false,
+                      disability_details: checked ? f.disability_details : "",
+                    }));
+                  }} />
                   <span>PWD</span>
                 </label>
+                <DisabilityDetailsField
+                  person={editForm}
+                  className="edit-field"
+                  onChange={(disability_details) => setEditForm(f => ({ ...f, disability_details }))}
+                />
                 <label className="edit-toggle-item">
-                  <input type="checkbox" checked={editForm.has_pwd_id} onChange={e => setEditForm(f => ({ ...f, has_pwd_id: e.target.checked }))} />
+                  <input type="checkbox" checked={editForm.has_pwd_id} disabled={!editForm.is_pwd} onChange={e => setEditForm(f => ({ ...f, has_pwd_id: e.target.checked }))} />
                   <span>Has PWD ID</span>
                 </label>
                 <label className="edit-toggle-item">
@@ -1794,11 +2073,12 @@ export default function BarangayList({ defaultMode = "household" }) {
 
                 {/* Pregnancy Classification - 3-tier */}
                 {(() => {
-                  const editAge = parseInt(editForm.age, 10);
-                  const isFemale = editForm.sex === "Female";
-                  const isChildAge = !isNaN(editAge) && editAge <= 9;
-                  const isTeenAge = !isNaN(editAge) && editAge >= 10 && editAge <= 19;
-                  const isAdultPlus = !isNaN(editAge) && editAge >= 20;
+                  const editAge = toAgeInt(editForm.age);
+                  // Accepts both the "F" used by this page and the "Female"
+                  // written by the registration form.
+                  const isFemale = isFemaleSex(editForm.sex);
+                  const isChild = isChildAge(editForm.age);
+                  const isAdult = isAdultAge(editForm.age);
 
                   if (!isFemale) return (
                     <div style={{ gridColumn: 'span 2', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1807,39 +2087,77 @@ export default function BarangayList({ defaultMode = "household" }) {
                     </div>
                   );
 
-                  if (isChildAge) return (
+                  if (editAge === null) return (
+                    <div style={{ gridColumn: 'span 2', padding: '8px 12px', background: '#fffbeb', borderRadius: '8px', border: '1px solid #fcd34d', fontSize: '12px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <i className="fa-solid fa-circle-info"></i>
+                      <span>Pregnancy Classification — enter a birth date or an age to classify.</span>
+                    </div>
+                  );
+
+                  if (isChild) return (
                     <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <label className="edit-toggle-item" style={{ gridColumn: 'span 2' }}>
-                        <input
-                          type="checkbox"
-                          checked={editForm.child_pregnancy_case || false}
-                          onChange={e => setEditForm(f => ({
-                            ...f,
-                            child_pregnancy_case: e.target.checked,
-                            teenage_pregnancy_case: false // strictly excluded
-                          }))}
-                        />
-                        <span style={{ fontWeight: editForm.child_pregnancy_case ? '700' : 'normal', color: editForm.child_pregnancy_case ? '#dc2626' : 'inherit' }}>
-                          Pregnant / Child Pregnancy Case (Age ≤ 9)
-                        </span>
-                      </label>
-                      {editForm.child_pregnancy_case && (
-                        <div style={{ padding: '10px 14px', background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)', border: '1.5px solid #fca5a5', borderRadius: '8px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                          <i className="fa-solid fa-triangle-exclamation" style={{ color: '#dc2626', fontSize: '14px' }}></i>
-                          <div style={{ fontWeight: '700', fontSize: '12px', color: '#dc2626' }}>Child Pregnancy — Highly Sensitive Case</div>
+                      {!sensitiveEditUnlocked ? (
+                        <div style={{ padding: '12px 14px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <i className="fa-solid fa-lock" style={{ color: '#475569', fontSize: '14px' }}></i>
+                            <div>
+                              <div style={{ fontWeight: '700', fontSize: '12px', color: '#334155' }}>Sensitive Pregnancy Classification</div>
+                              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                                {isStaff
+                                  ? "Only Admin or Administrator accounts may view this classification."
+                                  : "Hidden for privacy. Re-enter your administrator password to view or change it."}
+                              </div>
+                            </div>
+                          </div>
+                          {!isStaff && (
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={handleUnlockSensitiveClassification}
+                              style={{ background: '#334155', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 12px', fontSize: '11.5px', fontWeight: '700' }}
+                            >
+                              <i className="fa-solid fa-unlock-keyhole" style={{ marginRight: '6px' }}></i>
+                              Unlock
+                            </button>
+                          )}
                         </div>
+                      ) : (
+                        <>
+                          <label className="edit-toggle-item" style={{ gridColumn: 'span 2' }}>
+                            <input
+                              type="checkbox"
+                              checked={editForm.child_pregnancy_case || false}
+                              onChange={e => setEditForm(f => ({
+                                ...f,
+                                child_pregnancy_case: e.target.checked,
+                                teenage_pregnancy_case: false, // strictly excluded
+                                current_teenage_mother: false,
+                                teen_mother_reported: false,
+                              }))}
+                            />
+                            <span style={{ fontWeight: editForm.child_pregnancy_case ? '700' : 'normal', color: editForm.child_pregnancy_case ? '#dc2626' : 'inherit' }}>
+                              Pregnant / Child Pregnancy Case (Age ≤ 9)
+                            </span>
+                          </label>
+                          {editForm.child_pregnancy_case && (
+                            <div style={{ padding: '10px 14px', background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)', border: '1.5px solid #fca5a5', borderRadius: '8px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                              <i className="fa-solid fa-triangle-exclamation" style={{ color: '#dc2626', fontSize: '14px' }}></i>
+                              <div style={{ fontWeight: '700', fontSize: '12px', color: '#dc2626' }}>Child Pregnancy — Highly Sensitive Case</div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   );
 
-                  if (isAdultPlus) return (
+                  if (isAdult) return (
                     <div style={{ gridColumn: 'span 2', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <i className="fa-solid fa-circle-minus"></i>
-                      <span>Pregnancy Classification — Not Applicable (Age ≥ 20)</span>
+                      <span>Pregnancy Classification — Not Applicable (Age ≥ 20). A historical teenage pregnancy stays recorded.</span>
                     </div>
                   );
 
-                  // isTeenAge (10-19, female): show editable fields
+                  // Teen (10-19, female): show editable fields
                   return (
                     <>
                       <label className="edit-toggle-item" style={{ gridColumn: 'span 1' }}>
@@ -1847,7 +2165,7 @@ export default function BarangayList({ defaultMode = "household" }) {
                         <span>Teenage Pregnancy Case</span>
                       </label>
                       <label className="edit-toggle-item" style={{ gridColumn: 'span 1' }}>
-                        <input type="checkbox" checked={editForm.current_teenage_mother} onChange={e => setEditForm(f => ({ ...f, current_teenage_mother: e.target.checked }))} />
+                        <input type="checkbox" checked={editForm.current_teenage_mother} onChange={e => handleEditTeenMotherChange(e.target.checked)} />
                         <span>Current Teenage Mother</span>
                       </label>
                       {editForm.current_teenage_mother && (
@@ -1860,6 +2178,51 @@ export default function BarangayList({ defaultMode = "household" }) {
                   );
                 })()}
               </div>{/* end edit-toggles-grid */}
+
+              {/* --- Section: Programs & Seminars Attended --- */}
+              <div className="edit-section-title"><i className="fa-solid fa-calendar-check"></i> Programs &amp; Seminars Attended</div>
+              <AttendanceCheckboxes
+                groups={attendanceGroups}
+                selected={editForm.attended_items || []}
+                onChange={(attended_items) => setEditForm(f => ({ ...f, attended_items }))}
+                loading={attendanceLoading}
+                error={attendanceError}
+                onRetry={loadAttendanceCatalog}
+              />
+
+              {editForm.attended_orphans && editForm.attended_orphans.length > 0 && (
+                <div className="attendance-orphans">
+                  <div className="attendance-orphans-head">
+                    <i className="fa-solid fa-triangle-exclamation"></i>
+                    <span>
+                      Recorded earlier, but the program or seminar has since been archived
+                      and is no longer selectable. These are kept as-is when you save.
+                    </span>
+                  </div>
+                  {editForm.attended_orphans.map((orphan) => (
+                    <div key={`${orphan.kind}:${orphan.id}`} className="attendance-orphan-row">
+                      <span className="attendance-orphan-name">
+                        {orphan.name || orphan.id}
+                        <em>({orphan.kind})</em>
+                      </span>
+                      <button
+                        type="button"
+                        className="attendance-orphan-remove"
+                        onClick={() =>
+                          setEditForm(f => ({
+                            ...f,
+                            attended_orphans: (f.attended_orphans || []).filter(
+                              (item) => !(item.kind === orphan.kind && item.id === orphan.id),
+                            ),
+                          }))
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
             </div>{/* end edit-modal-body */}
 

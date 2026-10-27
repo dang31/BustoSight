@@ -5,6 +5,12 @@ import Sidebar from '../components/Sidebar';
 import UserProfileBadge from '../components/UserProfileBadge';
 import { supabase } from '../lib/supabase';
 import { logTransaction } from '../utils/logger';
+import { useToast, useConfirm } from '../components/Feedback/FeedbackProvider';
+import {
+  getDataYearOptions,
+  describeAgeReference,
+  normalizePersonForSave,
+} from '../lib/ageEngine';
 import '../css/UploadData.css';
 
 const BARANGAYS = [
@@ -24,14 +30,10 @@ const BARANGAYS = [
   'Malawak'
 ];
 
-// Years selectable for tagging a batch of imported data.
-// Adjust the start year as needed for older records you plan to migrate.
-const START_YEAR = 2020;
-const CURRENT_YEAR = new Date().getFullYear();
-const DATA_YEAR_OPTIONS = Array.from(
-  { length: CURRENT_YEAR - START_YEAR + 1 },
-  (_, i) => CURRENT_YEAR - i
-);
+// Years selectable for tagging a batch of imported data. Includes the upcoming
+// year so a roll-over can be staged early, plus a ten-year look-back for
+// historical migrations.
+const DATA_YEAR_OPTIONS = getDataYearOptions();
 
 // Canonical column definitions, used for BOTH scanning (to build the summary/
 // validation) and uploading (to build each resident row). Keeping this in one
@@ -112,6 +114,8 @@ export default function UploadData() {
   const [uploadComplete, setUploadComplete] = useState(false);
   const [totalRowsToUpload, setTotalRowsToUpload] = useState(0);
   const [dataYear, setDataYear] = useState('');
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const addLog = (message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -198,7 +202,7 @@ export default function UploadData() {
   const processSelectedFile = (selectedFile) => {
     const fileExt = selectedFile.name.split('.').pop().toLowerCase();
     if (fileExt !== 'xlsx' && fileExt !== 'xls') {
-      alert('Invalid file format. Please upload an Excel file (.xlsx or .xls).');
+      toast.error('Invalid file format. Please upload an Excel file (.xlsx or .xls).');
       return;
     }
 
@@ -309,7 +313,7 @@ export default function UploadData() {
       } catch (error) {
         console.error('Error parsing excel:', error);
         addLog(`Error parsing file: ${error.message}`, 'error');
-        alert(`Failed to parse file: ${error.message}`);
+        toast.error(`Failed to parse file: ${error.message}`);
       } finally {
         setIsParsing(false);
       }
@@ -341,7 +345,7 @@ export default function UploadData() {
     if (parsedSummary.length === 0 || totalRowsToUpload === 0) return;
 
     if (!dataYear) {
-      alert('Please select the year this data belongs to before uploading.');
+      toast.warning('Please select the year this data belongs to before uploading.');
       return;
     }
 
@@ -388,6 +392,8 @@ export default function UploadData() {
         } = indices;
 
         const residentsBatch = [];
+        const importYear = parseInt(dataYear, 10);
+        let correctedRows = 0;
 
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i];
@@ -436,10 +442,46 @@ export default function UploadData() {
             is_voter: voterIdx !== -1 ? cleanString(row[voterIdx]) : null,
             barangay: item.barangayName,
             is_archived: false,
-            data_year: parseInt(dataYear, 10)
+            data_year: importYear
           };
 
+          // Treat the spreadsheet's age and classification columns as hints
+          // only: the birth date (or the supplied age) plus the selected data
+          // year stay authoritative. This re-derives age, Senior Citizen and
+          // teenage-mother status so an imported row can never carry a stale
+          // classification into the database.
+          const before = {
+            age: resident.age,
+            is_senior: resident.is_senior,
+            current_teenage_mother: resident.current_teenage_mother,
+            child_pregnancy_case: resident.child_pregnancy_case,
+          };
+          const norm = normalizePersonForSave(resident, importYear);
+          resident.age = norm.age;
+          resident.is_senior = norm.is_senior;
+          resident.has_senior_id = norm.has_senior_id;
+          resident.current_teenage_mother = norm.current_teenage_mother;
+          resident.teenage_pregnancy_case = norm.teenage_pregnancy_case;
+          resident.child_pregnancy_case = norm.child_pregnancy_case;
+          resident.age_at_first_birth = norm.age_at_first_birth;
+
+          if (
+            before.age !== resident.age ||
+            before.is_senior !== resident.is_senior ||
+            before.current_teenage_mother !== resident.current_teenage_mother ||
+            before.child_pregnancy_case !== resident.child_pregnancy_case
+          ) {
+            correctedRows += 1;
+          }
+
           residentsBatch.push(resident);
+        }
+
+        if (correctedRows > 0) {
+          addLog(
+            `Recalculated age and Senior / teenage-mother status from the birth date (or supplied age) for ${correctedRows} of ${residentsBatch.length} row(s) in ${item.barangayName}, measured ${describeAgeReference(importYear)}.`,
+            'info'
+          );
         }
 
         // Upload in chunks
@@ -469,11 +511,16 @@ export default function UploadData() {
         details: `Uploaded file "${file?.name || 'workbook.xlsx'}" with ${totalUploaded} imported records (Data Year: ${dataYear}).`,
       });
 
-      alert(`Import Successful! Added ${totalUploaded} residents to Supabase for data year ${dataYear}.`);
+      toast.success(`Import successful! Added ${totalUploaded} residents for data year ${dataYear}.`, 6000);
     } catch (err) {
       console.error('Error uploading to Supabase:', err);
-      addLog(`CRITICAL ERROR during upload: ${err.message}`, 'error');
-      alert(`Upload failed: ${err.message}`);
+      const message = String(err?.message || 'Unknown error');
+      const migrationHint =
+        message.includes('child_pregnancy_case') || message.includes('dswd_')
+          ? ' Run supabase/sensitive_child_pregnancy.sql in the Supabase SQL editor first.'
+          : '';
+      addLog(`CRITICAL ERROR during upload: ${message}${migrationHint}`, 'error');
+      toast.error(`Upload failed: ${message}${migrationHint}`);
     } finally {
       setIsUploading(false);
     }
@@ -561,9 +608,16 @@ export default function UploadData() {
                 >
                   <option value="">-- Select Year --</option>
                   {DATA_YEAR_OPTIONS.map((y) => (
-                    <option key={y} value={y}>{y}</option>
+                    <option key={y} value={y}>
+                      {y}
+                      {y > new Date().getFullYear() ? " (Upcoming)" : ""}
+                    </option>
                   ))}
                 </select>
+                <span className="data-year-hint" style={{ display: 'block', marginTop: '6px' }}>
+                  Ages and Senior / teenage-mother flags are recalculated from each
+                  birth date for the year selected.
+                </span>
               </div>
             )}
 
@@ -623,10 +677,15 @@ export default function UploadData() {
               <button
                 type="button"
                 className="btn-cancel"
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to go back?')) {
-                    navigate('/barangay');
-                  }
+                onClick={async () => {
+                  const goBack = await confirm({
+                    title: 'Discard this upload?',
+                    message: 'You will go back without uploading the selected file.',
+                    confirmLabel: 'Discard and go back',
+                    cancelLabel: 'Keep working',
+                    variant: 'warning',
+                  });
+                  if (goBack) navigate('/barangay');
                 }}
                 disabled={isUploading}
               >

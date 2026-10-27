@@ -685,21 +685,32 @@
 }
 
 /* Child Pregnancy Alert */
+.child-pregnancy-box {
+  background: linear-gradient(135deg, #fff7f7 0%, #fff1f2 100%);
+  border-color: rgba(220, 38, 38, 0.28);
+}
+
+.child-pregnancy-title {
+  color: #b91c1c;
+}
+
 .child-pregnancy-alert {
   display: flex;
   gap: 12px;
-  align-items: center;
+  align-items: flex-start;
   background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
   border: 1.5px solid #fca5a5;
   border-radius: var(--radius-sm);
-  padding: 10px 14px;
+  padding: 12px 14px;
   color: #7f1d1d;
+  margin-bottom: 14px;
 }
 
 .child-pregnancy-alert i {
   color: #dc2626;
   font-size: 16px;
   flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .child-pregnancy-alert strong {
@@ -707,6 +718,18 @@
   font-weight: 800;
   color: #dc2626;
   display: block;
+  margin-bottom: 2px;
+}
+
+.child-pregnancy-alert span {
+  display: block;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #9f1239;
+}
+
+.child-pregnancy-check {
+  border-color: rgba(220, 38, 38, 0.22);
 }
 
 /* Pregnancy N/A Notice */
@@ -715,10 +738,11 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
+  margin-top: 16px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: var(--radius-sm);
-  color: #94a3b8;
+  color: #64748b;
   font-size: 12px;
 }
 
@@ -755,134 +779,6 @@
     grid-template-columns: 1fr;
     gap: 12px;
   }
-}
-
-/* Pre-Entry Household Verification */
-.verification-box {
-  background: #f8fafc;
-  border: 1.5px solid #cbd5e1;
-  border-radius: var(--radius-md);
-  padding: 18px 20px;
-  margin-bottom: 24px;
-}
-
-.verification-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-  color: var(--primary-dark);
-}
-
-.verification-header i {
-  font-size: 20px;
-  color: var(--primary);
-}
-
-.verification-header h3 {
-  font-size: 14.5px;
-  font-weight: 700;
-  margin: 0;
-}
-
-.verification-header p {
-  font-size: 11.5px;
-  color: var(--gray-500);
-  margin: 2px 0 0;
-}
-
-.btn-verify-household {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  color: white;
-  border: none;
-  padding: 10px 18px;
-  font-size: 13px;
-  font-weight: 700;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: var(--transition);
-  box-shadow: 0 2px 8px rgba(44, 82, 130, 0.2);
-}
-
-.btn-verify-household:hover {
-  background: linear-gradient(135deg, #1e3f69 0%, #112542 100%);
-  transform: translateY(-1px);
-}
-
-.btn-verify-household:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* Matched Card */
-.verification-matched-card {
-  background: linear-gradient(135deg, #f0fdf4 0%, #e8fbf0 100%);
-  border: 1.5px solid #86efac;
-  border-radius: var(--radius-sm);
-  padding: 16px;
-  margin-top: 14px;
-  animation: fadeIn 0.3s ease;
-}
-
-.verification-matched-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.verification-matched-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 800;
-  font-size: 13.5px;
-  color: #15803d;
-}
-
-.badge-continuity {
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.matched-details-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-  background: white;
-  padding: 12px 14px;
-  border-radius: 8px;
-  border: 1px solid #dcfce7;
-  font-size: 12px;
-}
-
-.matched-detail-item label {
-  font-size: 10px;
-  font-weight: 700;
-  color: #64748b;
-  display: block;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 2px;
-}
-
-.matched-detail-item span {
-  font-weight: 700;
-  color: #1e293b;
 }
 
 /* Pre-Entry Verification Box */
@@ -1075,3 +971,711 @@
   margin-bottom: 20px;
 }
 
+
+/* ── Prior Household Lookup ─────────────────────────────────────────── */
+.verification-new-card {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.verification-new-card > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lookup-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.lookup-fields .field-group {
+  margin-bottom: 0;
+}
+
+.lookup-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-new-household {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff7ed;
+  color: #b45309;
+  border: 1.5px dashed #fdba74;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-new-household:hover:not(:disabled) {
+  background: #ffedd5;
+  border-color: #f97316;
+  transform: translateY(-1px);
+}
+
+.btn-new-household:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.lookup-note {
+  font-size: 12px;
+  color: #475569;
+  background: #f1f5f9;
+  border-left: 3px solid #64748b;
+  padding: 8px 10px;
+  border-radius: 0 6px 6px 0;
+  margin: 10px 0 0;
+}
+
+.lookup-warning {
+  font-size: 12px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 10px;
+}
+
+.lookup-warning i {
+  color: #d97706;
+}
+
+.btn-text-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 0;
+  text-decoration: underline;
+}
+
+.btn-text-link:hover {
+  color: #1d4ed8;
+}
+
+.matched-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+/* ── Household-year candidates ─────────────────────────────────────── */
+.candidate-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.candidate-list-title {
+  font-size: 12.5px;
+  color: #334155;
+  font-weight: 600;
+  margin: 0;
+}
+
+.candidate-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: white;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 12px 14px;
+  transition: var(--transition);
+}
+
+.candidate-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+}
+
+.candidate-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.candidate-hh {
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.candidate-head {
+  font-size: 13px;
+  color: #334155;
+}
+
+.candidate-meta {
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.btn-use-candidate {
+  background: linear-gradient(135deg, #1e40af, #1d4ed8);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-use-candidate:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  transform: translateY(-1px);
+}
+
+.btn-use-candidate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Head retention & successor (Step 2) ───────────────────────────── */
+.head-retention-box {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+
+.retention-box-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+
+.retention-box-title i {
+  color: #2563eb;
+}
+
+.retention-from {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #64748b;
+  font-style: italic;
+}
+
+.retention-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.retention-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1.5px solid #cbd5e1;
+  background: white;
+  color: #475569;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.retention-chip input {
+  accent-color: currentColor;
+  margin: 0;
+}
+
+.retention-chip.retained.active {
+  background: #dcfce7;
+  border-color: #22c55e;
+  color: #166534;
+}
+
+.retention-chip.deceased.active {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #991b1b;
+}
+
+.retention-chip.migrated.active {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.successor-box {
+  margin-top: 14px;
+  background: white;
+  border: 1.5px dashed #fcd34d;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.successor-lead {
+  font-size: 12.5px;
+  color: #78350f;
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.successor-lead i {
+  color: #d97706;
+}
+
+.successor-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.successor-option:hover {
+  border-color: #93c5fd;
+}
+
+.successor-option.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.successor-option input {
+  margin-top: 3px;
+  accent-color: #2563eb;
+}
+
+.successor-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.successor-option strong {
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.successor-option small {
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.successor-required {
+  font-size: 12px;
+  color: #b91c1c;
+  font-weight: 700;
+  margin: 10px 0 0;
+}
+
+/* ── Retention toolbar (Step 3) ────────────────────────────────────── */
+.retention-toolbar {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-left: 4px solid #2563eb;
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.retention-toolbar.confirmed {
+  background: #f0fdf4;
+  border-color: #86efac;
+  border-left-color: #16a34a;
+}
+
+.retention-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.retention-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: #e2e8f0;
+  color: #334155;
+  border: 1px solid transparent;
+}
+
+.retention-pill b {
+  font-weight: 800;
+}
+
+.retention-pill.retained {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.retention-pill.deceased {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.retention-pill.migrated {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.retention-pill.promoted {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
+}
+
+.retention-pill.added {
+  background: #e0f2fe;
+  color: #075985;
+  border-color: #bae6fd;
+}
+
+.retention-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.btn-retain-all {
+  background: white;
+  border: 1.5px solid #86efac;
+  color: #166534;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-retain-all:hover {
+  background: #f0fdf4;
+}
+
+.btn-confirm-roster {
+  background: linear-gradient(135deg, #1e40af, #1d4ed8);
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-confirm-roster:hover {
+  transform: translateY(-1px);
+}
+
+.btn-confirm-roster.done {
+  background: linear-gradient(135deg, #16a34a, #15803d);
+}
+
+.retention-hint {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Member retention controls (Step 3 cards) ──────────────────────── */
+.member-source-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #e2e8f0;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.member-source-badge.retained {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.member-source-badge.deceased {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.member-source-badge.migrated {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.member-source-badge.promoted {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.member-source-badge.added {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.member-source-badge.estimated {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.member-retention-group {
+  display: inline-flex;
+  gap: 4px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.member-retention-btn {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.member-retention-btn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.member-retention-btn.retained.active {
+  background: #16a34a;
+  color: white;
+}
+
+.member-retention-btn.deceased.active {
+  background: #ef4444;
+  color: white;
+}
+
+.member-retention-btn.migrated.active {
+  background: #f59e0b;
+  color: white;
+}
+
+.member-card.prior-member.deceased,
+.member-card.prior-member.migrated {
+  background: #fafafa;
+  border-style: dashed !important;
+}
+
+.member-card.prior-member.deceased .member-name,
+.member-card.prior-member.migrated .member-name {
+  text-decoration: line-through;
+  color: #64748b;
+}
+
+.member-card.prior-member.promoted {
+  background: #eff6ff;
+  border-color: #93c5fd !important;
+}
+
+.member-excluded-note {
+  font-size: 12px;
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+}
+
+/* ── Tracker notes & excluded table (Step 4) ───────────────────────── */
+.increment-tracker-banner {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.increment-stat small {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.increment-stat strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: white;
+}
+
+.increment-tracker-notes {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #dbeafe;
+}
+
+.increment-tracker-notes b {
+  color: white;
+}
+
+.summary-section.excluded-section {
+  border: 1.5px dashed #fca5a5;
+  background: #fffafa;
+}
+
+.summary-section.excluded-section h3 {
+  color: #b91c1c;
+}
+
+@media (max-width: 768px) {
+  .lookup-actions,
+  .retention-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .candidate-card,
+  .matched-card-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* ── Automated age incrementation ──────────────────────────────────────
+ * Age is derived from the birth date (or, when it is missing, from an
+ * estimate anchored to the data year it was entered in). These styles make
+ * that visible so an encoder can tell at a glance which values the engine
+ * owns and which ones they can still type. */
+
+/* Read-only while a birth date exists - the age is engine-owned. */
+.age-auto-input {
+  background: #f8fafc;
+  color: #334155;
+  cursor: not-allowed;
+}
+
+.age-auto-input:hover {
+  border-color: var(--primary-light);
+}
+
+/* "Derived from birth date · as of ..." note under an auto-filled age. */
+.auto-classified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.auto-classified-badge i {
+  font-size: 9px;
+}
+
+/* Explanation line inside a classification card. */
+.auto-classified-note {
+  display: block;
+  margin-top: 2px;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.auto-classified-note.muted {
+  color: #94a3b8;
+}
+
+/* Small "Auto" pill on the Senior Citizen card header. */
+.class-header .checkbox-container {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.class-header .auto-classified-tag {
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+/* A derived checkbox is display-only, so show it that way. */
+.classification-card input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.auto-classified-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #3730a3;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: help;
+}
+
+/* Helper text under the Data Year selector and the estimated-age fields. */
+.age-reference-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.age-reference-note.estimated {
+  color: #b45309;
+}

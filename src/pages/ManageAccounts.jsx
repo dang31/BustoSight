@@ -7,6 +7,8 @@ import { supabase } from "../lib/supabase";
 import ResetStaffPasswordModal from "../components/Admin/ResetStaffPasswordModal";
 import PasswordInput from "../components/Common/PasswordInput";
 import { logTransaction } from "../utils/logger";
+import { verifyAdminPassword as verifyPassword } from "../utils/adminPassword";
+import { useToast } from "../components/Feedback/FeedbackProvider";
 import "../css/ManageAccounts.css";
 import "../css/AddResident.css";
 
@@ -225,8 +227,9 @@ export default function ManageAccounts() {
     data: null,
   });
 
-  // Toast state
-  const [toast, setToast] = useState(null);
+  // Feedback (toasts + dialogs) comes from the app-wide provider so notices
+  // survive navigation and are positioned consistently.
+  const toast = useToast();
 
   // Form inputs
   const [formData, setFormData] = useState({
@@ -250,84 +253,23 @@ export default function ManageAccounts() {
   const [formErrors, setFormErrors] = useState({});
 
   const showToast = (message, type = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+    const emit = toast[type] ?? toast.info;
+    emit(message);
   };
 
   const verifyAdminPassword = async (pwdToVerify) => {
     const pwd =
       (pwdToVerify !== undefined ? pwdToVerify : adminPasswordConfirm) || "";
     if (!pwd.trim()) {
-      alert("Security Check Failed: Logged-in Admin password is required.");
+      toast.error("Security check failed: your admin password is required.");
       return false;
     }
-    const trimmedPassword = pwd.trim();
 
-    const storedUserStr = sessionStorage.getItem("popdev_user") || localStorage.getItem("popdev_user");
-    const storedUser = JSON.parse(storedUserStr) || {};
-
-    // 1. Direct local stored password check
-    if (
-      storedUser &&
-      storedUser.password &&
-      storedUser.password === trimmedPassword
-    ) {
-      return true;
+    const ok = await verifyPassword(pwd);
+    if (!ok) {
+      toast.error("Security check failed: incorrect admin password.");
     }
-
-    try {
-      // 2. Create isolated auth client to prevent session mutation/disruption
-      const tempAuthClient = createClient(
-        import.meta.env.VITE_SUPABASE_URL,
-        import.meta.env.VITE_SUPABASE_ANON_KEY,
-        {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-            detectSessionInUrl: false,
-          },
-        },
-      );
-
-      let emailsToTry = [];
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user && user.email) emailsToTry.push(user.email);
-      if (storedUser && storedUser.email) emailsToTry.push(storedUser.email);
-      if (storedUser && storedUser.username) {
-        emailsToTry.push(`${storedUser.username}@bustos.gov.ph`);
-      }
-      emailsToTry.push("admin@bustos.gov.ph");
-
-      const uniqueEmails = [...new Set(emailsToTry.filter(Boolean))];
-
-      for (const email of uniqueEmails) {
-        const { error: authError } =
-          await tempAuthClient.auth.signInWithPassword({
-            email: email,
-            password: trimmedPassword,
-          });
-
-        if (!authError) {
-          return true;
-        }
-      }
-
-      alert("Security Check Failed: Incorrect Admin Password.");
-      return false;
-    } catch (err) {
-      console.warn("Auth verification error:", err.message);
-      if (
-        storedUser &&
-        storedUser.password &&
-        storedUser.password === trimmedPassword
-      ) {
-        return true;
-      }
-      alert("Security Check Failed: Incorrect Admin Password.");
-      return false;
-    }
+    return ok;
   };
 
   useEffect(() => {
@@ -1019,14 +961,6 @@ export default function ManageAccounts() {
       <Sidebar />
 
       <main className="content">
-        {/* Toast Notification */}
-        {toast && (
-          <div className={`acc-toast acc-toast-${toast.type} animate-fade-up`}>
-            <span>{toast.message}</span>
-            <button onClick={() => setToast(null)}>×</button>
-          </div>
-        )}
-
         {/* Header */}
         <header className="main-header">
           <h1>Account Lifecycle & Access Control Management</h1>

@@ -1,12 +1,58 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import UserProfileBadge from "../components/UserProfileBadge";
+import AttendanceCheckboxes from "../components/AttendanceCheckboxes";
+import PregnancyClassificationSection from "../components/PregnancyClassificationSection";
+import DisabilityDetailsField from "../components/DisabilityDetailsField";
+import { disabilityDetailsForSave, getDisabilityError } from "../lib/disability";
 import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/AddResident.css";
 import { isValidName, getNameError } from "../lib/nameValidation";
+import {
+  buildGroups,
+  fetchAttendanceCatalog,
+  formatAttendance,
+  serializeAttendance,
+} from "../lib/attendance";
 import { logTransaction } from "../utils/logger";
+import { formatResidentName } from "../lib/residentName";
+import { useToast, useConfirm } from "../components/Feedback/FeedbackProvider";
+import {
+  RETAINED,
+  DECEASED,
+  MIGRATED,
+  RETENTION_LABELS,
+  EDUCATION_OPTIONS,
+  VOTER_OPTIONS,
+  CIVIL_STATUS_OPTIONS,
+  RESIDENCE_OPTIONS,
+  findPriorHouseholdCandidates,
+  fetchHouseholdForYear,
+  generateHouseholdNumber,
+  mapResidenceType,
+  mapPriorToHeadForm,
+  mapPriorToMemberForm,
+  isMemberRetained,
+  activeMembersOf,
+  summarizeRetention,
+  identityKey,
+} from "../lib/householdContinuity";
+import {
+  getDataYearOptions,
+  describeAgeReference,
+  calculateAgeForYear,
+  currentYear,
+  isSeniorAge,
+  isFemaleSex,
+  toAgeInt,
+  applyPersonYear,
+  normalizePersonForSave,
+  snapshotPerson,
+  summarizeYearChanges,
+  formatYearChangeSummary,
+} from "../lib/ageEngine";
 
 export default function AddResident() {
   const navigate = useNavigate();
@@ -51,9 +97,44 @@ export default function AddResident() {
   const [expandedMemberIndex, setExpandedMemberIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
   const [formWarning, setFormWarning] = useState("");
-  const [verificationStatus, setVerificationStatus] = useState("idle"); // 'idle' | 'searching' | 'matched' | 'new_household'
-  const [matchedHousehold, setMatchedHousehold] = useState(null);
-  const [isVerifying, setIsVerifying] = useState(false);
+  const [attendanceCatalog, setAttendanceCatalog] = useState({
+    programs: [],
+    seminars: [],
+  });
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const [attendanceError, setAttendanceError] = useState("");
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  const loadAttendanceCatalog = useCallback(async () => {
+    setAttendanceLoading(true);
+    setAttendanceError("");
+    const result = await fetchAttendanceCatalog();
+    setAttendanceCatalog({
+      programs: result.programs,
+      seminars: result.seminars,
+    });
+    setAttendanceError(result.error || "");
+    setAttendanceLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadAttendanceCatalog();
+  }, [loadAttendanceCatalog]);
+
+  const attendanceGroups = useMemo(
+    () => buildGroups(attendanceCatalog.programs, attendanceCatalog.seminars),
+    [attendanceCatalog],
+  );
+
+  const attendanceText = useCallback(
+    (items) =>
+      formatAttendance(
+        serializeAttendance(items, attendanceGroups),
+        attendanceGroups,
+      ),
+    [attendanceGroups],
+  );
 
   // Reusable default states so we can both initialize and reset the form
   const initialHousehold = {
@@ -86,81 +167,265 @@ export default function AddResident() {
     is_4ps: false,
     is_pwd: false,
     has_pwd_id: false,
+    disability_details: "",
     is_senior: false,
+    senior_id_reported: false,
     has_senior_id: false,
     is_solo_parent: false,
     has_solo_parent_id: false,
     age_first_birth: "",
     teenage_pregnancy: false,
+    // Manual evidence of a child, separate from age at first birth. The
+    // age engine uses either source while the person is female and 10-19.
+    teen_mother_reported: false,
     teenage_mother: false,
-    services_attended: "",
+    child_pregnancy_case: false,
+    // Age anchor used when the birth date is missing, so an estimated age
+    // still rolls forward on the next data year.
+    ageBaselineYear: null,
+    ageBaselineValue: null,
+    ageEstimated: false,
+    attended_items: [],
   };
   const [household, setHousehold] = useState(initialHousehold);
   const [head, setHead] = useState(initialHead);
 
-  const calculateAge = (dobString) => {
-    if (!dobString) return "";
-    const today = new Date();
-    const birthDate = new Date(dobString);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (
-      monthDiff < 0 ||
-      (monthDiff === 0 && today.getDate() < birthDate.getDate())
-    ) {
-      age--;
-    }
-    return age >= 0 ? age : "";
+  /* ── Prior Household Lookup & Member Retention ──
+   * verificationStatus: 'idle' | 'searching' | 'candidates' | 'matched'
+   *                     | 'new_household'
+   * matchedHousehold holds the confirmed prior household-year; priorHeadForm
+   * keeps the original prior head so a successor can be reverted. */
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState("idle");
+  const [matchedHousehold, setMatchedHousehold] = useState(null);
+  const [priorCandidates, setPriorCandidates] = useState([]);
+  const [lookupNote, setLookupNote] = useState("");
+  const [currentYearMatch, setCurrentYearMatch] = useState(null);
+  const [lookupHhNo, setLookupHhNo] = useState("");
+  const [lookupLastName, setLookupLastName] = useState("");
+  const [lookupFirstName, setLookupFirstName] = useState("");
+  const [retentionReviewed, setRetentionReviewed] = useState(false);
+  // Household-head retention: 'retained' | 'deceased' | 'migrated'
+  const [headRetention, setHeadRetention] = useState(RETAINED);
+  const [priorHeadForm, setPriorHeadForm] = useState(null);
+  const [headIsSuccessor, setHeadIsSuccessor] = useState(false);
+  const [successorChoice, setSuccessorChoice] = useState("");
+
+  /**
+   * Age is always derived from the birth date against the Data Year being
+   * encoded, so a prior-year roster recalculates to the year the encoder is
+   * working on. For the current year the reference is today; for every other
+   * year (past *or* future) it is December 31 of that year, which is what
+   * makes preparing next year's roll-over work.
+   */
+  const selectedDataYear = () => {
+    const year = parseInt(household.data_year, 10);
+    return Number.isFinite(year) ? year : new Date().getFullYear();
   };
 
+  /** True when an age is known (0 counts - infants are a real age). */
+  const hasKnownAge = (person) => toAgeInt(person.age) !== null;
+
+  /**
+   * Birth date is the master baseline. Entering one recalculates the age and
+   * every age-derived flag; the Age field becomes read-only. Clearing it
+   * falls back to the last known age, anchored to the current data year so it
+   * still rolls forward next year.
+   */
   const handleHeadDobChange = (dobValue) => {
-    const calculatedAge = calculateAge(dobValue);
-    setHead((prev) => ({
-      ...prev,
-      dob: dobValue,
-      age: calculatedAge,
-    }));
+    setHead((prev) => {
+      const next = { ...prev, dob: dobValue };
+      if (dobValue) {
+        next.age = calculateAgeForYear(dobValue, selectedDataYear());
+        next.ageBaselineYear = null;
+        next.ageBaselineValue = null;
+        next.ageEstimated = false;
+      } else {
+        next.ageBaselineYear = selectedDataYear();
+        next.ageBaselineValue = toAgeInt(prev.age);
+      }
+      return applyPersonYear(next, selectedDataYear());
+    });
   };
 
   const handleMemberDobChange = (index, dobValue) => {
-    const calculatedAge = calculateAge(dobValue);
-    const newMembers = [...members];
-    newMembers[index].dob = dobValue;
-    newMembers[index].age = calculatedAge;
-    setMembers(newMembers);
+    setMembers((prev) => {
+      const next = [...prev];
+      const person = { ...next[index], dob: dobValue };
+      if (dobValue) {
+        person.age = calculateAgeForYear(dobValue, selectedDataYear());
+        person.ageBaselineYear = null;
+        person.ageBaselineValue = null;
+        person.ageEstimated = false;
+      } else {
+        person.ageBaselineYear = selectedDataYear();
+        person.ageBaselineValue = toAgeInt(person.age);
+      }
+      next[index] = applyPersonYear(person, selectedDataYear());
+      return next;
+    });
+  };
+
+  /**
+   * The Age field is only editable while the birth date is missing (an
+   * estimate the encoder supplies). The value is anchored to the data year it
+   * was typed in, so switching Data Year still rolls it forward.
+   */
+  const handleHeadAgeChange = (value) => {
+    setHead((prev) => {
+      if (prev.dob) return prev; // derived - not editable
+      const raw = value === "" ? "" : value;
+      return applyPersonYear(
+        {
+          ...prev,
+          age: raw,
+          ageBaselineYear: value === "" ? null : selectedDataYear(),
+          ageBaselineValue: toAgeInt(value),
+        },
+        selectedDataYear(),
+      );
+    });
+  };
+
+  const handleMemberAgeChange = (index, value) => {
+    setMembers((prev) => {
+      if (prev[index]?.dob) return prev; // derived - not editable
+      const next = [...prev];
+      next[index] = applyPersonYear(
+        {
+          ...next[index],
+          age: value === "" ? "" : value,
+          ageBaselineYear: value === "" ? null : selectedDataYear(),
+          ageBaselineValue: toAgeInt(value),
+        },
+        selectedDataYear(),
+      );
+      return next;
+    });
+  };
+
+  /** Sex drives the female-adolescent rules, so re-derive on change. */
+  const handleHeadSexChange = (value) => {
+    setHead((prev) =>
+      applyPersonYear({ ...prev, sex: value }, selectedDataYear()),
+    );
+  };
+
+  const handleMemberSexChange = (index, value) => {
+    setMembers((prev) => {
+      const next = [...prev];
+      next[index] = applyPersonYear(
+        { ...next[index], sex: value },
+        selectedDataYear(),
+      );
+      return next;
+    });
+  };
+
+  /**
+   * Manual motherhood evidence is used when first-birth age is unknown.
+   * The age engine also recognizes a valid teenage first-birth age, and
+   * only applies the flag while female and 10-19. Keep the manual baseline
+   * separate so changing the data year can re-derive the flag.
+   */
+  const handleHeadTeenMotherChange = (checked) => {
+    setHead((prev) =>
+      applyPersonYear(
+        { ...prev, teen_mother_reported: checked },
+        selectedDataYear(),
+      ),
+    );
+  };
+
+  const handleMemberTeenMotherChange = (index, checked) => {
+    setMembers((prev) => {
+      const next = [...prev];
+      next[index] = applyPersonYear(
+        { ...next[index], teen_mother_reported: checked },
+        selectedDataYear(),
+      );
+      return next;
+    });
+  };
+
+  /**
+   * A reported pregnancy on a female child is a sensitive child-pregnancy
+   * case. Toggling it clears the teenage baselines so checking creates a clean
+   * child case and unchecking cannot be silently re-derived from a stale teen
+   * flag. A first-birth age of 9 or below is separate evidence and still
+   * preserves the case until that value is corrected.
+   */
+  const handleHeadChildPregnancyChange = (checked) => {
+    setHead((prev) =>
+      applyPersonYear(
+        {
+          ...prev,
+          child_pregnancy_case: checked,
+          teenage_pregnancy: false,
+          teen_mother_reported: false,
+        },
+        selectedDataYear(),
+      ),
+    );
+  };
+
+  const handleMemberChildPregnancyChange = (index, checked) => {
+    setMembers((prev) => {
+      const next = [...prev];
+      next[index] = applyPersonYear(
+        {
+          ...next[index],
+          child_pregnancy_case: checked,
+          teenage_pregnancy: false,
+          teen_mother_reported: false,
+        },
+        selectedDataYear(),
+      );
+      return next;
+    });
   };
 
   const handleHeadAgeFirstBirthChange = (val) => {
     const ageNum = parseInt(val, 10);
     const isTeenPreg = !isNaN(ageNum) && ageNum > 0 && ageNum <= 19;
-    setHead((prev) => ({
-      ...prev,
-      age_first_birth: val,
-      teenage_pregnancy: isTeenPreg,
-    }));
+    setHead((prev) =>
+      applyPersonYear(
+        {
+          ...prev,
+          age_first_birth: val,
+          teenage_pregnancy: isTeenPreg,
+        },
+        selectedDataYear(),
+      ),
+    );
   };
 
   const handleMemberAgeFirstBirthChange = (index, val) => {
     const ageNum = parseInt(val, 10);
     const isTeenPreg = !isNaN(ageNum) && ageNum > 0 && ageNum <= 19;
-    const newMembers = [...members];
-    newMembers[index].age_first_birth = val;
-    newMembers[index].teenage_pregnancy = isTeenPreg;
-    setMembers(newMembers);
+    setMembers((prev) => {
+      const next = [...prev];
+      next[index] = applyPersonYear(
+        {
+          ...next[index],
+          age_first_birth: val,
+          teenage_pregnancy: isTeenPreg,
+        },
+        selectedDataYear(),
+      );
+      return next;
+    });
   };
 
+  // Senior Citizen is fully automatic (age >= 60), so these handlers no longer
+  // carry a senior branch - the checkbox is derived and disabled in the UI.
   const handleHeadClassification = (field, checked) => {
-    if (field === "is_senior" && checked) {
-      const age = parseInt(head.age, 10);
-      if (!age || age < 60) {
-        alert("Senior Citizen classification requires age 60 or above.");
-        return;
-      }
-    }
     setHead((prev) => {
       const next = { ...prev, [field]: checked };
-      if (field === "is_pwd" && !checked) next.has_pwd_id = false;
-      if (field === "is_senior" && !checked) next.has_senior_id = false;
+      if (field === "is_pwd" && !checked) {
+        next.has_pwd_id = false;
+        next.disability_details = "";
+      }
       if (field === "is_solo_parent" && !checked)
         next.has_solo_parent_id = false;
       return next;
@@ -168,18 +433,12 @@ export default function AddResident() {
   };
 
   const updateMemberClassification = (index, field, checked) => {
-    if (field === "is_senior" && checked) {
-      const age = parseInt(members[index].age, 10);
-      if (!age || age < 60) {
-        alert("Senior Citizen classification requires age 60 or above.");
-        return;
-      }
-    }
     const newMembers = [...members];
     newMembers[index][field] = checked;
-    if (field === "is_pwd" && !checked) newMembers[index].has_pwd_id = false;
-    if (field === "is_senior" && !checked)
-      newMembers[index].has_senior_id = false;
+    if (field === "is_pwd" && !checked) {
+      newMembers[index].has_pwd_id = false;
+      newMembers[index].disability_details = "";
+    }
     if (field === "is_solo_parent" && !checked)
       newMembers[index].has_solo_parent_id = false;
     setMembers(newMembers);
@@ -187,7 +446,15 @@ export default function AddResident() {
 
   const validateStep = (step = currentStep) => {
     if (step === 1) {
-      if (!household.hh_num) return "Household Number is required.";
+      if (!household.hh_num) {
+        if (verificationStatus === "idle") {
+          return 'Search for a prior household first, or click "Register as New Household" to generate a Household Number.';
+        }
+        if (verificationStatus === "new_household") {
+          return 'Enter a Household Number, or click "Register as New Household" to generate one.';
+        }
+        return "Household Number is required.";
+      }
       if (!household.house_no) return "House Number is required.";
       if (!household.street) return "Street name is required.";
       if (!household.purok) return "Purok / Sitio is required.";
@@ -198,10 +465,28 @@ export default function AddResident() {
       ) {
         return "Please specify the residence type.";
       }
+      if (
+        currentYearMatch &&
+        verificationStatus === "matched" &&
+        currentYearMatch > 0
+      ) {
+        return `Household ${household.hh_num} already has ${currentYearMatch} record(s) for Data Year ${household.data_year}. Edit or add members from the Household list to avoid duplicates.`;
+      }
     }
 
     // Step 2: Household Head Validation
     if (step === 2) {
+      // A prior household head that will not be carried forward must have a
+      // successor before the household can be encoded.
+      if (
+        verificationStatus === "matched" &&
+        priorHeadForm &&
+        headRetention !== RETAINED &&
+        !headIsSuccessor
+      ) {
+        return `The prior household head is marked ${RETENTION_LABELS[headRetention]}. Select a successor (promote a retained member or enter a new head) before continuing.`;
+      }
+
       if (!head.lname) return "Last Name is required for the Household Head.";
       const lnameErr = getNameError(head.lname);
       if (lnameErr) return `Household Head last name: ${lnameErr}`;
@@ -218,13 +503,28 @@ export default function AddResident() {
       if (!head.pob)
         return "Place of Birth is required for the Household Head.";
       if (!head.dob) return "Date of Birth is required for the Household Head.";
+      if (calculateAgeForYear(head.dob, selectedDataYear()) === "")
+        return "Date of Birth must be a valid date that is not in the future.";
       if (head.age !== "" && head.age <= 18)
         return "Household head must be over 18 years old.";
+      const disabilityError = getDisabilityError(head, "Household Head");
+      if (disabilityError) return disabilityError;
     }
 
     if (step === 3) {
+      // Every prior member must have been reviewed (Retained / Deceased /
+      // Migrated) before the encoder can move on.
+      if (verificationStatus === "matched" && !retentionReviewed) {
+        return "Review the prior-year roster and confirm retention (Retained, Deceased or Migrated) before continuing.";
+      }
+
       for (let i = 0; i < members.length; i += 1) {
         const member = members[i];
+        if (member.promotedToHead) continue; // saved as the head instead
+        if (!isMemberRetained(member)) continue; // not carried forward
+        const disabilityError = getDisabilityError(member, `Member ${i + 1}`);
+        if (disabilityError) return disabilityError;
+
         const hasAnyMemberValue =
           member.lname ||
           member.fname ||
@@ -250,7 +550,34 @@ export default function AddResident() {
 
           if (!member.rel)
             return `Member ${i + 1} is missing a Relationship to Head.`;
+
+          // An age (or a birth date to derive it from) is required so the
+          // Senior Citizen and teenage-mother classifications can be derived
+          // automatically on save rather than left blank.
+          if (!member.dob && toAgeInt(member.age) === null) {
+            return `Member ${i + 1} needs a Date of Birth — or, if it is unknown, an estimated Age.`;
+          }
         }
+      }
+
+      // Duplicate person check across the head + the members being saved.
+      const seen = new Map();
+      const roster = [head, ...activeMembersOf(members)];
+      for (const person of roster) {
+        const last = String(person.lname || "").trim();
+        const first = String(person.fname || "").trim();
+        if (!last && !first) continue;
+        const key = identityKey(person);
+        const label = formatResidentName({
+          first_name: person.fname,
+          middle_name: person.mname,
+          last_name: person.lname,
+          qualifier: person.q,
+        });
+        if (seen.has(key)) {
+          return `Duplicate: ${label} appears twice in this household roster. Mark one record as Deceased or Migrated, or correct the birth date.`;
+        }
+        seen.set(key, label);
       }
     }
 
@@ -289,17 +616,62 @@ export default function AddResident() {
         is_4ps: false,
         is_pwd: false,
         has_pwd_id: false,
+        disability_details: "",
         is_senior: false,
+        senior_id_reported: false,
         has_senior_id: false,
         is_solo_parent: false,
         has_solo_parent_id: false,
         age_first_birth: "",
         teenage_pregnancy: false,
+        teen_mother_reported: false,
         teenage_mother: false,
-        services_attended: "",
+        child_pregnancy_case: false,
+        ageBaselineYear: null,
+        ageBaselineValue: null,
+        ageEstimated: false,
+        attended_items: [],
+        source: "new",
+        promotedToHead: false,
       },
     ]);
     setExpandedMemberIndex(members.length);
+    setFormWarning("");
+  };
+
+  /**
+   * Sets the retention status of a prior member. Members marked Deceased or
+   * Migrated stay visible for reference but are excluded from the new data
+   * year. Confirming again after any change re-arms the roster confirmation.
+   */
+  const updateMemberStatus = (index, status) => {
+    setMembers((prev) =>
+      prev.map((member, i) =>
+        i === index ? { ...member, retentionStatus: status } : member,
+      ),
+    );
+    setRetentionReviewed(false);
+    if (status !== RETAINED && expandedMemberIndex === index) {
+      setExpandedMemberIndex(-1);
+    }
+    setFormWarning("");
+  };
+
+  /** Shortcut: keep every prior member in the household. */
+  const retainAllMembers = () => {
+    setMembers((prev) =>
+      prev.map((member) =>
+        member.source === "prior" && !member.promotedToHead
+          ? { ...member, retentionStatus: RETAINED }
+          : member,
+      ),
+    );
+    setFormWarning("");
+  };
+
+  const confirmRosterReviewed = () => {
+    setRetentionReviewed(true);
+    setFormWarning("");
   };
 
   const removeMember = (index) => {
@@ -311,19 +683,22 @@ export default function AddResident() {
     }
   };
 
-  const updateMember = (index, field, value) => {
-    const newMembers = [...members];
-    newMembers[index][field] = value;
-    setMembers(newMembers);
+  /** Updates one field, or a patch object, of a single member card. */
+  const updateMember = (index, fieldOrPatch, value) => {
+    setMembers((prev) =>
+      prev.map((m, i) => {
+        if (i !== index) return m;
+        return typeof fieldOrPatch === "object"
+          ? { ...m, ...fieldOrPatch }
+          : { ...m, [fieldOrPatch]: value };
+      }),
+    );
   };
 
   const handleStep = (dir) => {
     if (dir === 1) {
       const warning = validateStep();
       if (warning) {
-        if (warning.includes("18 years old")) {
-          alert("Invalid: Household head must be over 18 years old.");
-        }
         setFormWarning(warning);
         return;
       }
@@ -362,6 +737,14 @@ export default function AddResident() {
             : household.residence_type,
       };
 
+      const dataYear = common.data_year;
+
+      // Final safety net: re-derive every age and age-dependent flag from the
+      // birth date (or the estimated-age anchor) for the data year being
+      // saved, so no stale `is_senior` / `current_teenage_mother` can ever
+      // reach the database.
+      const headNorm = normalizePersonForSave(head, dataYear);
+
       const residentsToSave = [
         {
           ...common,
@@ -375,7 +758,7 @@ export default function AddResident() {
           civil_status: head.civil,
           relation_to_head: "HEAD",
           is_household_head: true,
-          age: head.age ? parseInt(head.age, 10) : null,
+          age: headNorm.age,
           religion: head.religion || null,
           educational_attainment: head.edu || null,
           citizenship: head.citizenship || "FILIPINO",
@@ -384,56 +767,73 @@ export default function AddResident() {
           is_4ps: head.is_4ps,
           is_pwd: head.is_pwd,
           has_pwd_id: head.is_pwd ? head.has_pwd_id : false,
-          is_senior: head.is_senior,
-          has_senior_id: head.is_senior ? head.has_senior_id : false,
+          disability_details: disabilityDetailsForSave(head),
+          is_senior: headNorm.is_senior,
+          has_senior_id: headNorm.has_senior_id,
           is_solo_parent: head.is_solo_parent,
           has_solo_parent_id: head.is_solo_parent
             ? head.has_solo_parent_id
             : false,
-          age_at_first_birth:
-            head.sex === "Female" && head.age_first_birth
-              ? parseInt(head.age_first_birth, 10)
-              : null,
-          teenage_pregnancy_case:
-            head.sex === "Female" ? head.teenage_pregnancy : false,
-          current_teenage_mother:
-            head.sex === "Female" ? head.teenage_mother : false,
+          age_at_first_birth: headNorm.age_at_first_birth,
+          teenage_pregnancy_case: headNorm.teenage_pregnancy_case,
+          current_teenage_mother: headNorm.current_teenage_mother,
+          child_pregnancy_case: headNorm.child_pregnancy_case,
+          dswd_referral_status: head.dswd_referral_status || "Pending",
+          dswd_referred_at: head.dswd_referred_at || null,
+          dswd_referral_notes: head.dswd_referral_notes || null,
+          attended_items: serializeAttendance(
+            head.attended_items,
+            attendanceGroups,
+          ),
           is_archived: false,
         },
-        ...members.map((m) => ({
-          ...common,
-          last_name: m.lname,
-          first_name: m.fname,
-          middle_name: m.mname || null,
-          qualifier: m.q || null,
-          birth_place: m.pob,
-          birth_date: m.dob || null,
-          sex: m.sex,
-          civil_status: m.civil,
-          relation_to_head: m.rel || "MEMBER",
-          is_household_head: false,
-          age: m.age ? parseInt(m.age, 10) : null,
-          religion: m.religion || null,
-          educational_attainment: m.edu || null,
-          citizenship: m.citizenship || "FILIPINO",
-          occupation: m.occupation || null,
-          is_voter: m.is_voter,
-          is_4ps: m.is_4ps,
-          is_pwd: m.is_pwd,
-          has_pwd_id: m.is_pwd ? m.has_pwd_id : false,
-          is_senior: m.is_senior,
-          has_senior_id: m.is_senior ? m.has_senior_id : false,
-          is_solo_parent: m.is_solo_parent,
-          has_solo_parent_id: m.is_solo_parent ? m.has_solo_parent_id : false,
-          age_at_first_birth:
-            m.sex === "Female" && m.age_first_birth
-              ? parseInt(m.age_first_birth, 10)
-              : null,
-          teenage_pregnancy_case:
-            m.sex === "Female" ? m.teenage_pregnancy : false,
-          current_teenage_mother: m.sex === "Female" ? m.teenage_mother : false,
-          is_archived: false,
-        })),
+        // Only members carried forward are written to the new data year.
+        // Deceased / migrated prior members and the promoted successor are
+        // recorded in the transaction log instead.
+        ...activeMembersOf(members).map((m) => {
+          const memberNorm = normalizePersonForSave(m, dataYear);
+          return {
+            ...common,
+            last_name: m.lname,
+            first_name: m.fname,
+            middle_name: m.mname || null,
+            qualifier: m.q || null,
+            birth_place: m.pob,
+            birth_date: m.dob || null,
+            sex: m.sex,
+            civil_status: m.civil,
+            relation_to_head: m.rel || "MEMBER",
+            is_household_head: false,
+            age: memberNorm.age,
+            religion: m.religion || null,
+            educational_attainment: m.edu || null,
+            citizenship: m.citizenship || "FILIPINO",
+            occupation: m.occupation || null,
+            is_voter: m.is_voter,
+            is_4ps: m.is_4ps,
+            is_pwd: m.is_pwd,
+            has_pwd_id: m.is_pwd ? m.has_pwd_id : false,
+            disability_details: disabilityDetailsForSave(m),
+            is_senior: memberNorm.is_senior,
+            has_senior_id: memberNorm.has_senior_id,
+            is_solo_parent: m.is_solo_parent,
+            has_solo_parent_id: m.is_solo_parent
+              ? m.has_solo_parent_id
+              : false,
+            age_at_first_birth: memberNorm.age_at_first_birth,
+            teenage_pregnancy_case: memberNorm.teenage_pregnancy_case,
+            current_teenage_mother: memberNorm.current_teenage_mother,
+            child_pregnancy_case: memberNorm.child_pregnancy_case,
+            dswd_referral_status: m.dswd_referral_status || "Pending",
+            dswd_referred_at: m.dswd_referred_at || null,
+            dswd_referral_notes: m.dswd_referral_notes || null,
+            attended_items: serializeAttendance(
+              m.attended_items,
+              attendanceGroups,
+            ),
+            is_archived: false,
+          };
+        }),
       ];
 
       // Check for duplicate residents in Supabase & Local Storage before saving
@@ -453,13 +853,12 @@ export default function AddResident() {
 
         if (!checkErr && existing && existing.length > 0) {
           const isArchived = existing.some((ex) => ex.is_archived);
-          const fullName = `${r.first_name} ${r.last_name}`;
+          const fullName = formatResidentName(r);
           const msg = isArchived
             ? `Cannot save: Resident ${fullName} already exists in ${r.barangay} as an archived record for year ${r.data_year}.`
             : `Cannot save: Resident ${fullName} already exists in ${r.barangay} for year ${r.data_year}.`;
 
           setFormWarning(msg);
-          alert(msg);
           setIsLoading(false);
           return;
         }
@@ -474,10 +873,9 @@ export default function AddResident() {
         });
 
         if (localDup) {
-          const fullName = `${r.first_name} ${r.last_name}`;
+          const fullName = formatResidentName(r);
           const msg = `Cannot save: Resident ${fullName} already exists in local storage for year ${r.data_year}.`;
           setFormWarning(msg);
-          alert(msg);
           setIsLoading(false);
           return;
         }
@@ -523,6 +921,7 @@ export default function AddResident() {
         edu: r.educational_attainment,
         isPwd: r.is_pwd,
         hasPwdId: r.has_pwd_id,
+        disabilityDetails: r.disability_details,
         isSenior: r.is_senior,
         hasSeniorId: r.has_senior_id,
         isSoloParent: r.is_solo_parent,
@@ -530,7 +929,12 @@ export default function AddResident() {
         ageFirstBirth: r.age_at_first_birth,
         teenagePregnancy: r.teenage_pregnancy_case,
         teenageMother: r.current_teenage_mother,
+        childPregnancy: r.child_pregnancy_case,
+        dswdReferralStatus: r.dswd_referral_status,
+        dswdReferredAt: r.dswd_referred_at,
+        dswdReferralNotes: r.dswd_referral_notes,
         is4ps: r.is_4ps,
+        attendedItems: r.attended_items,
         dataYear: r.data_year,
       }));
 
@@ -539,174 +943,425 @@ export default function AddResident() {
         JSON.stringify([...allRecords, ...newRecordsLocal]),
       );
 
-      const incrementInfo = verificationStatus === "matched" && matchedHousehold
-        ? " | Prior-year match: " + matchedHousehold.totalMembers + " member(s) in " + matchedHousehold.priorYear + ", Net increment: " + ((residentsToSave.length) - matchedHousehold.totalMembers >= 0 ? "+" : "") + ((residentsToSave.length) - matchedHousehold.totalMembers)
-        : verificationStatus === "new_household"
-          ? " | New household (no prior-year record)"
-          : "";
+      const summary = summarizeRetention(members);
+      const retentionBits = [];
+      if (verificationStatus === "matched" && matchedHousehold) {
+        retentionBits.push(
+          `prior household ${matchedHousehold.hNo} from ${matchedHousehold.dataYear} (head: ${matchedHousehold.headName})`,
+        );
+        retentionBits.push(`${summary.retained} retained`);
+        if (summary.promoted) retentionBits.push(`${summary.promoted} promoted to head`);
+        if (summary.deceased) retentionBits.push(`${summary.deceased} deceased (not carried forward)`);
+        if (summary.migrated) retentionBits.push(`${summary.migrated} migrated (not carried forward)`);
+        if (summary.added) retentionBits.push(`${summary.added} newly added`);
+        const net = residentsToSave.length - (matchedHousehold.memberCount || 0);
+        retentionBits.push(`net increment ${net >= 0 ? "+" : ""}${net}`);
+      } else if (verificationStatus === "new_household") {
+        retentionBits.push(
+          `new household (no prior-year record), ${residentsToSave.length} member(s)`,
+        );
+      }
+      if (headRetention !== RETAINED && priorHeadForm) {
+        retentionBits.push(
+          `prior head ${formatResidentName({
+            first_name: priorHeadForm.fname,
+            middle_name: priorHeadForm.mname,
+            last_name: priorHeadForm.lname,
+            qualifier: priorHeadForm.q,
+          })} marked ${RETENTION_LABELS[headRetention]}`,
+        );
+      }
 
       logTransaction({
         action: "Add Resident",
         category: "Resident Management",
-        details: "Registered household " + (residentsToSave[0]?.h_no || "") + " in " + (residentsToSave[0]?.barangay || "") + " with " + residentsToSave.length + " member(s) for year " + (residentsToSave[0]?.data_year || "") + "." + incrementInfo,
+        details:
+          `Registered household ${residentsToSave[0]?.h_no || ""} in ${residentsToSave[0]?.barangay || ""} with ${residentsToSave.length} member(s) for year ${residentsToSave[0]?.data_year || ""}.` +
+          (retentionBits.length ? ` | ${retentionBits.join(", ")}.` : ""),
       });
 
-      alert("Resident successfully saved to Supabase!");
+      toast.success(
+        `Resident saved successfully to Supabase${residentsToSave.length > 1 ? ` (${residentsToSave.length} members)` : ""}!`,
+      );
       navigate("/barangay");
     } catch (err) {
       console.error("Error saving to Supabase:", err);
-      if (err.message && err.message.includes("already exists")) {
-        setFormWarning(err.message);
+      const message = String(err?.message || "Unknown error");
+      if (message.includes("already exists")) {
+        setFormWarning(message);
       }
-      alert("Failed to save to Supabase: " + err.message);
+      const migrationHint =
+        message.includes("child_pregnancy_case") || message.includes("dswd_")
+          ? " Database migration required: run supabase/sensitive_child_pregnancy.sql in the Supabase SQL editor."
+          : "";
+      toast.error(`Failed to save to Supabase: ${message}${migrationHint}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ── Pre-Entry Household Verification (Prior-Year Lookup) ──
-  const handleVerifyHousehold = async () => {
-    if (!household.house_no || !household.brgy) {
-      alert("Please enter House Number and select a Barangay before verifying.");
+  // ── Prior Household Lookup & Member Retention ──
+
+  /**
+   * Looks up the household in every data year before the one being encoded.
+   * A single hit is auto-loaded; multiple hits are shown as candidates
+   * because h_no is reused across data years (BM156 = Flores in 2024,
+   * Mercado in 2025).
+   */
+  const handleSearchPriorHousehold = async () => {
+    const hasHh = lookupHhNo.trim() !== "";
+    const hasName = lookupLastName.trim() !== "" || lookupFirstName.trim() !== "";
+
+    if (!hasHh && !hasName) {
+      toast.warning("Enter a Household No. and/or the prior head's name to search.");
       return;
     }
+    if (!household.brgy) {
+      toast.warning("Select a Barangay first — prior records are matched within a barangay.");
+      return;
+    }
+
     setIsVerifying(true);
     setVerificationStatus("searching");
     setMatchedHousehold(null);
+    setPriorCandidates([]);
+    setLookupNote("");
+    setCurrentYearMatch(null);
+
     try {
-      const currentYearNum = household.data_year
-        ? parseInt(household.data_year, 10)
-        : new Date().getFullYear();
-      const priorYear = currentYearNum - 1;
-
-      // 1. Check Supabase for prior-year records
-      const { data: supaMatches, error: supaErr } = await supabase
-        .from("residents")
-        .select("*")
-        .eq("house_no", household.house_no.trim())
-        .ilike("barangay", household.brgy.trim())
-        .eq("data_year", priorYear)
-        .order("is_household_head", { ascending: false });
-
-      if (supaErr) console.warn("Supabase lookup warn:", supaErr);
-
-      // 2. Also check localStorage
-      const allLocal = JSON.parse(localStorage.getItem("tanawanData")) || [];
-      const localMatches = allLocal.filter((rec) => {
-        const sameNo = (rec.no || "").trim() === household.house_no.trim();
-        const sameBrgy = (rec.brgy || "").toLowerCase().trim() === household.brgy.toLowerCase().trim();
-        const recYear = rec.dataYear ? parseInt(rec.dataYear, 10) : null;
-        return sameNo && sameBrgy && recYear === priorYear;
+      const { candidates, errors, note } = await findPriorHouseholdCandidates({
+        hNo: lookupHhNo,
+        lastName: lookupLastName,
+        firstName: lookupFirstName,
+        barangay: household.brgy,
+        targetYear: selectedDataYear(),
       });
 
-      const combined = [...(supaMatches || []), ...localMatches];
+      if (errors.length) toast.warning(`Lookup finished with warnings: ${errors[0]}`);
+      if (note) setLookupNote(note);
 
-      if (combined.length > 0) {
-        // ── MATCH FOUND ──
-        const headRecord = supaMatches?.find((r) => r.is_household_head) || combined[0];
-        setMatchedHousehold({
-          h_no: headRecord.h_no || headRecord.h_no || "",
-          house_no: headRecord.house_no || headRecord.no || household.house_no,
-          street: headRecord.street || headRecord.st || "",
-          purok: headRecord.purok || headRecord.p || "",
-          brgy: headRecord.barangay || headRecord.brgy || household.brgy,
-          headName: headRecord.last_name
-            ? (headRecord.last_name + ", " + headRecord.first_name)
-            : (headRecord.last || "") + ", " + (headRecord.first || ""),
-          priorYear: priorYear,
-          totalMembers: combined.length,
-        });
-        // Retain the established HH identifier
-        setHousehold((prev) => ({
-          ...prev,
-          hh_num: headRecord.h_no || headRecord.h_no || prev.hh_num,
-          street: headRecord.street || headRecord.st || prev.street,
-          purok: headRecord.purok || headRecord.p || prev.purok,
-        }));
-        setVerificationStatus("matched");
-      } else {
-        // ── NO MATCH — New Household ──
-        setVerificationStatus("new_household");
-        // Auto-generate HH number for the new household
-        try {
-          const selectedBrgy = household.brgy;
-          const prefix = selectedBrgy.substring(0, 3).toUpperCase();
-          const { data } = await supabase
-            .from("residents")
-            .select("h_no")
-            .ilike("h_no", prefix + "%");
-          let maxNum = 0;
-          if (data && data.length > 0) {
-            data.forEach((row) => {
-              const numMatch = row.h_no?.match(new RegExp("^" + prefix + "(\\d+)$", "i"));
-              if (numMatch) {
-                const num = parseInt(numMatch[1], 10);
-                if (num > maxNum) maxNum = num;
-              }
-            });
-          }
-          setHousehold((prev) => ({
-            ...prev,
-            hh_num: prefix + (maxNum + 1),
-          }));
-        } catch {
-          // fallback — keep existing hh_num
+      if (candidates.length === 0) {
+        if (errors.length > 0) {
+          // The lookup did not complete — do not mint a number from partial data.
+          setVerificationStatus("idle");
+          toast.error(
+            "Lookup could not confirm prior-year records. Check the connection and search again.",
+          );
+          return;
         }
+        setVerificationStatus("new_household");
+        // No prior-year record → this is a new household, so mint its number.
+        const generated = await generateHouseholdNumber(household.brgy);
+        if (generated) {
+          setHousehold((prev) => ({ ...prev, hh_num: generated }));
+          toast.info(
+            `No prior-year record found — new household with Household No. ${generated}.`,
+          );
+        } else {
+          toast.info(
+            "No prior-year record found. Enter or generate a Household No. to continue.",
+          );
+        }
+        return;
       }
+
+      if (candidates.length === 1) {
+        await applyPriorCandidate(candidates[0]);
+        return;
+      }
+
+      setPriorCandidates(candidates);
+      setVerificationStatus("candidates");
     } catch (err) {
-      console.error("Verification lookup error:", err);
-      alert("Error checking prior-year records: " + err.message);
+      console.error("Prior household lookup error:", err);
+      setVerificationStatus("idle");
+      toast.error("Prior household lookup failed: " + err.message);
     } finally {
       setIsVerifying(false);
     }
   };
 
-  const handleBrgyChange = async (e) => {
-    const selectedBrgy = e.target.value;
-    setHousehold({ ...household, brgy: selectedBrgy });
-
-    if (!selectedBrgy) return;
-
-    // Auto-generate Household Number
-    const prefix = selectedBrgy.substring(0, 3).toUpperCase();
-
+  /** Loads a chosen prior household-year into the registration form. */
+  const applyPriorCandidate = async (candidate) => {
+    if (!candidate) return;
+    setIsVerifying(true);
     try {
-      const { data, error } = await supabase
-        .from("residents")
-        .select("h_no")
-        .ilike("h_no", `${prefix}%`);
+      const year = candidate.dataYear;
 
-      if (error) {
-        console.error("Error fetching HH num:", error);
-        return;
-      }
-
-      let maxNum = 0;
-      if (data && data.length > 0) {
-        data.forEach((row) => {
-          const numMatch = row.h_no?.match(
-            new RegExp(`^${prefix}(\\d+)$`, "i"),
-          );
-          if (numMatch) {
-            const num = parseInt(numMatch[1], 10);
-            if (num > maxNum) maxNum = num;
-          }
-        });
-      }
-
+      // Household & location details come from the prior record.
+      const residence = mapResidenceType(candidate.residenceType);
       setHousehold((prev) => ({
         ...prev,
-        brgy: selectedBrgy,
-        hh_num: `${prefix}${maxNum + 1}`,
+        hh_num: candidate.hNo || prev.hh_num,
+        house_no: candidate.houseNo || prev.house_no,
+        street: candidate.street || prev.street,
+        purok: candidate.purok || prev.purok,
+        brgy: candidate.barangay || prev.brgy,
+        residence_type: residence.value,
+        residence_type_other: residence.other,
+        data_year: String(selectedDataYear()),
       }));
+
+      // Head of household.
+      const headForm = mapPriorToHeadForm(candidate.headRecord, selectedDataYear());
+      setHead(headForm);
+      setPriorHeadForm(headForm);
+      setHeadRetention(RETAINED);
+      setHeadIsSuccessor(false);
+      setSuccessorChoice("");
+
+      // Members: everyone except the head, carried over with a retention
+      // status the encoder can adjust.
+      const roster = candidate.members
+        .filter((m) => m !== candidate.headRecord)
+        .map((m) => mapPriorToMemberForm(m, selectedDataYear()));
+      setMembers(roster);
+      setExpandedMemberIndex(-1);
+      setRetentionReviewed(false);
+      setFormWarning("");
+
+      // Warn when this household already has records in the target year.
+      const { rows, error } = await fetchHouseholdForYear({
+        hNo: candidate.hNo,
+        barangay: candidate.barangay,
+        targetYear: selectedDataYear(),
+      });
+      if (error) console.warn("Current-year check failed:", error);
+      setCurrentYearMatch(rows.length || 0);
+
+      setMatchedHousehold({
+        hNo: candidate.hNo,
+        dataYear: year,
+        headName: candidate.headName,
+        memberCount: candidate.memberCount,
+        houseNo: candidate.houseNo,
+        street: candidate.street,
+        purok: candidate.purok,
+        barangay: candidate.barangay,
+      });
+      setPriorCandidates([]);
+      setLookupNote("");
+      setVerificationStatus("matched");
+      toast.success(
+        `Loaded household ${candidate.hNo} (${year}) — ${candidate.memberCount} record(s), ages recalculated for ${selectedDataYear()}.`,
+      );
     } catch (err) {
-      console.error("Failed to auto-generate HH number", err);
+      console.error("Failed to load prior household:", err);
+      toast.error("Could not load that household: " + err.message);
+    } finally {
+      setIsVerifying(false);
     }
   };
-  const resetForm = () => {
-    const confirmed = window.confirm(
-      "Clear all entered fields? This cannot be undone.",
+
+  /** Starts a brand-new household and generates its Household No. */
+  const startNewHousehold = async () => {
+    if (!household.brgy) {
+      toast.warning("Select a Barangay before generating a Household No.");
+      return;
+    }
+    setIsVerifying(true);
+    try {
+      const generated = await generateHouseholdNumber(household.brgy);
+      setHousehold((prev) => ({ ...prev, hh_num: generated || prev.hh_num }));
+      clearMatchedRoster();
+      setVerificationStatus("new_household");
+      toast.info(
+        generated
+          ? `New household — Household No. ${generated} generated for ${household.brgy}.`
+          : "New household — could not generate a number, please enter the Household No. manually.",
+      );
+    } catch (err) {
+      console.error("Household number generation failed:", err);
+      toast.error("Could not generate a Household No.: " + err.message);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  /** Drops the prior match and returns the form to the lookup state. */
+  const clearMatchedRoster = () => {
+    setMatchedHousehold(null);
+    setPriorCandidates([]);
+    setMembers([]);
+    setExpandedMemberIndex(-1);
+    setRetentionReviewed(false);
+    setHead(initialHead);
+    setPriorHeadForm(null);
+    setHeadRetention(RETAINED);
+    setHeadIsSuccessor(false);
+    setSuccessorChoice("");
+    setCurrentYearMatch(null);
+    setFormWarning("");
+  };
+
+  const clearPriorMatch = () => {
+    clearMatchedRoster();
+    setVerificationStatus("idle");
+    setLookupNote("");
+  };
+
+  /**
+   * Records what happens to the prior household head. Marking the head
+   * Deceased or Migrated requires a successor before Step 3 can be left.
+   */
+  const handleHeadRetentionChange = (status) => {
+    if (status === headRetention) return;
+
+    if (status === RETAINED) {
+      // Revert to the original prior head.
+      if (priorHeadForm) setHead(priorHeadForm);
+      setMembers((prev) => prev.map((m) => ({ ...m, promotedToHead: false })));
+      setHeadIsSuccessor(false);
+      setSuccessorChoice("");
+    } else if (priorHeadForm) {
+      // Keep the prior head visible for reference until a successor is chosen.
+      setHead(priorHeadForm);
+      setHeadIsSuccessor(false);
+      setSuccessorChoice("");
+      setMembers((prev) => prev.map((m) => ({ ...m, promotedToHead: false })));
+      toast.info(
+        `Prior head marked ${RETENTION_LABELS[status]}. Choose a successor or enter a new head.`,
+      );
+    }
+
+    setHeadRetention(status);
+    setFormWarning("");
+  };
+
+  /** Applies the chosen successor: a retained member promoted to head, or a freshly entered head. */
+  const handleSuccessorChoice = (choice) => {
+    setSuccessorChoice(choice);
+    setFormWarning("");
+
+    if (!choice) {
+      setHeadIsSuccessor(false);
+      if (priorHeadForm) setHead(priorHeadForm);
+      setMembers((prev) => prev.map((m) => ({ ...m, promotedToHead: false })));
+      return;
+    }
+
+    if (choice === "manual") {
+      setHead({
+        ...initialHead,
+        source: "new",
+        isSuccessor: true,
+        rel: "HEAD",
+      });
+      setMembers((prev) => prev.map((m) => ({ ...m, promotedToHead: false })));
+      setHeadIsSuccessor(true);
+      return;
+    }
+
+    const index = parseInt(choice.replace("member:", ""), 10);
+    const member = members[index];
+    if (!member || !isMemberRetained(member)) return;
+
+    setHead({
+      ...member,
+      rel: "HEAD",
+      source: member.source,
+      isSuccessor: true,
+      priorId: member.priorId,
+      priorDataYear: member.priorDataYear,
+      priorAge: member.priorAge,
+      ageEstimated: member.ageEstimated,
+      retentionStatus: RETAINED,
+      attended_items: [],
+    });
+    setMembers((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, promotedToHead: true } : m)),
     );
+    setHeadIsSuccessor(true);
+  };
+
+  const handleBrgyChange = (e) => {
+    const selectedBrgy = e.target.value;
+    if (verificationStatus === "matched" || verificationStatus === "candidates") {
+      // A prior match is barangay-specific — changing barangay drops it.
+      clearPriorMatch();
+    }
+    setHousehold((prev) => ({ ...prev, brgy: selectedBrgy }));
+    setLookupNote("");
+    setCurrentYearMatch(null);
+  };
+
+  /**
+   * Data Year drives every age on the form, so switching it re-derives each
+   * person's age and every age-derived classification (Senior Citizen, current
+   * teenage mother). The revert-to-head copy is re-derived too, so restoring a
+   * retired head never restores a stale age.
+   */
+  const handleDataYearChange = (e) => {
+    const value = e.target.value;
+    const year = parseInt(value, 10);
+    if (!Number.isFinite(year)) return;
+
+    // A loaded prior household can only be carried into a LATER data year.
+    // Rolling back onto (or into) its own year would re-create the source
+    // rows, so the change is rejected and the previous value kept.
+    if (
+      verificationStatus === "matched" &&
+      matchedHousehold &&
+      Number.isFinite(matchedHousehold.dataYear) &&
+      year <= matchedHousehold.dataYear
+    ) {
+      toast.error(
+        `Data Year must be later than the loaded prior household (${matchedHousehold.dataYear}). Use "Change Prior Household" to encode an earlier year.`,
+      );
+      return;
+    }
+
+    if (currentStep === 2 && headRetention === DECEASED) {
+      setFormWarning(
+        "Changing Data Year while the prior head is marked Deceased will reset the head's retention. Please review the successor selection after switching.",
+      );
+    }
+
+    // Snapshot everyone before and after so the encoder is told exactly what
+    // the year change did, rather than silently moving ages around.
+    const before = [
+      snapshotPerson(head),
+      ...members.map((m) => snapshotPerson(m)),
+    ];
+    const after = [
+      snapshotPerson(applyPersonYear(head, year)),
+      ...members.map((m) => snapshotPerson(applyPersonYear(m, year))),
+    ];
+
+    setHousehold((prev) => ({ ...prev, data_year: value }));
+    setHead((prev) => applyPersonYear(prev, year));
+    setMembers((prev) => prev.map((m) => applyPersonYear(m, year)));
+    if (priorHeadForm) {
+      setPriorHeadForm((prev) => (prev ? applyPersonYear(prev, year) : prev));
+    }
+
+    const summary = formatYearChangeSummary(
+      summarizeYearChanges(before, after),
+    );
+    if (summary) toast.info(`Data Year ${year}: ${summary}.`);
+
+    // Re-check whether the matched household already exists in the new year.
+    if (verificationStatus === "matched" && matchedHousehold) {
+      fetchHouseholdForYear({
+        hNo: matchedHousehold.hNo,
+        barangay: matchedHousehold.barangay,
+        targetYear: year,
+      })
+        .then(({ rows }) => setCurrentYearMatch(rows.length || 0))
+        .catch(() => setCurrentYearMatch(null));
+    }
+  };
+
+  const resetForm = async () => {
+    const confirmed = await confirm({
+      title: "Clear all fields?",
+      message:
+        "Every household, head and member detail you have entered will be discarded. This cannot be undone.",
+      details: ["Household number and barangay", "Head of household details", "All household members"],
+      confirmLabel: "Clear all fields",
+      cancelLabel: "Keep my entries",
+      variant: "warning",
+    });
     if (!confirmed) return;
 
     setHousehold(initialHousehold);
@@ -716,8 +1371,31 @@ export default function AddResident() {
     setFormWarning("");
     setVerificationStatus("idle");
     setMatchedHousehold(null);
+    setPriorCandidates([]);
+    setLookupNote("");
+    setCurrentYearMatch(null);
+    setLookupHhNo("");
+    setLookupLastName("");
+    setLookupFirstName("");
+    setRetentionReviewed(false);
+    setHeadRetention(RETAINED);
+    setPriorHeadForm(null);
+    setHeadIsSuccessor(false);
+    setSuccessorChoice("");
+    setIsVerifying(false);
     setCurrentStep(1);
   };
+
+  // Derived values used by the Step 3 retention toolbar and Step 4 tracker.
+  const retentionSummary = summarizeRetention(members);
+  const activeMemberList = activeMembersOf(members);
+
+  /**
+   * Keeps a stored legacy value visible in a <select> even when it is not one
+   * of the canonical options (e.g. a prior record holding "Owned").
+   */
+  const withLegacyValue = (options, value) =>
+    value && !options.includes(value) ? [value, ...options] : options;
 
   return (
     <div className="dashboard-wrapper">
@@ -807,64 +1485,225 @@ export default function AddResident() {
 
               {currentStep === 1 && (
                 <div className="form-step animate-fade-up">
-                  {/* ── Pre-Entry Household Verification Box ── */}
+                  <h2 className="form-section-title">Data Year & Barangay</h2>
+                  <div className="grid-4-cols">
+                    <div className="field-group">
+                      <label>Data Year</label>
+                      <select
+                        className="modern-select"
+                        value={household.data_year}
+                        onChange={handleDataYearChange}
+                      >
+                        {getDataYearOptions().map((y) => (
+                          <option key={y} value={y}>
+                            {y}
+                            {y > currentYear() ? " (Upcoming)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="age-reference-note">
+                        Ages and Senior / teenage-mother status are calculated{" "}
+                        {describeAgeReference(selectedDataYear())}.
+                      </span>
+                    </div>
+                    <div className="field-group">
+                      <label>Barangay</label>
+                      <select
+                        className="modern-select"
+                        value={household.brgy}
+                        onChange={handleBrgyChange}
+                      >
+                        <option value="" disabled>
+                          Select Barangay
+                        </option>
+                        {brgyStats.map((b) => (
+                          <option key={b.name} value={b.name}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field-group">
+                      <label>Municipality</label>
+                      <input type="text" value="Bustos" readOnly />
+                    </div>
+                    <div className="field-group">
+                      <label>Province</label>
+                      <input type="text" value="Bulacan" readOnly />
+                    </div>
+                  </div>
+
+                  {/* ── Prior Household Lookup & Member Retention ── */}
                   <div className="verification-box">
                     <div className="verification-header">
                       <i className="fa-solid fa-magnifying-glass" style={{ color: "#2563eb", fontSize: "15px" }}></i>
                       <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#1e293b" }}>
-                        Pre-Entry Household Verification
+                        Prior Household Lookup
                       </h3>
                       <span style={{ fontSize: "11px", color: "#64748b", fontStyle: "italic" }}>
-                        Verify prior-year records before encoding
+                        Carry an established household forward
                       </span>
                     </div>
                     <p style={{ fontSize: "12.5px", color: "#475569", margin: "8px 0 14px", lineHeight: 1.5 }}>
-                      Enter the <b>House Number</b> and select a <b>Barangay</b>, then click <b>Verify</b> to check
-                      if this household already exists in the previous Data Year ({household.data_year ? parseInt(household.data_year, 10) - 1 : new Date().getFullYear() - 1}).
+                      Search every Data Year <b>before {selectedDataYear()}</b> by{" "}
+                      <b>Household No.</b> and/or the <b>prior head's name</b> (within the selected
+                      barangay). Household numbers can be reused across years, so a match is always
+                      confirmed before it is loaded.
                     </p>
-                    <button
-                      type="button"
-                      className="btn-verify-household"
-                      onClick={handleVerifyHousehold}
-                      disabled={isVerifying || !household.house_no || !household.brgy}
-                    >
-                      {isVerifying ? (
-                        <><i className="fa-solid fa-spinner fa-spin"></i> Searching...</>
-                      ) : (
-                        <><i className="fa-solid fa-magnifying-glass"></i> Verify Household</>
-                      )}
-                    </button>
+
+                    {verificationStatus !== "matched" && verificationStatus !== "candidates" && (
+                      <div className="lookup-fields">
+                        <div className="field-group">
+                          <label>Household No.</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. BM156"
+                            value={lookupHhNo}
+                            disabled={isVerifying}
+                            onChange={(e) => setLookupHhNo(e.target.value)}
+                          />
+                        </div>
+                        <div className="field-group">
+                          <label>Prior Head — Last Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Flores"
+                            value={lookupLastName}
+                            disabled={isVerifying}
+                            onChange={(e) => setLookupLastName(e.target.value)}
+                          />
+                        </div>
+                        <div className="field-group">
+                          <label>First Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Arthur"
+                            value={lookupFirstName}
+                            disabled={isVerifying}
+                            onChange={(e) => setLookupFirstName(e.target.value)}
+                          />
+                        </div>
+                        <div className="lookup-actions">
+                          <button
+                            type="button"
+                            className="btn-verify-household"
+                            onClick={handleSearchPriorHousehold}
+                            disabled={isVerifying || !household.brgy}
+                          >
+                            {isVerifying ? (
+                              <><i className="fa-solid fa-spinner fa-spin"></i> Searching...</>
+                            ) : (
+                              <><i className="fa-solid fa-magnifying-glass"></i> Search Prior Household</>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-new-household"
+                            onClick={startNewHousehold}
+                            disabled={isVerifying || !household.brgy}
+                          >
+                            <i className="fa-solid fa-house-chimney-medical"></i> Register as New Household
+                          </button>
+                        </div>
+                        {!household.brgy && (
+                          <p style={{ fontSize: "11.5px", color: "#b45309", margin: "6px 0 0" }}>
+                            Select a Barangay first — prior records are matched within a barangay.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {lookupNote && (
+                      <p className="lookup-note">
+                        <i className="fa-solid fa-circle-info"></i> {lookupNote}
+                      </p>
+                    )}
+
+                    {verificationStatus === "candidates" && (
+                      <div className="candidate-list">
+                        <p className="candidate-list-title">
+                          {priorCandidates.length} household-year record(s) match — household
+                          numbers are reused, so pick the right one:
+                        </p>
+                        {priorCandidates.map((c) => (
+                          <div className="candidate-card" key={c.key}>
+                            <div className="candidate-info">
+                              <strong className="candidate-hh">{c.hNo || "(no identifier)"}</strong>
+                              <span className="candidate-head">{c.headName}</span>
+                              <span className="candidate-meta">
+                                Data Year {c.dataYear} · {c.memberCount} member(s)
+                                {c.houseNo ? ` · ${c.houseNo}` : ""}
+                                {c.street ? ` ${c.street}` : ""}
+                                {c.purok ? ` · ${c.purok}` : ""}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn-use-candidate"
+                              onClick={() => applyPriorCandidate(c)}
+                              disabled={isVerifying}
+                            >
+                              Use this household
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          className="btn-text-link"
+                          onClick={() => {
+                            setPriorCandidates([]);
+                            setVerificationStatus("idle");
+                          }}
+                        >
+                          ← Back to search
+                        </button>
+                      </div>
+                    )}
 
                     {verificationStatus === "matched" && matchedHousehold && (
                       <div className="verification-matched-card">
                         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
                           <i className="fa-solid fa-circle-check" style={{ color: "#16a34a", fontSize: "18px" }}></i>
                           <div>
-                            <strong style={{ color: "#166534" }}>Household Match Found!</strong>
+                            <strong style={{ color: "#166534" }}>Household Match Found!</strong>{" "}
                             <span className="badge-continuity">Identifier Retained</span>
                           </div>
                         </div>
                         <div className="matched-details-grid">
                           <div className="matched-detail-item">
                             <small>Household #</small>
-                            <strong>{matchedHousehold.h_no}</strong>
+                            <strong>{matchedHousehold.hNo}</strong>
                           </div>
                           <div className="matched-detail-item">
-                            <small>Head of Household</small>
+                            <small>Prior Head</small>
                             <strong>{matchedHousehold.headName}</strong>
                           </div>
                           <div className="matched-detail-item">
-                            <small>Prior Year</small>
-                            <strong>{matchedHousehold.priorYear}</strong>
+                            <small>Prior Data Year</small>
+                            <strong>{matchedHousehold.dataYear}</strong>
                           </div>
                           <div className="matched-detail-item">
-                            <small>Prior Members</small>
-                            <strong>{matchedHousehold.totalMembers}</strong>
+                            <small>Prior Records</small>
+                            <strong>{matchedHousehold.memberCount}</strong>
                           </div>
                         </div>
-                        <p style={{ fontSize: "11.5px", color: "#166534", marginTop: "10px", fontStyle: "italic" }}>
-                          The household identifier has been retained. You may now proceed to encode additional members.
-                        </p>
+                        {currentYearMatch > 0 && (
+                          <div className="lookup-warning">
+                            <i className="fa-solid fa-triangle-exclamation"></i>{" "}
+                            {currentYearMatch} record(s) already exist for household{" "}
+                            {matchedHousehold.hNo} in Data Year {household.data_year}. Edit those
+                            records from the Household list instead of re-encoding them.
+                          </div>
+                        )}
+                        <div className="matched-card-footer">
+                          <span style={{ fontSize: "11.5px", color: "#166534", fontStyle: "italic" }}>
+                            Head and {matchedHousehold.memberCount - 1} prior member record(s) were
+                            loaded with ages recalculated for {household.data_year}.
+                          </span>
+                          <button type="button" className="btn-text-link" onClick={clearPriorMatch}>
+                            Start over
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -875,10 +1714,14 @@ export default function AddResident() {
                           <div>
                             <strong style={{ color: "#92400e" }}>No Prior-Year Record Found</strong>
                             <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#78716c" }}>
-                              This will be registered as a new household for Data Year {household.data_year}.
+                              This will be registered as a new household for Data Year {household.data_year}
+                              {household.hh_num ? ` with Household No. ${household.hh_num}` : ""}.
                             </p>
                           </div>
                         </div>
+                        <button type="button" className="btn-text-link" onClick={clearPriorMatch}>
+                          ← Look up a prior household instead
+                        </button>
                       </div>
                     )}
                   </div>
@@ -889,7 +1732,7 @@ export default function AddResident() {
                       <label>Household Number</label>
                       <input
                         type="text"
-                        placeholder="2024-XXXX"
+                        placeholder="e.g. BM156"
                         value={household.hh_num}
                         readOnly={verificationStatus === "matched"}
                         onChange={(e) =>
@@ -940,50 +1783,6 @@ export default function AddResident() {
                       />
                     </div>
                   </div>
-                  <div className="grid-4-cols" style={{ marginTop: "20px" }}>
-                    <div className="field-group">
-                      <label>Data Year</label>
-                      <select
-                        className="modern-select"
-                        value={household.data_year}
-                        onChange={(e) =>
-                          setHousehold({ ...household, data_year: e.target.value })
-                        }
-                      >
-                        {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map((y) => (
-                          <option key={y} value={y}>
-                            {y}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field-group">
-                      <label>Barangay</label>
-                      <select
-                        className="modern-select"
-                        value={household.brgy}
-                        onChange={handleBrgyChange}
-                      >
-                        <option value="" disabled>
-                          Select Barangay
-                        </option>
-                        {brgyStats.map((b) => (
-                          <option key={b.name} value={b.name}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field-group">
-                      <label>Municipality</label>
-                      <input type="text" value="Bustos" readOnly />
-                    </div>
-                    <div className="field-group">
-                      <label>Province</label>
-                      <input type="text" value="Bulacan" readOnly />
-                    </div>
-                  </div>
-
                   <h2
                     className="form-section-title"
                     style={{ marginTop: "30px" }}
@@ -1003,12 +1802,9 @@ export default function AddResident() {
                           })
                         }
                       >
-                        <option>Owner</option>
-                        <option>Renter</option>
-                        <option>Boarder</option>
-                        <option>Living with relatives</option>
-                        <option>Apartment</option>
-                        <option>Other</option>
+                        {RESIDENCE_OPTIONS.map((option) => (
+                          <option key={option}>{option}</option>
+                        ))}
                       </select>
                     </div>
                     {household.residence_type === "Other" && (
@@ -1037,9 +1833,107 @@ export default function AddResident() {
                     <div className="matched-head-banner">
                       <i className="fa-solid fa-house" style={{ color: "#2563eb", fontSize: "15px" }}></i>
                       <span>
-                        Encoding for established household <strong>{matchedHousehold.h_no}</strong> —
-                        Prior head: <strong>{matchedHousehold.headName}</strong> ({matchedHousehold.priorYear})
+                        Encoding for established household <strong>{matchedHousehold.hNo}</strong> —
+                        Prior head: <strong>{matchedHousehold.headName}</strong> ({matchedHousehold.dataYear})
                       </span>
+                    </div>
+                  )}
+
+                  {/* ── Prior head retention & successor ── */}
+                  {verificationStatus === "matched" && priorHeadForm && (
+                    <div className="head-retention-box">
+                      <div className="retention-box-title">
+                        <i className="fa-solid fa-user-shield"></i>
+                        Household Head for Data Year {household.data_year}
+                        <span className="retention-from">
+                          carried from {matchedHousehold?.dataYear}:{" "}
+                          {formatResidentName({
+                            first_name: priorHeadForm.fname,
+                            middle_name: priorHeadForm.mname,
+                            last_name: priorHeadForm.lname,
+                            qualifier: priorHeadForm.q,
+                          })}
+                        </span>
+                      </div>
+
+                      <div className="retention-options">
+                        {[RETAINED, DECEASED, MIGRATED].map((status) => (
+                          <label
+                            key={status}
+                            className={`retention-chip ${status} ${headRetention === status ? "active" : ""}`}
+                          >
+                            <input
+                              type="radio"
+                              name="head_retention"
+                              checked={headRetention === status}
+                              onChange={() => handleHeadRetentionChange(status)}
+                            />
+                            {RETENTION_LABELS[status]}
+                          </label>
+                        ))}
+                      </div>
+
+                      {headRetention !== RETAINED && (
+                        <div className="successor-box animate-fade-in">
+                          <p className="successor-lead">
+                            <i className="fa-solid fa-triangle-exclamation"></i>{" "}
+                            The prior head will <b>not</b> be encoded as head for{" "}
+                            {household.data_year} (status recorded in the transaction log). Choose a
+                            successor:
+                          </p>
+
+                          <label
+                            className={`successor-option ${successorChoice === "manual" ? "active" : ""}`}
+                          >
+                            <input
+                              type="radio"
+                              name="successor_choice"
+                              checked={successorChoice === "manual"}
+                              onChange={() => handleSuccessorChoice("manual")}
+                            />
+                            <span>
+                              <strong>Enter a new household head manually</strong>
+                              <small>Fill in the head profile below from scratch.</small>
+                            </span>
+                          </label>
+
+                          {members.map((m, i) =>
+                            m.source === "prior" && isMemberRetained(m) ? (
+                              <label
+                                key={`succ-${i}`}
+                                className={`successor-option ${successorChoice === `member:${i}` ? "active" : ""}`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="successor_choice"
+                                  checked={successorChoice === `member:${i}`}
+                                  onChange={() => handleSuccessorChoice(`member:${i}`)}
+                                />
+                                <span>
+                                  <strong>
+                                    {formatResidentName({
+                                      first_name: m.fname,
+                                      middle_name: m.mname,
+                                      last_name: m.lname,
+                                      qualifier: m.q,
+                                    })}
+                                  </strong>
+                                  <small>
+                                    Promote a retained member — currently {m.rel || "Member"}, age{" "}
+                                    {m.age || "—"}.
+                                  </small>
+                                </span>
+                              </label>
+                            ) : null,
+                          )}
+
+                          {!headIsSuccessor && (
+                            <p className="successor-required">
+                              A successor is required before you can leave this step.
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                   <h2 className="form-section-title">
@@ -1134,21 +2028,30 @@ export default function AddResident() {
                       <label>Age</label>
                       <input
                         type="number"
-                        placeholder="Calculated"
+                        placeholder={head.dob ? "Calculated" : "Enter estimated age"}
                         value={head.age}
-                        onChange={(e) =>
-                          setHead({ ...head, age: e.target.value })
-                        }
+                        readOnly={Boolean(head.dob)}
+                        className={head.dob ? "age-auto-input" : ""}
+                        onChange={(e) => handleHeadAgeChange(e.target.value)}
                       />
+                      {head.dob ? (
+                        <span className="auto-classified-badge">
+                          <i className="fa-solid fa-lock"></i> Derived from birth
+                          date · {describeAgeReference(selectedDataYear())}
+                        </span>
+                      ) : (
+                        <span className="age-reference-note estimated">
+                          Estimated — no birth date on file. Anchored to Data Year{" "}
+                          {selectedDataYear()}.
+                        </span>
+                      )}
                     </div>
                     <div className="field-group">
                       <label>Gender</label>
                       <select
                         className="modern-select"
                         value={head.sex}
-                        onChange={(e) =>
-                          setHead({ ...head, sex: e.target.value })
-                        }
+                        onChange={(e) => handleHeadSexChange(e.target.value)}
                       >
                         <option>Male</option>
                         <option>Female</option>
@@ -1167,10 +2070,11 @@ export default function AddResident() {
                           setHead({ ...head, civil: e.target.value })
                         }
                       >
-                        <option>Single</option>
-                        <option>Married</option>
-                        <option>Widowed</option>
-                        <option>Separated</option>
+                        {withLegacyValue(CIVIL_STATUS_OPTIONS, head.civil).map(
+                          (option) => (
+                            <option key={option}>{option}</option>
+                          ),
+                        )}
                       </select>
                     </div>
                     <div className="field-group">
@@ -1206,25 +2110,13 @@ export default function AddResident() {
                         <option value="" disabled>
                           Select Education
                         </option>
-                        <option value="No Education">No Education</option>
-                        <option value="Elementary Level">
-                          Elementary Level
-                        </option>
-                        <option value="Elementary Graduate">
-                          Elementary Graduate
-                        </option>
-                        <option value="High School Level">
-                          High School Level
-                        </option>
-                        <option value="High School Graduate">
-                          High School Graduate
-                        </option>
-                        <option value="Vocational">Vocational</option>
-                        <option value="College Level">College Level</option>
-                        <option value="College Graduate">
-                          College Graduate
-                        </option>
-                        <option value="Post Graduate">Post Graduate</option>
+                        {withLegacyValue(EDUCATION_OPTIONS, head.edu).map(
+                          (option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ),
+                        )}
                       </select>
                     </div>
                   </div>
@@ -1250,8 +2142,11 @@ export default function AddResident() {
                           setHead({ ...head, is_voter: e.target.value })
                         }
                       >
-                        <option>Registered Voter</option>
-                        <option>Not Registered Voter</option>
+                        {withLegacyValue(VOTER_OPTIONS, head.is_voter).map(
+                          (option) => (
+                            <option key={option}>{option}</option>
+                          ),
+                        )}
                       </select>
                     </div>
                     <div className="field-group">
@@ -1296,6 +2191,12 @@ export default function AddResident() {
                             </span>
                           </label>
                         </div>
+                        <DisabilityDetailsField
+                          person={head}
+                          onChange={(disability_details) =>
+                            setHead((prev) => ({ ...prev, disability_details }))
+                          }
+                        />
                         {head.is_pwd && (
                           <div className="id-options animate-fade-in">
                             <label className="radio-container">
@@ -1324,28 +2225,35 @@ export default function AddResident() {
                         )}
                       </div>
 
-                      {/* Senior Citizen Card */}
+                      {/* Senior Citizen Card — derived automatically from the
+                          calculated age (60 and above); no manual override. */}
                       <div
-                        className={`classification-card ${head.is_senior ? "active" : ""}`}
+                        className={`classification-card ${head.is_senior ? "active" : ""} ${!hasKnownAge(head) ? "disabled" : ""}`}
                       >
                         <div className="class-header">
                           <label className="checkbox-container">
                             <input
                               type="checkbox"
                               checked={head.is_senior}
-                              onChange={(e) =>
-                                handleHeadClassification(
-                                  "is_senior",
-                                  e.target.checked,
-                                )
-                              }
+                              disabled
                             />
                             <span className="class-label">Senior Citizen</span>
                           </label>
+                          <span
+                            className="auto-classified-tag"
+                            title="Set automatically from the calculated age."
+                          >
+                            <i className="fa-solid fa-wand-magic-sparkles"></i> Auto
+                          </span>
                         </div>
-                        {parseInt(head.age, 10) > 0 && parseInt(head.age, 10) < 60 && (
-                          <span style={{ color: "#ef4444", fontSize: "11px", marginTop: "4px", display: "block" }}>
-                            ⚠ Only applicable for age 60 and above.
+                        {hasKnownAge(head) ? (
+                          <span className="auto-classified-note">
+                            Age {head.age} {describeAgeReference(selectedDataYear())} —
+                            classified automatically at 60 and above.
+                          </span>
+                        ) : (
+                          <span className="auto-classified-note muted">
+                            Enter a birth date or an age to classify.
                           </span>
                         )}
                         {head.is_senior && (
@@ -1356,7 +2264,11 @@ export default function AddResident() {
                                 name="head_senior_id"
                                 checked={head.has_senior_id === true}
                                 onChange={() =>
-                                  setHead({ ...head, has_senior_id: true })
+                                  setHead({
+                                    ...head,
+                                    senior_id_reported: true,
+                                    has_senior_id: true,
+                                  })
                                 }
                               />
                               <span>Has Senior Citizen ID</span>
@@ -1367,7 +2279,11 @@ export default function AddResident() {
                                 name="head_senior_id"
                                 checked={head.has_senior_id === false}
                                 onChange={() =>
-                                  setHead({ ...head, has_senior_id: false })
+                                  setHead({
+                                    ...head,
+                                    senior_id_reported: false,
+                                    has_senior_id: false,
+                                  })
                                 }
                               />
                               <span>No ID</span>
@@ -1428,74 +2344,32 @@ export default function AddResident() {
                     </div>
                   </div>
 
-                  {/* Teenage Pregnancy Section */}
-                  {head.sex === "Female" && (
-                    <div className="teenage-pregnancy-box animate-fade-in">
-                      <p className="teenage-pregnancy-title">
-                        Teenage Pregnancy (For Female Head Only)
-                      </p>
-                      <div className="grid-3-cols">
-                        <div className="field-group">
-                          <label>Age at First Birth</label>
-                          <input
-                            type="number"
-                            placeholder="e.g. 18"
-                            value={head.age_first_birth}
-                            onChange={(e) =>
-                              handleHeadAgeFirstBirthChange(e.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="check-item-fancy">
-                          <div className="check-item-text">
-                            <label>Teenage Pregnancy Case</label>
-                            <span className="sub-desc">
-                              (Auto-checked if age at first birth is 19 or
-                              below)
-                            </span>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={head.teenage_pregnancy}
-                            onChange={(e) =>
-                              setHead({
-                                ...head,
-                                teenage_pregnancy: e.target.checked,
-                              })
-                            }
-                          />
-                        </div>
-                        <div className="check-item-fancy">
-                          <div className="check-item-text">
-                            <label>Current Teenage Mother</label>
-                            <span className="sub-desc">
-                              (If currently age 10-19 and has child)
-                            </span>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={head.teenage_mother}
-                            onChange={(e) =>
-                              setHead({
-                                ...head,
-                                teenage_mother: e.target.checked,
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  {/* Age-aware pregnancy classification */}
+                  <PregnancyClassificationSection
+                    person={head}
+                    title="Household Head"
+                    onAgeFirstBirthChange={handleHeadAgeFirstBirthChange}
+                    onTeenagePregnancyChange={(checked) =>
+                      setHead((prev) => ({
+                        ...prev,
+                        teenage_pregnancy: checked,
+                      }))
+                    }
+                    onTeenMotherChange={handleHeadTeenMotherChange}
+                    onChildPregnancyChange={handleHeadChildPregnancyChange}
+                  />
 
                   <div className="field-group" style={{ marginTop: "18px" }}>
                     <label>Services/Program Attended:</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Family Planning, Medical Mission, Livelihood Seminar"
-                      value={head.services_attended || ""}
-                      onChange={(e) =>
-                        setHead({ ...head, services_attended: e.target.value })
+                    <AttendanceCheckboxes
+                      groups={attendanceGroups}
+                      selected={head.attended_items}
+                      onChange={(attended_items) =>
+                        setHead({ ...head, attended_items })
                       }
+                      loading={attendanceLoading}
+                      error={attendanceError}
+                      onRetry={loadAttendanceCatalog}
                     />
                   </div>
                 </div>
@@ -1504,6 +2378,59 @@ export default function AddResident() {
               {currentStep === 3 && (
                 <div className="form-step animate-fade-up">
                   <h2 className="form-section-title">Household Members</h2>
+
+                  {/* ── Retention toolbar (prior household matched) ── */}
+                  {verificationStatus === "matched" && (
+                    <div className={`retention-toolbar ${retentionReviewed ? "confirmed" : ""}`}>
+                      <div className="retention-summary">
+                        <span className="retention-pill retained">
+                          <b>{retentionSummary.retained}</b> retained
+                        </span>
+                        {retentionSummary.deceased > 0 && (
+                          <span className="retention-pill deceased">
+                            <b>{retentionSummary.deceased}</b> deceased
+                          </span>
+                        )}
+                        {retentionSummary.migrated > 0 && (
+                          <span className="retention-pill migrated">
+                            <b>{retentionSummary.migrated}</b> migrated
+                          </span>
+                        )}
+                        {retentionSummary.promoted > 0 && (
+                          <span className="retention-pill promoted">
+                            <b>{retentionSummary.promoted}</b> promoted to head
+                          </span>
+                        )}
+                        {retentionSummary.added > 0 && (
+                          <span className="retention-pill added">
+                            <b>{retentionSummary.added}</b> newly added
+                          </span>
+                        )}
+                      </div>
+                      <div className="retention-actions">
+                        <button type="button" className="btn-retain-all" onClick={retainAllMembers}>
+                          <i className="fa-solid fa-people-roof"></i> Keep all prior members
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn-confirm-roster ${retentionReviewed ? "done" : ""}`}
+                          onClick={confirmRosterReviewed}
+                        >
+                          {retentionReviewed ? (
+                            <><i className="fa-solid fa-circle-check"></i> Roster confirmed</>
+                          ) : (
+                            "Confirm roster"
+                          )}
+                        </button>
+                      </div>
+                      <p className="retention-hint">
+                        Prior members from {matchedHousehold?.dataYear} carry a status —{" "}
+                        <b>Retained</b> members are saved for {household.data_year};{" "}
+                        <b>Deceased</b> and <b>Migrated</b> members are excluded and only recorded
+                        in the transaction log. Programs/seminars attended are not carried forward.
+                      </p>
+                    </div>
+                  )}
 
                   {members.length === 0 ? (
                     <div
@@ -1541,14 +2468,21 @@ export default function AddResident() {
                       {members.map((m, i) => {
                         const isExpanded = expandedMemberIndex === i;
                         const fullName =
-                          [m.fname, m.mname, m.lname]
-                            .filter(Boolean)
-                            .join(" ") || `Member ${i + 1}`;
+                          formatResidentName({
+                            first_name: m.fname,
+                            middle_name: m.mname,
+                            last_name: m.lname,
+                            qualifier: m.q,
+                          }) || `Member ${i + 1}`;
 
                         return (
                           <div
                             key={i}
-                            className={`member-card ${isExpanded ? "expanded" : ""}`}
+                            className={`member-card ${isExpanded ? "expanded" : ""} ${
+                              m.source === "prior"
+                                ? `prior-member ${m.promotedToHead ? "promoted" : m.retentionStatus}`
+                                : "new-member"
+                            }`}
                             style={{
                               border: "1px solid #e2e8f0",
                               borderRadius: "12px",
@@ -1611,6 +2545,24 @@ export default function AddResident() {
                                 >
                                   {fullName} {m.rel ? `(${m.rel})` : ""}
                                 </span>
+                                {m.source === "prior" && (
+                                  <span className={`member-source-badge ${m.promotedToHead ? "promoted" : m.retentionStatus}`}>
+                                    {m.promotedToHead
+                                      ? "Successor head"
+                                      : `Prior ${m.priorDataYear}`}
+                                  </span>
+                                )}
+                                {m.source === "new" && verificationStatus === "matched" && (
+                                  <span className="member-source-badge added">New</span>
+                                )}
+                                {m.ageEstimated && (
+                                  <span
+                                    className="member-source-badge estimated"
+                                    title="Age estimated from the prior record — no birth date on file"
+                                  >
+                                    Age est.
+                                  </span>
+                                )}
                               </div>
                               <div
                                 className="member-card-actions"
@@ -1619,8 +2571,27 @@ export default function AddResident() {
                                   display: "flex",
                                   gap: "10px",
                                   alignItems: "center",
+                                  flexWrap: "wrap",
+                                  justifyContent: "flex-end",
                                 }}
                               >
+                                {m.source === "prior" && !m.promotedToHead && (
+                                  <div className="member-retention-group">
+                                    {[RETAINED, DECEASED, MIGRATED].map((status) => (
+                                      <button
+                                        key={status}
+                                        type="button"
+                                        className={`member-retention-btn ${status} ${
+                                          m.retentionStatus === status ? "active" : ""
+                                        }`}
+                                        title={`Mark this prior member as ${RETENTION_LABELS[status]}`}
+                                        onClick={() => updateMemberStatus(i, status)}
+                                      >
+                                        {RETENTION_LABELS[status]}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                                 <button
                                   type="button"
                                   className="btn-toggle-expand"
@@ -1641,23 +2612,25 @@ export default function AddResident() {
                                     ? "Collapse ▲"
                                     : "Expand / Edit ▼"}
                                 </button>
-                                <button
-                                  type="button"
-                                  className="btn-remove-member"
-                                  onClick={() => removeMember(i)}
-                                  style={{
-                                    color: "#ef4444",
-                                    background: "none",
-                                    border: "none",
-                                    fontSize: "12px",
-                                    fontWeight: "600",
-                                    textDecoration: "underline",
-                                    cursor: "pointer",
-                                    padding: "5px",
-                                  }}
-                                >
-                                  Remove
-                                </button>
+                                {m.source !== "prior" && (
+                                  <button
+                                    type="button"
+                                    className="btn-remove-member"
+                                    onClick={() => removeMember(i)}
+                                    style={{
+                                      color: "#ef4444",
+                                      background: "none",
+                                      border: "none",
+                                      fontSize: "12px",
+                                      fontWeight: "600",
+                                      textDecoration: "underline",
+                                      cursor: "pointer",
+                                      padding: "5px",
+                                    }}
+                                  >
+                                    Remove
+                                  </button>
+                                )}
                               </div>
                             </div>
 
@@ -1669,6 +2642,17 @@ export default function AddResident() {
                                   background: "white",
                                 }}
                               >
+                                {m.source === "prior" &&
+                                  !m.promotedToHead &&
+                                  m.retentionStatus !== RETAINED && (
+                                    <div className="member-excluded-note">
+                                      <i className="fa-solid fa-ban"></i>{" "}
+                                      Marked <b>{RETENTION_LABELS[m.retentionStatus]}</b> — this
+                                      record is kept for reference and will{" "}
+                                      <b>not</b> be saved for Data Year {household.data_year}. It is
+                                      only recorded in the transaction log.
+                                    </div>
+                                  )}
                                 <div className="grid-4-cols">
                                   <div className="field-group">
                                     <label>Last Name</label>
@@ -1788,12 +2772,33 @@ export default function AddResident() {
                                     <label>Age</label>
                                     <input
                                       type="number"
-                                      placeholder="Calculated"
+                                      placeholder={
+                                        m.dob
+                                          ? "Calculated"
+                                          : "Enter estimated age"
+                                      }
                                       value={m.age}
+                                      readOnly={Boolean(m.dob)}
+                                      className={m.dob ? "age-auto-input" : ""}
                                       onChange={(e) =>
-                                        updateMember(i, "age", e.target.value)
+                                        handleMemberAgeChange(i, e.target.value)
                                       }
                                     />
+                                    {m.dob ? (
+                                      <span className="auto-classified-badge">
+                                        <i className="fa-solid fa-lock"></i>{" "}
+                                        Derived from birth date ·{" "}
+                                        {describeAgeReference(
+                                          selectedDataYear(),
+                                        )}
+                                      </span>
+                                    ) : (
+                                      <span className="age-reference-note estimated">
+                                        Estimated — no birth date on file.
+                                        Anchored to Data Year{" "}
+                                        {selectedDataYear()}.
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
 
@@ -1807,7 +2812,7 @@ export default function AddResident() {
                                       className="modern-select"
                                       value={m.sex}
                                       onChange={(e) =>
-                                        updateMember(i, "sex", e.target.value)
+                                        handleMemberSexChange(i, e.target.value)
                                       }
                                     >
                                       <option>Male</option>
@@ -1824,10 +2829,12 @@ export default function AddResident() {
                                         updateMember(i, "civil", e.target.value)
                                       }
                                     >
-                                      <option>Single</option>
-                                      <option>Married</option>
-                                      <option>Widowed</option>
-                                      <option>Separated</option>
+                                      {withLegacyValue(
+                                        CIVIL_STATUS_OPTIONS,
+                                        m.civil,
+                                      ).map((option) => (
+                                        <option key={option}>{option}</option>
+                                      ))}
                                     </select>
                                   </div>
                                   <div className="field-group">
@@ -1877,33 +2884,14 @@ export default function AddResident() {
                                       <option value="" disabled>
                                         Select Education
                                       </option>
-                                      <option value="No Education">
-                                        No Education
-                                      </option>
-                                      <option value="Elementary Level">
-                                        Elementary Level
-                                      </option>
-                                      <option value="Elementary Graduate">
-                                        Elementary Graduate
-                                      </option>
-                                      <option value="High School Level">
-                                        High School Level
-                                      </option>
-                                      <option value="High School Graduate">
-                                        High School Graduate
-                                      </option>
-                                      <option value="Vocational">
-                                        Vocational
-                                      </option>
-                                      <option value="College Level">
-                                        College Level
-                                      </option>
-                                      <option value="College Graduate">
-                                        College Graduate
-                                      </option>
-                                      <option value="Post Graduate">
-                                        Post Graduate
-                                      </option>
+                                      {withLegacyValue(
+                                        EDUCATION_OPTIONS,
+                                        m.edu,
+                                      ).map((option) => (
+                                        <option key={option} value={option}>
+                                          {option}
+                                        </option>
+                                      ))}
                                     </select>
                                   </div>
                                   <div className="field-group">
@@ -1934,8 +2922,12 @@ export default function AddResident() {
                                         )
                                       }
                                     >
-                                      <option>Registered Voter</option>
-                                      <option>Not Registered Voter</option>
+                                      {withLegacyValue(
+                                        VOTER_OPTIONS,
+                                        m.is_voter,
+                                      ).map((option) => (
+                                        <option key={option}>{option}</option>
+                                      ))}
                                     </select>
                                   </div>
                                   <div className="field-group">
@@ -1985,6 +2977,10 @@ export default function AddResident() {
                                           </span>
                                         </label>
                                       </div>
+                                      <DisabilityDetailsField
+                                        person={m}
+                                        onChange={(value) => updateMember(i, "disability_details", value)}
+                                      />
                                       {m.is_pwd && (
                                         <div className="id-options animate-fade-in">
                                           <label className="radio-container">
@@ -2021,31 +3017,43 @@ export default function AddResident() {
                                       )}
                                     </div>
 
-                                    {/* Senior Citizen Card */}
+                                    {/* Senior Citizen Card — derived
+                                        automatically from the calculated age */}
                                     <div
-                                      className={`classification-card ${m.is_senior ? "active" : ""}`}
+                                      className={`classification-card ${m.is_senior ? "active" : ""} ${!hasKnownAge(m) ? "disabled" : ""}`}
                                     >
                                       <div className="class-header">
                                         <label className="checkbox-container">
                                           <input
                                             type="checkbox"
                                             checked={m.is_senior}
-                                            onChange={(e) =>
-                                              updateMemberClassification(
-                                                i,
-                                                "is_senior",
-                                                e.target.checked,
-                                              )
-                                            }
+                                            disabled
                                           />
                                           <span className="class-label">
                                             Senior Citizen
                                           </span>
                                         </label>
+                                        <span
+                                          className="auto-classified-tag"
+                                          title="Set automatically from the calculated age."
+                                        >
+                                          <i className="fa-solid fa-wand-magic-sparkles"></i>{" "}
+                                          Auto
+                                        </span>
                                       </div>
-                                      {parseInt(m.age, 10) > 0 && parseInt(m.age, 10) < 60 && (
-                                        <span style={{ color: "#ef4444", fontSize: "11px", marginTop: "4px", display: "block" }}>
-                                          ⚠ Only applicable for age 60 and above.
+                                      {hasKnownAge(m) ? (
+                                        <span className="auto-classified-note">
+                                          Age {m.age}{" "}
+                                          {describeAgeReference(
+                                            selectedDataYear(),
+                                          )}{" "}
+                                          — classified automatically at 60 and
+                                          above.
+                                        </span>
+                                      ) : (
+                                        <span className="auto-classified-note muted">
+                                          Enter a birth date or an age to
+                                          classify.
                                         </span>
                                       )}
                                       {m.is_senior && (
@@ -2056,11 +3064,10 @@ export default function AddResident() {
                                               name={`member_${i}_senior_id`}
                                               checked={m.has_senior_id === true}
                                               onChange={() =>
-                                                updateMember(
-                                                  i,
-                                                  "has_senior_id",
-                                                  true,
-                                                )
+                                                updateMember(i, {
+                                                  senior_id_reported: true,
+                                                  has_senior_id: true,
+                                                })
                                               }
                                             />
                                             <span>Has Senior ID</span>
@@ -2073,11 +3080,10 @@ export default function AddResident() {
                                                 m.has_senior_id === false
                                               }
                                               onChange={() =>
-                                                updateMember(
-                                                  i,
-                                                  "has_senior_id",
-                                                  false,
-                                                )
+                                                updateMember(i, {
+                                                  senior_id_reported: false,
+                                                  has_senior_id: false,
+                                                })
                                               }
                                             />
                                             <span>No ID</span>
@@ -2150,83 +3156,40 @@ export default function AddResident() {
                                   </div>
                                 </div>
 
-                                {/* Teenage Pregnancy Section */}
-                                {m.sex === "Female" && (
-                                  <div
-                                    className="teenage-pregnancy-box animate-fade-in"
-                                    style={{ marginTop: "15px" }}
-                                  >
-                                    <p className="teenage-pregnancy-title">
-                                      Teenage Pregnancy (For Female Member Only)
-                                    </p>
-                                    <div className="grid-3-cols">
-                                      <div className="field-group">
-                                        <label>Age at First Birth</label>
-                                        <input
-                                          type="number"
-                                          placeholder="e.g. 18"
-                                          value={m.age_first_birth}
-                                          onChange={(e) =>
-                                            handleMemberAgeFirstBirthChange(
-                                              i,
-                                              e.target.value,
-                                            )
-                                          }
-                                        />
-                                      </div>
-                                      <div className="check-item-fancy">
-                                        <div className="check-item-text">
-                                          <label>Teenage Pregnancy Case</label>
-                                          <span className="sub-desc">
-                                            (Auto-checked if age at first birth
-                                            is 19 or below)
-                                          </span>
-                                        </div>
-                                        <input
-                                          type="checkbox"
-                                          checked={m.teenage_pregnancy}
-                                          onChange={(e) =>
-                                            updateMember(
-                                              i,
-                                              "teenage_pregnancy",
-                                              e.target.checked,
-                                            )
-                                          }
-                                        />
-                                      </div>
-                                      <div className="check-item-fancy">
-                                        <div className="check-item-text">
-                                          <label>Current Teenage Mother</label>
-                                          <span className="sub-desc">
-                                            (If currently age 10-19 and has
-                                            child)
-                                          </span>
-                                        </div>
-                                        <input
-                                          type="checkbox"
-                                          checked={m.teenage_mother}
-                                          onChange={(e) =>
-                                            updateMember(
-                                              i,
-                                              "teenage_mother",
-                                              e.target.checked,
-                                            )
-                                          }
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
+                                {/* Age-aware pregnancy classification */}
+                                <PregnancyClassificationSection
+                                  person={m}
+                                  title="Household Member"
+                                  style={{ marginTop: "15px" }}
+                                  onAgeFirstBirthChange={(val) =>
+                                    handleMemberAgeFirstBirthChange(i, val)
+                                  }
+                                  onTeenagePregnancyChange={(checked) =>
+                                    updateMember(
+                                      i,
+                                      "teenage_pregnancy",
+                                      checked,
+                                    )
+                                  }
+                                  onTeenMotherChange={(checked) =>
+                                    handleMemberTeenMotherChange(i, checked)
+                                  }
+                                  onChildPregnancyChange={(checked) =>
+                                    handleMemberChildPregnancyChange(i, checked)
+                                  }
+                                />
 
                                 <div className="field-group" style={{ marginTop: "18px" }}>
                                   <label>Services/Program Attended:</label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. Immunization, Feeding Program, Youth Summit, Skills Training"
-                                    value={m.services_attended || ""}
-                                    onChange={(e) =>
-                                      updateMember(i, "services_attended", e.target.value)
+                                  <AttendanceCheckboxes
+                                    groups={attendanceGroups}
+                                    selected={m.attended_items || []}
+                                    onChange={(attended_items) =>
+                                      updateMember(i, "attended_items", attended_items)
                                     }
+                                    loading={attendanceLoading}
+                                    error={attendanceError}
+                                    onRetry={loadAttendanceCatalog}
                                   />
                                 </div>
                               </div>
@@ -2243,8 +3206,16 @@ export default function AddResident() {
                       className="btn-add-member"
                       onClick={addMember}
                     >
-                      + Add Household Member
+                      {verificationStatus === "matched"
+                        ? "+ Add New Member"
+                        : "+ Add Household Member"}
                     </button>
+                    {verificationStatus === "matched" && (
+                      <p style={{ fontSize: "11.5px", color: "#64748b", marginTop: "8px" }}>
+                        Use this for people who joined the household after {matchedHousehold?.dataYear} —
+                        prior records are carried over above.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -2255,25 +3226,81 @@ export default function AddResident() {
                   {verificationStatus === "matched" && matchedHousehold && (
                     <div className="increment-tracker-banner">
                       <h4 style={{ margin: "0 0 10px", fontSize: "14px", color: "#1e40af", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <i className="fa-solid fa-chart-column"></i> Incremental Population Tracker
+                        <i className="fa-solid fa-chart-column"></i> Retention & Incremental Population Tracker
                       </h4>
                       <div className="increment-tracker-stats">
                         <div className="increment-stat">
-                          <small>Prior Year ({matchedHousehold.priorYear})</small>
-                          <strong>{matchedHousehold.totalMembers} member{matchedHousehold.totalMembers !== 1 ? "s" : ""}</strong>
+                          <small>Prior Year ({matchedHousehold.dataYear})</small>
+                          <strong>{matchedHousehold.memberCount} record{matchedHousehold.memberCount !== 1 ? "s" : ""}</strong>
                         </div>
                         <div className="increment-stat">
-                          <small>Current Year ({household.data_year})</small>
-                          <strong>{1 + members.length} member{(1 + members.length) !== 1 ? "s" : ""}</strong>
+                          <small>Carried Forward</small>
+                          <strong>{retentionSummary.retained} retained</strong>
+                        </div>
+                        <div className="increment-stat">
+                          <small>Not Carried Forward</small>
+                          <strong>
+                            {retentionSummary.excluded}
+                            {retentionSummary.excluded > 0
+                              ? ` (${retentionSummary.deceased} deceased / ${retentionSummary.migrated} migrated)`
+                              : ""}
+                          </strong>
+                        </div>
+                        <div className="increment-stat">
+                          <small>Data Year {household.data_year}</small>
+                          <strong>{1 + activeMemberList.length} member{(1 + activeMemberList.length) !== 1 ? "s" : ""}</strong>
                         </div>
                         <div className="increment-stat">
                           <small>Net Increment</small>
                           <span className="increment-badge-pill">
-                            {(1 + members.length) - matchedHousehold.totalMembers >= 0 ? "+" : ""}
-                            {(1 + members.length) - matchedHousehold.totalMembers}
+                            {1 + activeMemberList.length - matchedHousehold.memberCount >= 0 ? "+" : ""}
+                            {1 + activeMemberList.length - matchedHousehold.memberCount}
                           </span>
                         </div>
                       </div>
+                      {(retentionSummary.excluded > 0 || headIsSuccessor) && (
+                        <ul className="increment-tracker-notes">
+                          {retentionSummary.excluded > 0 && (
+                            <li>
+                              <b>Excluded from {household.data_year} (audit only):</b>{" "}
+                              {members
+                                .filter((m) => m.source === "prior" && !isMemberRetained(m))
+                                .map(
+                                  (m) =>
+                                    `${formatResidentName({
+                                      first_name: m.fname,
+                                      middle_name: m.mname,
+                                      last_name: m.lname,
+                                      qualifier: m.q,
+                                    })} — ${RETENTION_LABELS[m.retentionStatus]}`,
+                                )
+                                .join("; ")}
+                            </li>
+                          )}
+                          {headIsSuccessor && priorHeadForm && (
+                            <li>
+                              <b>Head replaced:</b>{" "}
+                              {formatResidentName({
+                                first_name: priorHeadForm.fname,
+                                middle_name: priorHeadForm.mname,
+                                last_name: priorHeadForm.lname,
+                                qualifier: priorHeadForm.q,
+                              })}{" "}
+                              ({RETENTION_LABELS[headRetention]}) →{" "}
+                              {formatResidentName({
+                                first_name: head.fname,
+                                middle_name: head.mname,
+                                last_name: head.lname,
+                                qualifier: head.q,
+                              })}
+                            </li>
+                          )}
+                          <li>
+                            Programs/seminars attended from prior years are not carried into{" "}
+                            {household.data_year}.
+                          </li>
+                        </ul>
+                      )}
                     </div>
                   )}
                   {verificationStatus === "new_household" && (
@@ -2282,7 +3309,7 @@ export default function AddResident() {
                         <i className="fa-solid fa-house-chimney-medical"></i> New Household Entry
                       </h4>
                       <p style={{ margin: 0, fontSize: "12.5px", color: "#78716c" }}>
-                        This household has no prior-year records. Registering <strong>{1 + members.length}</strong> new member{(1 + members.length) !== 1 ? "s" : ""} for Data Year {household.data_year}.
+                        This household has no prior-year records. Registering <strong>{1 + activeMemberList.length}</strong> new member{(1 + activeMemberList.length) !== 1 ? "s" : ""} for Data Year {household.data_year}.
                       </p>
                     </div>
                   )}
@@ -2315,9 +3342,23 @@ export default function AddResident() {
                         <b>Data Year:</b> {household.data_year}
                       </span>
                       <span>
-                        <b>Verification:</b>{" "}
-                        {verificationStatus === "matched" ? "Matched (Prior-Year)" : verificationStatus === "new_household" ? "New Household" : "Not Verified"}
+                        <b>Lookup:</b>{" "}
+                        {verificationStatus === "matched"
+                          ? `Prior household ${matchedHousehold?.hNo} (${matchedHousehold?.dataYear}) matched`
+                          : verificationStatus === "new_household"
+                            ? "New Household (no prior-year record)"
+                            : verificationStatus === "candidates"
+                              ? "Candidate household not selected"
+                              : "Not looked up"}
                       </span>
+                      {verificationStatus === "matched" && (
+                        <span>
+                          <b>Roster:</b>{" "}
+                          {retentionReviewed
+                            ? `Confirmed — ${retentionSummary.retained} retained, ${retentionSummary.excluded} excluded`
+                            : "Not confirmed"}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="summary-section">
@@ -2360,31 +3401,36 @@ export default function AddResident() {
                           head.is_senior &&
                           `Senior Citizen (${head.has_senior_id ? "Has ID" : "No ID"})`,
                           head.is_pwd &&
-                          `PWD (${head.has_pwd_id ? "Has ID" : "No ID"})`,
+                          `PWD: ${head.disability_details?.trim()} (${head.has_pwd_id ? "Has ID" : "No ID"})`,
                           head.is_solo_parent &&
                           `Solo Parent (${head.has_solo_parent_id ? "Has ID" : "No ID"})`,
                         ]
                           .filter(Boolean)
                           .join(", ") || "Regular"}
                       </span>
-                      {head.sex === "Female" && (
+                      {isFemaleSex(head.sex) && !head.child_pregnancy_case && (
                         <span>
-                          <b>Teenage Pregnancy Details:</b>{" "}
+                          <b>Pregnancy Classification:</b>{" "}
                           {head.age_first_birth
                             ? `First birth at ${head.age_first_birth} yrs ${head.teenage_pregnancy ? "(Teen Case)" : ""}${head.teenage_mother ? ", (Current Teenage Mother)" : ""}`
                             : "None"}
                         </span>
                       )}
-                      {head.services_attended && (
+                      {attendanceText(head.attended_items) && (
                         <span>
-                          <b>Services/Program Attended:</b> {head.services_attended}
+                          <b>Services/Program Attended:</b>{" "}
+                          {attendanceText(head.attended_items)}
                         </span>
                       )}
                     </div>
                   </div>
                   <div className="summary-section">
-                    <h3>Members ({members.length})</h3>
-                    {members.length === 0 ? (
+                    <h3>
+                      Members to Save ({activeMemberList.length})
+                      {retentionSummary.excluded > 0 &&
+                        ` · ${retentionSummary.excluded} not carried forward`}
+                    </h3>
+                    {activeMemberList.length === 0 ? (
                       <p
                         style={{
                           fontSize: "13px",
@@ -2402,23 +3448,27 @@ export default function AddResident() {
                               <th>No.</th>
                               <th>Name</th>
                               <th>Relation</th>
+                              <th>Source</th>
                               <th>Basic Details</th>
                               <th>Classification</th>
                               <th>Services/Program Attended</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {members.map((m, i) => {
-                              const mName = [m.fname, m.mname, m.lname, m.q]
-                                .filter(Boolean)
-                                .join(" ");
+                            {activeMemberList.map((m, i) => {
+                              const mName = formatResidentName({
+                                first_name: m.fname,
+                                middle_name: m.mname,
+                                last_name: m.lname,
+                                qualifier: m.q,
+                              });
                               const basicDetails = `${m.sex}, ${m.civil}, DOB: ${m.dob || "N/A"} (${m.age || "N/A"} yrs), Job: ${m.occupation || "N/A"}`;
                               const classList =
                                 [
                                   m.is_senior &&
                                   `Senior Citizen (${m.has_senior_id ? "S" : "No ID"})`,
                                   m.is_pwd &&
-                                  `PWD (${m.has_pwd_id ? "P" : "No ID"})`,
+                                  `PWD: ${m.disability_details?.trim()} (${m.has_pwd_id ? "Has ID" : "No ID"})`,
                                   m.is_solo_parent &&
                                   `Solo Parent (${m.has_solo_parent_id ? "SP" : "No ID"})`,
                                 ]
@@ -2432,9 +3482,16 @@ export default function AddResident() {
                                     <b>{mName}</b>
                                   </td>
                                   <td>{m.rel}</td>
+                                  <td>
+                                    {m.source === "prior"
+                                      ? `Carried from ${m.priorDataYear}`
+                                      : "New"}
+                                  </td>
                                   <td>{basicDetails}</td>
                                   <td>{classList}</td>
-                                  <td>{m.services_attended || "—"}</td>
+                                  <td>
+                                    {attendanceText(m.attended_items) || "—"}
+                                  </td>
                                 </tr>
                               );
                             })}
@@ -2443,6 +3500,54 @@ export default function AddResident() {
                       </div>
                     )}
                   </div>
+
+                  {retentionSummary.excluded > 0 && (
+                    <div className="summary-section excluded-section">
+                      <h3>Not Carried Forward ({retentionSummary.excluded})</h3>
+                      <div className="summary-table-wrapper">
+                        <table className="summary-table">
+                          <thead>
+                            <tr>
+                              <th>No.</th>
+                              <th>Name</th>
+                              <th>Prior Year</th>
+                              <th>Status</th>
+                              <th>Disposition</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {members
+                              .filter((m) => m.source === "prior" && !isMemberRetained(m))
+                              .map((m, i) => (
+                                <tr key={`ex-${i}`}>
+                                  <td>{i + 1}</td>
+                                  <td>
+                                    <b>
+                                      {formatResidentName({
+                                        first_name: m.fname,
+                                        middle_name: m.mname,
+                                        last_name: m.lname,
+                                        qualifier: m.q,
+                                      })}
+                                    </b>
+                                  </td>
+                                  <td>{m.priorDataYear}</td>
+                                  <td>
+                                    <span className={`retention-pill ${m.retentionStatus}`}>
+                                      {RETENTION_LABELS[m.retentionStatus]}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    Excluded from {household.data_year} — prior record left
+                                    unchanged, logged in the transaction history only.
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

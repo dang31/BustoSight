@@ -2,54 +2,6 @@
    PROGRAMS & SEMINARS MANAGEMENT CSS - BUSTOSIGHT
    ============================================================ */
 
-/* --- Toast Notification --- */
-.prog-toast {
-  position: fixed;
-  top: 24px;
-  right: 24px;
-  z-index: 10001;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  border-radius: var(--radius-md);
-  font-size: 13.5px;
-  font-weight: 600;
-  color: white;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(8px);
-  animation: fadeInScale 0.25s ease;
-}
-
-.prog-toast-success {
-  background: linear-gradient(135deg, #276749 0%, #38a169 100%);
-}
-
-.prog-toast-info {
-  background: linear-gradient(135deg, #2b6cb0 0%, #3182ce 100%);
-}
-
-.prog-toast-error {
-  background: linear-gradient(135deg, #9b2c2c 0%, #e53e3e 100%);
-}
-
-.prog-toast button {
-  background: transparent;
-  border: none;
-  color: white;
-  font-size: 18px;
-  cursor: pointer;
-  opacity: 0.85;
-  transition: opacity 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.prog-toast button:hover {
-  opacity: 1;
-}
-
 /* --- Layout Content --- */
 .prog-content {
   flex: 1;
@@ -1268,16 +1220,3 @@
 }
 
 /* Auth Lock Icon Wrap */
-.prog-auth-lock-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: rgba(44, 82, 130, 0.1);
-  color: var(--primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 14px;
-}
-
-

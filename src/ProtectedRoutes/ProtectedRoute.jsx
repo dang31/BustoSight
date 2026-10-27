@@ -1,6 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import LoadingScreen from "../components/Common/LoadingScreen";
 
 export default function ProtectedRoute({ children, allowedRoles }) {
   const [loading, setLoading] = useState(true);
@@ -59,7 +60,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     return () => subscription.unsubscribe();
   }, [allowedRoles]);
 
-  if (loading) return <h2>Loading...</h2>;
+  if (loading) return <LoadingScreen />;
 
   if (!session) {
     return <Navigate to="/login" state={{ message: 'Please log in first to access this page.' }} replace />;

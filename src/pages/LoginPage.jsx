@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import PasswordInput from "../components/Common/PasswordInput";
 import { logTransaction } from "../utils/logger";
+import { getDeviceId } from "../lib/device";
+import { useToast } from "../components/Feedback/FeedbackProvider";
 import "../css/LoginPage.css";
 
 export default function LoginPage() {
@@ -12,23 +14,66 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const location = useLocation();
-  const [toast, setToast] = useState(null);
+  const toast = useToast();
+
+  // React 18 StrictMode double-invokes effects in development, and both runs
+  // see the router state before the navigate() below has been applied — which
+  // would raise the same toast twice. React Router creates a new location object
+  // per navigation but reuses the same one across a re-run, so comparing object
+  // identity blocks the repeat without ever suppressing a later logout's toast.
+  const handledLocation = useRef(null);
 
   useEffect(() => {
-    if (location.state?.message) {
-      const isTimeoutMsg = location.state.message.toLowerCase().includes('inactivity');
-      setToast({
-        message: location.state.message,
-        type: isTimeoutMsg ? "warning" : "error",
-      });
-      setTimeout(() => setToast(null), 5000);
+    const message = location.state?.message;
+    if (!message) return;
+    if (handledLocation.current === location) return;
 
-      // Clear state so it doesn't reappear on refresh
-      navigate(location.pathname, { replace: true, state: {} });
+    handledLocation.current = location;
+
+    // logout() supplies an explicit tone (a takeover is informational, not an
+    // error); fall back to inferring it for any older callers. Allow-listed
+    // rather than indexing straight into `toast`, since router state can be
+    // written from the console or via history.replaceState.
+    const TONES = ['success', 'error', 'info', 'warning'];
+    const isTimeoutMsg = message.toLowerCase().includes('inactivity');
+    const requested = location.state?.tone;
+    const tone = TONES.includes(requested)
+      ? requested
+      : isTimeoutMsg
+        ? 'warning'
+        : 'error';
+
+    toast[tone](message, isTimeoutMsg ? 6000 : undefined);
+
+    // Clear state so it doesn't reappear on refresh
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location, navigate, toast]);
+
+  /**
+ * Record this browser as the owner of the account and revoke any session
+ * belonging to another device. Never throws — a failure here must not block
+ * sign-in, it only means single-session enforcement stays dormant.
+ */
+const claimSessionOwnership = async () => {
+  try {
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+    const sessionId = claimsData?.claims?.session_id;
+    if (claimsError || !sessionId) return;
+
+    const { error: invokeError } = await supabase.functions.invoke(
+      'enforce-single-session',
+      { body: { session_id: sessionId, device_id: getDeviceId() } },
+    );
+
+    if (invokeError) {
+      console.warn('Single-session claim failed:', invokeError.message);
     }
-  }, [location, navigate]);
+  } catch (err) {
+    console.warn('Single-session claim failed:', err?.message || err);
+  }
+};
 
-  const handleLogin = async (e) => {
+const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg("");
@@ -104,8 +149,9 @@ export default function LoginPage() {
         return;
       }
 
-      // Store user session info for the frontend
-      const userPayload = { ...profile, password: password };
+      // Store user session info for the frontend.
+      // Never persist the password — it is only used for the sign-in above.
+      const userPayload = { ...profile };
       sessionStorage.setItem("popdev_user", JSON.stringify(userPayload));
       localStorage.setItem("popdev_user", JSON.stringify(userPayload));
 
@@ -116,6 +162,11 @@ export default function LoginPage() {
         details: `User @${profile.username || username} logged in successfully as ${profile.role || 'Staff'}.`,
         user: userPayload,
       });
+
+      // Claim this browser as the session owner. Best-effort: if the edge
+      // function is not deployed or the network fails, signing in must still
+      // succeed — we just fall back to today's multi-session behaviour.
+      await claimSessionOwnership();
 
       navigate("/dashboard");
     } catch (err) {
@@ -131,16 +182,6 @@ export default function LoginPage() {
       {/* Shared background layers */}
       <div className="bg-image" />
       <div className="overlay" />
-
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          className={`login-toast login-toast-${toast.type} animate-fade-up`}
-        >
-          <span>{toast.message}</span>
-          <button onClick={() => setToast(null)}>×</button>
-        </div>
-      )}
 
       {/* Back button */}
       <Link to="/" className="back-btn">
@@ -232,8 +273,14 @@ export default function LoginPage() {
                 className={`btn-login-submit ${isLoading ? "loading" : ""}`}
                 id="loginSubmitBtn"
                 disabled={isLoading}
+                aria-busy={isLoading}
               >
-                {isLoading ? "Authenticating..." : "Login"}
+                {isLoading && (
+                  <span className="btn-spinner" aria-hidden="true" />
+                )}
+                <span className="btn-login-label">
+                  {isLoading ? "Authenticating" : "Login"}
+                </span>
               </button>
             </form>
           </div>
