@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import UserProfileBadge from "../components/UserProfileBadge";
 import AttendanceCheckboxes from "../components/AttendanceCheckboxes";
+import DisabilityDetailsField from "../components/DisabilityDetailsField";
+import { disabilityDetailsForSave, getDisabilityError } from "../lib/disability";
 import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/BarangayList.css";
@@ -71,6 +73,7 @@ function mapResidentRow(r) {
     edu: r.educational_attainment,
     isPwd: r.is_pwd,
     hasPwdId: r.has_pwd_id,
+    disabilityDetails: r.disability_details,
     isSenior: r.is_senior,
     hasSeniorId: r.has_senior_id,
     isSoloParent: r.is_solo_parent,
@@ -357,6 +360,7 @@ export default function BarangayList({ defaultMode = "household" }) {
       educational_attainment: res.edu || "",
       is_pwd: res.isPwd || false,
       has_pwd_id: res.hasPwdId || false,
+      disability_details: res.disabilityDetails || "",
       is_senior: derived.is_senior,
       senior_id_reported: res.hasSeniorId || false,
       has_senior_id: derived.has_senior_id,
@@ -457,6 +461,12 @@ export default function BarangayList({ defaultMode = "household" }) {
       return;
     }
 
+    const disabilityError = getDisabilityError(editForm);
+    if (disabilityError) {
+      toast.error(disabilityError);
+      return;
+    }
+
     const adminPassword = await requestAdminPassword({
       actionTitle: 'Save Changes',
       actionDescription: `Enter your admin password to save the edits to ${formatResidentName(editingResident)}.`,
@@ -499,7 +509,8 @@ export default function BarangayList({ defaultMode = "household" }) {
         religion: editForm.religion,
         educational_attainment: editForm.educational_attainment,
         is_pwd: editForm.is_pwd,
-        has_pwd_id: editForm.has_pwd_id,
+        has_pwd_id: editForm.is_pwd ? editForm.has_pwd_id : false,
+        disability_details: disabilityDetailsForSave(editForm),
         is_senior: norm.is_senior,
         has_senior_id: norm.has_senior_id,
         is_solo_parent: editForm.is_solo_parent,
@@ -543,7 +554,8 @@ export default function BarangayList({ defaultMode = "household" }) {
         religion: editForm.religion,
         edu: editForm.educational_attainment,
         isPwd: editForm.is_pwd,
-        hasPwdId: editForm.has_pwd_id,
+        hasPwdId: editForm.is_pwd ? editForm.has_pwd_id : false,
+        disabilityDetails: disabilityDetailsForSave(editForm),
         isSenior: norm.is_senior,
         hasSeniorId: norm.has_senior_id,
         isSoloParent: editForm.is_solo_parent,
@@ -1605,6 +1617,14 @@ export default function BarangayList({ defaultMode = "household" }) {
                         </span>
                       </span>
                     </div>
+                    {selectedResident.isPwd && (
+                      <div className="res-detail-row">
+                        <span className="res-detail-label">Disability</span>
+                        <span className="res-detail-value">
+                          {selectedResident.disabilityDetails || "Not recorded"}
+                        </span>
+                      </div>
+                    )}
                     <div className="res-detail-row">
                       <span className="res-detail-label">Solo Parent</span>
                       <span className="res-detail-value">
@@ -2018,11 +2038,24 @@ export default function BarangayList({ defaultMode = "household" }) {
                   );
                 })()}
                 <label className="edit-toggle-item">
-                  <input type="checkbox" checked={editForm.is_pwd} onChange={e => setEditForm(f => ({ ...f, is_pwd: e.target.checked }))} />
+                  <input type="checkbox" checked={editForm.is_pwd} onChange={e => {
+                    const checked = e.target.checked;
+                    setEditForm(f => ({
+                      ...f,
+                      is_pwd: checked,
+                      has_pwd_id: checked ? f.has_pwd_id : false,
+                      disability_details: checked ? f.disability_details : "",
+                    }));
+                  }} />
                   <span>PWD</span>
                 </label>
+                <DisabilityDetailsField
+                  person={editForm}
+                  className="edit-field"
+                  onChange={(disability_details) => setEditForm(f => ({ ...f, disability_details }))}
+                />
                 <label className="edit-toggle-item">
-                  <input type="checkbox" checked={editForm.has_pwd_id} onChange={e => setEditForm(f => ({ ...f, has_pwd_id: e.target.checked }))} />
+                  <input type="checkbox" checked={editForm.has_pwd_id} disabled={!editForm.is_pwd} onChange={e => setEditForm(f => ({ ...f, has_pwd_id: e.target.checked }))} />
                   <span>Has PWD ID</span>
                 </label>
                 <label className="edit-toggle-item">

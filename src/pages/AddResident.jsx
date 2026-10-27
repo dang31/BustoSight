@@ -4,6 +4,8 @@ import Sidebar from "../components/Sidebar";
 import UserProfileBadge from "../components/UserProfileBadge";
 import AttendanceCheckboxes from "../components/AttendanceCheckboxes";
 import PregnancyClassificationSection from "../components/PregnancyClassificationSection";
+import DisabilityDetailsField from "../components/DisabilityDetailsField";
+import { disabilityDetailsForSave, getDisabilityError } from "../lib/disability";
 import { brgyStats } from "../data/brgyData";
 import { supabase } from "../lib/supabase";
 import "../css/AddResident.css";
@@ -165,6 +167,7 @@ export default function AddResident() {
     is_4ps: false,
     is_pwd: false,
     has_pwd_id: false,
+    disability_details: "",
     is_senior: false,
     senior_id_reported: false,
     has_senior_id: false,
@@ -172,9 +175,8 @@ export default function AddResident() {
     has_solo_parent_id: false,
     age_first_birth: "",
     teenage_pregnancy: false,
-    // Reported baseline (evidence of a child). The applied
-    // `teenage_mother` flag is derived from it by the age engine and only
-    // holds while the person is female and aged 10-19.
+    // Manual evidence of a child, separate from age at first birth. The
+    // age engine uses either source while the person is female and 10-19.
     teen_mother_reported: false,
     teenage_mother: false,
     child_pregnancy_case: false,
@@ -321,10 +323,10 @@ export default function AddResident() {
   };
 
   /**
-   * "Current teenage mother" is reported (it needs evidence of a child), so
-   * the encoder ticks it. The flag is then only *applied* while the person is
-   * female and 10-19 - the baseline is kept so it can be re-derived if the
-   * data year changes.
+   * Manual motherhood evidence is used when first-birth age is unknown.
+   * The age engine also recognizes a valid teenage first-birth age, and
+   * only applies the flag while female and 10-19. Keep the manual baseline
+   * separate so changing the data year can re-derive the flag.
    */
   const handleHeadTeenMotherChange = (checked) => {
     setHead((prev) =>
@@ -420,7 +422,10 @@ export default function AddResident() {
   const handleHeadClassification = (field, checked) => {
     setHead((prev) => {
       const next = { ...prev, [field]: checked };
-      if (field === "is_pwd" && !checked) next.has_pwd_id = false;
+      if (field === "is_pwd" && !checked) {
+        next.has_pwd_id = false;
+        next.disability_details = "";
+      }
       if (field === "is_solo_parent" && !checked)
         next.has_solo_parent_id = false;
       return next;
@@ -430,7 +435,10 @@ export default function AddResident() {
   const updateMemberClassification = (index, field, checked) => {
     const newMembers = [...members];
     newMembers[index][field] = checked;
-    if (field === "is_pwd" && !checked) newMembers[index].has_pwd_id = false;
+    if (field === "is_pwd" && !checked) {
+      newMembers[index].has_pwd_id = false;
+      newMembers[index].disability_details = "";
+    }
     if (field === "is_solo_parent" && !checked)
       newMembers[index].has_solo_parent_id = false;
     setMembers(newMembers);
@@ -499,6 +507,8 @@ export default function AddResident() {
         return "Date of Birth must be a valid date that is not in the future.";
       if (head.age !== "" && head.age <= 18)
         return "Household head must be over 18 years old.";
+      const disabilityError = getDisabilityError(head, "Household Head");
+      if (disabilityError) return disabilityError;
     }
 
     if (step === 3) {
@@ -512,6 +522,8 @@ export default function AddResident() {
         const member = members[i];
         if (member.promotedToHead) continue; // saved as the head instead
         if (!isMemberRetained(member)) continue; // not carried forward
+        const disabilityError = getDisabilityError(member, `Member ${i + 1}`);
+        if (disabilityError) return disabilityError;
 
         const hasAnyMemberValue =
           member.lname ||
@@ -604,6 +616,7 @@ export default function AddResident() {
         is_4ps: false,
         is_pwd: false,
         has_pwd_id: false,
+        disability_details: "",
         is_senior: false,
         senior_id_reported: false,
         has_senior_id: false,
@@ -754,6 +767,7 @@ export default function AddResident() {
           is_4ps: head.is_4ps,
           is_pwd: head.is_pwd,
           has_pwd_id: head.is_pwd ? head.has_pwd_id : false,
+          disability_details: disabilityDetailsForSave(head),
           is_senior: headNorm.is_senior,
           has_senior_id: headNorm.has_senior_id,
           is_solo_parent: head.is_solo_parent,
@@ -799,6 +813,7 @@ export default function AddResident() {
             is_4ps: m.is_4ps,
             is_pwd: m.is_pwd,
             has_pwd_id: m.is_pwd ? m.has_pwd_id : false,
+            disability_details: disabilityDetailsForSave(m),
             is_senior: memberNorm.is_senior,
             has_senior_id: memberNorm.has_senior_id,
             is_solo_parent: m.is_solo_parent,
@@ -906,6 +921,7 @@ export default function AddResident() {
         edu: r.educational_attainment,
         isPwd: r.is_pwd,
         hasPwdId: r.has_pwd_id,
+        disabilityDetails: r.disability_details,
         isSenior: r.is_senior,
         hasSeniorId: r.has_senior_id,
         isSoloParent: r.is_solo_parent,
@@ -2175,6 +2191,12 @@ export default function AddResident() {
                             </span>
                           </label>
                         </div>
+                        <DisabilityDetailsField
+                          person={head}
+                          onChange={(disability_details) =>
+                            setHead((prev) => ({ ...prev, disability_details }))
+                          }
+                        />
                         {head.is_pwd && (
                           <div className="id-options animate-fade-in">
                             <label className="radio-container">
@@ -2955,6 +2977,10 @@ export default function AddResident() {
                                           </span>
                                         </label>
                                       </div>
+                                      <DisabilityDetailsField
+                                        person={m}
+                                        onChange={(value) => updateMember(i, "disability_details", value)}
+                                      />
                                       {m.is_pwd && (
                                         <div className="id-options animate-fade-in">
                                           <label className="radio-container">
@@ -3375,7 +3401,7 @@ export default function AddResident() {
                           head.is_senior &&
                           `Senior Citizen (${head.has_senior_id ? "Has ID" : "No ID"})`,
                           head.is_pwd &&
-                          `PWD (${head.has_pwd_id ? "Has ID" : "No ID"})`,
+                          `PWD: ${head.disability_details?.trim()} (${head.has_pwd_id ? "Has ID" : "No ID"})`,
                           head.is_solo_parent &&
                           `Solo Parent (${head.has_solo_parent_id ? "Has ID" : "No ID"})`,
                         ]
@@ -3442,7 +3468,7 @@ export default function AddResident() {
                                   m.is_senior &&
                                   `Senior Citizen (${m.has_senior_id ? "S" : "No ID"})`,
                                   m.is_pwd &&
-                                  `PWD (${m.has_pwd_id ? "P" : "No ID"})`,
+                                  `PWD: ${m.disability_details?.trim()} (${m.has_pwd_id ? "Has ID" : "No ID"})`,
                                   m.is_solo_parent &&
                                   `Solo Parent (${m.has_solo_parent_id ? "SP" : "No ID"})`,
                                 ]

@@ -154,17 +154,17 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- A child case is explicit, historical (first birth <= 9), or automatic
-  -- because the recorded age is <= 9 and pregnancy evidence exists.
+  -- A child case is explicit, historical (first birth <= 9 while <= current age),
+  -- or automatic because the recorded age is <= 9 and pregnancy evidence exists.
   IF NEW.child_pregnancy_case IS TRUE
-     OR (v_first_birth BETWEEN 1 AND 9)
+     OR (v_first_birth BETWEEN 1 AND 9 AND (v_age IS NULL OR v_first_birth <= v_age))
      OR (
        v_age IS NOT NULL
        AND v_age <= 9
        AND (
          NEW.teenage_pregnancy_case IS TRUE
          OR NEW.current_teenage_mother IS TRUE
-         OR v_first_birth > 0
+         OR (v_first_birth BETWEEN 1 AND v_age)
        )
      )
   THEN
@@ -179,9 +179,11 @@ BEGIN
   END IF;
 
   -- Not a child case. Derive the historical teenage-pregnancy flag from
-  -- the first-birth age when it is available.
-  IF v_first_birth > 0 THEN
+  -- the first-birth age when it is available and valid for the current age.
+  IF v_first_birth > 0 AND (v_age IS NULL OR v_first_birth <= v_age) THEN
     NEW.teenage_pregnancy_case := (v_first_birth <= 19);
+  ELSIF v_first_birth > 0 AND v_age IS NOT NULL AND v_first_birth > v_age THEN
+    NEW.teenage_pregnancy_case := FALSE;
   END IF;
 
   -- Current teenage mother only applies to females aged 10-19.

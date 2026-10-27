@@ -1,3 +1,4 @@
+import { useId } from "react";
 import {
   isAdolescentAge,
   isAdultAge,
@@ -22,13 +23,14 @@ export default function PregnancyClassificationSection({
   onChildPregnancyChange,
   style,
 }) {
+  const teenMotherId = useId();
   const p = person || {};
   const female = isFemaleSex(p.sex);
   const age = toAgeInt(p.age);
   const child = isChildAge(p.age);
   const adolescent = isAdolescentAge(p.age);
   const adult = isAdultAge(p.age);
-  const teenMotherEligible = female && adolescent;
+  const teenMotherEligible = female && adolescent && !p.child_pregnancy_case;
 
   // Non-female residents have no pregnancy classification to record.
   if (!female) return null;
@@ -120,16 +122,19 @@ export default function PregnancyClassificationSection({
         </div>
         <div className="check-item-fancy">
           <div className="check-item-text">
-            <label>Current Teenage Mother</label>
+            <label htmlFor={teenMotherId}>Current Teenage Mother</label>
             <span className="sub-desc">
-              {teenMotherEligible
-                ? "(Currently age 10-19 and has a child)"
-                : `Only applies while age 10-19${
-                    age !== null ? ` — currently ${age}` : ""
-                  }.`}
+              {p.child_pregnancy_case
+                ? "Unavailable for a child-pregnancy classification."
+                : teenMotherEligible
+                  ? "Auto-checked from a valid age at first birth. Select manually if that age is unknown."
+                  : `Only applies while age 10-19${
+                      age !== null ? ` — currently ${age}` : ""
+                    }.`}
             </span>
           </div>
           <input
+            id={teenMotherId}
             type="checkbox"
             checked={Boolean(p.teenage_mother)}
             disabled={!teenMotherEligible}

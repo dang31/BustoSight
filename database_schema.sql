@@ -136,6 +136,7 @@ CREATE TABLE public.residents (
     educational_attainment TEXT NULL,
     is_pwd BOOLEAN NULL DEFAULT FALSE,
     has_pwd_id BOOLEAN NULL DEFAULT FALSE,
+    disability_details TEXT NULL,
     is_senior BOOLEAN NULL DEFAULT FALSE,
     has_senior_id BOOLEAN NULL DEFAULT FALSE,
     is_solo_parent BOOLEAN NULL DEFAULT FALSE,
@@ -313,15 +314,17 @@ BEGIN
         RETURN NEW;
     END IF;
 
+    -- A child case is explicit, historical (first birth <= 9 while <= current age),
+    -- or automatic because the recorded age is <= 9 and pregnancy evidence exists.
     IF NEW.child_pregnancy_case IS TRUE
-       OR (v_first_birth BETWEEN 1 AND 9)
+       OR (v_first_birth BETWEEN 1 AND 9 AND (v_age IS NULL OR v_first_birth <= v_age))
        OR (
            v_age IS NOT NULL
            AND v_age <= 9
            AND (
                NEW.teenage_pregnancy_case IS TRUE
                OR NEW.current_teenage_mother IS TRUE
-               OR v_first_birth > 0
+               OR (v_first_birth BETWEEN 1 AND v_age)
            )
        )
     THEN
@@ -335,8 +338,12 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    IF v_first_birth > 0 THEN
+    -- Not a child case. Derive the historical teenage-pregnancy flag from
+    -- the first-birth age when it is available and valid for the current age.
+    IF v_first_birth > 0 AND (v_age IS NULL OR v_first_birth <= v_age) THEN
         NEW.teenage_pregnancy_case := (v_first_birth <= 19);
+    ELSIF v_first_birth > 0 AND v_age IS NOT NULL AND v_first_birth > v_age THEN
+        NEW.teenage_pregnancy_case := FALSE;
     END IF;
 
     IF v_age IS NULL OR v_age < 10 OR v_age > 19 THEN

@@ -26,10 +26,10 @@
  *     estimate is anchored to the year it was entered so it still rolls
  *     forward on the next Data Year.
  *   - Senior Citizen is fully automatic: age >= 60. No manual override.
- *   - "Current teenage mother" needs evidence (a child), so it is kept as
- *     a reported baseline and only *applied* while the person is female
- *     and aged 10-19. The baseline survives a year change, so a person who
- *     ages out at 20 can still be re-derived correctly if the encoder goes
+ *   - "Current teenage mother" needs evidence (a child): a valid teenage
+ *     first-birth age or a reported baseline. It is only *applied* while
+ *     the person is female and aged 10-19. The baseline survives a year
+ *     change, so a person who ages out at 20 can still be re-derived if the encoder goes
  *     back to an earlier year.
  *   - "Teenage pregnancy case" is historical: it follows the age at first
  *     birth (<= 19) and is retained after age 20.
@@ -285,21 +285,24 @@ export function classifyPregnancyAtAge(person, ageValue) {
       false,
   );
   const isChildAgeBand = age !== null && age <= CHILD_MAX_AGE;
+  // A first-birth age is only valid/historical if it does not exceed the person's current age
+  const firstBirthValid =
+    hasFirstBirth && (age === null || firstBirth <= age);
   const firstBirthWasChildAge =
-    hasFirstBirth && firstBirth <= CHILD_MAX_AGE;
+    firstBirthValid && firstBirth <= CHILD_MAX_AGE;
 
   const childPregnancyCase =
     female &&
     (reportedChild ||
       firstBirthWasChildAge ||
       (isChildAgeBand &&
-        (reportedTeen || reportedCurrentMother || hasFirstBirth)));
+        (reportedTeen || reportedCurrentMother || firstBirthWasChildAge)));
 
   const teenagePregnancyCase =
     female && !childPregnancyCase
-      ? hasFirstBirth
+      ? firstBirthValid
         ? firstBirth <= ADOLESCENT_MAX_AGE
-        : reportedTeen
+        : (isAdolescentAge(age) && reportedTeen)
       : false;
 
   return { childPregnancyCase, teenagePregnancyCase, isChildAgeBand };
@@ -341,6 +344,11 @@ export function derivePersonYear(person, targetYear, now = new Date()) {
   const age = resolvePersonAge(source, targetYear, now);
   const isSenior = isSeniorAge(age);
   const pregnancy = classifyPregnancyAtAge(source, age);
+  const firstBirth = toAgeInt(
+    source.age_first_birth ?? source.age_at_first_birth ?? "",
+  );
+  const hasTeenFirstBirth =
+    isAdolescentAge(firstBirth) && firstBirth <= toAgeInt(age);
 
   return {
     age,
@@ -348,13 +356,13 @@ export function derivePersonYear(person, targetYear, now = new Date()) {
     is_senior: isSenior,
     // A senior ID only exists while the person is actually a senior.
     has_senior_id: isSenior ? seniorIdEvidence : false,
-    // "Current teenage mother" only applies to females aged 10-19. The
-    // reported baseline is kept on the record, not overwritten, so the flag
-    // can be re-derived if the encoder switches back to an earlier year.
+    // A valid first-birth age is evidence of a child even without a manual
+    // report. Keep that evidence separate from the reported baseline so
+    // correcting the first-birth age does not leave a stale manual flag.
     teenage_mother:
       isFemaleSex(sex) &&
       isAdolescentAge(age) &&
-      teenReported &&
+      (teenReported || hasTeenFirstBirth) &&
       !pregnancy.childPregnancyCase,
     // Classifications are mutually exclusive; a child case always wins.
     teenage_pregnancy_case: pregnancy.teenagePregnancyCase,

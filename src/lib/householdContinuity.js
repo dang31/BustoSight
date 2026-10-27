@@ -78,6 +78,7 @@ export const PRIOR_RESIDENT_FIELDS = [
   "is_4ps",
   "is_pwd",
   "has_pwd_id",
+  "disability_details",
   "is_senior",
   "has_senior_id",
   "is_solo_parent",
@@ -335,6 +336,7 @@ export function normalizeResidentRecord(row) {
     is_4ps: toBool(pick(row, "is_4ps", "is4ps")),
     is_pwd: toBool(pick(row, "is_pwd", "isPwd")),
     has_pwd_id: toBool(pick(row, "has_pwd_id", "hasPwdId")),
+    disability_details: clean(pick(row, "disability_details", "disabilityDetails")),
     is_senior: toBool(pick(row, "is_senior", "isSenior")),
     has_senior_id: toBool(pick(row, "has_senior_id", "hasSeniorId")),
     is_solo_parent: toBool(pick(row, "is_solo_parent", "isSoloParent")),
@@ -668,6 +670,7 @@ function mapPriorRecordToForm(record, targetYear) {
     is_4ps: Boolean(record.is_4ps),
     is_pwd: Boolean(record.is_pwd),
     has_pwd_id: Boolean(record.has_pwd_id),
+    disability_details: record.is_pwd ? record.disability_details || "" : "",
     // Reported baseline re-applied only while the person is still a senior.
     senior_id_reported: Boolean(record.has_senior_id),
     has_senior_id: Boolean(record.has_senior_id),
